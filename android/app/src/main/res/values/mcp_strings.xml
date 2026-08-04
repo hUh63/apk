@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mcp_accessibility_desc">ProxyPin MCP screen control service. Used for retrieving UI elements and performing gestures without ADB.</string>
+</resources>

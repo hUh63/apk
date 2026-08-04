@@ -1,0 +1,2275 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io' as io;
+
+import 'package:proxypin/network/bin/configuration.dart';
+import 'package:proxypin/network/bin/server.dart';
+import 'package:proxypin/network/components/manager/hosts_manager.dart';
+import 'package:proxypin/network/components/manager/request_block_manager.dart';
+import 'package:proxypin/network/components/manager/request_rewrite_manager.dart';
+import 'package:proxypin/network/components/manager/rewrite_rule.dart';
+import 'package:proxypin/network/components/manager/script_manager.dart';
+import 'package:proxypin/network/components/manager/request_breakpoint_manager.dart';
+import 'package:proxypin/network/components/manager/network_condition_manager.dart';
+import 'package:proxypin/network/components/manager/environment_manager.dart';
+import 'package:proxypin/network/http/http_client.dart';
+import 'package:proxypin/network/channel/host_port.dart';
+import 'package:proxypin/network/mcp/mcp_bridge.dart';
+import 'package:proxypin/network/util/logger.dart';
+import 'package:proxypin/utils/platform.dart';
+import 'package:proxypin/network/util/random.dart';
+import 'package:proxypin/network/http/http.dart';
+import 'package:proxypin/network/http/http_headers.dart';
+import 'package:proxypin/native/mcp_screen.dart';
+import 'package:proxypin/native/vpn.dart';
+import 'package:flutter/material.dart';
+
+class McpServer {
+  static final McpServer _instance = McpServer._internal();
+
+  factory McpServer() => _instance;
+
+  McpServer._internal();
+
+  io.HttpServer? _server;
+  int? _port;
+  
+  int get port => _port ?? 17777;
+  
+  // SSE 连接池 — 使用 List 的 copy-then-iterate 模式保证并发安全
+  final List<io.HttpResponse> _sseConnections = [];
+
+  /// 线程安全地添加 SSE 连接
+  void _addSseConnection(io.HttpResponse response) {
+    _sseConnections.add(response);
+  }
+
+  /// 线程安全地移除 SSE 连接
+  void _removeSseConnection(io.HttpResponse response) {
+    _sseConnections.remove(response);
+  }
+
+  /// 获取 SSE 连接列表的快照（避免遍历时被并发修改）
+  List<io.HttpResponse> _snapshotSseConnections() =>
+      List<io.HttpResponse>.from(_sseConnections);
+  
+  // SSE 心跳定时器
+  Timer? _heartbeatTimer;
+  
+  // 状态变化回调
+  VoidCallback? onStatusChanged;
+
+  bool get isRunning => _server != null;
+
+  Future<void> start() async {
+    try {
+      if (isRunning) return;
+      
+      var config = await Configuration.instance;
+      _port = config.mcpPort;
+      
+      // 绑定 loopback 保证安全
+      _server = await io.HttpServer.bind(io.InternetAddress.loopbackIPv4, _port!);
+      logger.i('MCP Server listening on http://127.0.0.1:$_port');
+
+      _server!.listen((request) {
+        // CORS 处理
+        if (request.method == 'OPTIONS') {
+           _handleOptions(request);
+           return;
+        }
+
+        final path = request.uri.path;
+        if (path == '/sse') {
+          _handleSse(request);
+        } else if (path == '/messages') {
+          _handleMessages(request);
+        } else {
+          final response = request.response;
+          response.statusCode = io.HttpStatus.notFound;
+          response.close();
+        }
+      });
+      
+      // 监听 Bridge 的请求完成事件，推送到 SSE
+      McpBridge().onRequestCompleted = (log) {
+          _broadcastEvent('resource', {
+              'uri': 'proxypin://requests/latest',
+              // 可以在这里推送增量更新
+          });
+      };
+      
+      // 启动 SSE 心跳保活（每 30 秒发送 ping）
+      _heartbeatTimer?.cancel();
+      _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+          _broadcastEvent('ping', {'timestamp': DateTime.now().toIso8601String()});
+      });
+      
+      // 通知状态变化
+      onStatusChanged?.call();
+      
+    } catch (e) {
+      logger.e('Failed to start MCP server', error: e);
+    }
+  }
+  
+  Future<void> stop() async {
+      _heartbeatTimer?.cancel();
+      _heartbeatTimer = null;
+      
+      // 关闭所有 SSE 连接（先取快照再遍历）
+      for (var conn in _snapshotSseConnections()) {
+          try {
+              await conn.close();
+          } catch (e) {
+              // ignore
+          }
+      }
+      _sseConnections.clear();
+      
+      // 清除回调
+      McpBridge().onRequestCompleted = null;
+      
+      await _server?.close();
+      _server = null;
+      // 通知状态变化
+      onStatusChanged?.call();
+  }
+
+  void _handleOptions(io.HttpRequest request) {
+    final response = request.response;
+    response.headers.add('Access-Control-Allow-Origin', '*');
+    response.headers.add('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type');
+    response.close();
+  }
+
+  void _handleSse(io.HttpRequest request) {
+    final response = request.response;
+    response.headers.contentType = io.ContentType('text', 'event-stream');
+    response.headers.add('Cache-Control', 'no-cache');
+    response.headers.add('Connection', 'keep-alive');
+    response.headers.add('Access-Control-Allow-Origin', '*');
+
+    // 发送 endpoint 告知客户端 POST 地址
+    final endpoint = '/messages';
+    response.write('event: endpoint\ndata: $endpoint\n\n');
+    response.flush();
+
+    _addSseConnection(response);
+    
+    logger.i('New MCP SSE connection');
+
+    response.done.then((_) {
+      _removeSseConnection(response);
+      logger.i('MCP SSE connection closed');
+    }).catchError((e) {
+      _removeSseConnection(response);
+    });
+  }
+
+  Future<void> _handleMessages(io.HttpRequest request) async {
+    if (request.method != 'POST') {
+      final response = request.response;
+      response.statusCode = 405; // Method Not Allowed
+      response.close();
+      return;
+    }
+
+    try {
+      final content = await utf8.decoder.bind(request).join();
+      if (content.isEmpty) {
+          final response = request.response;
+          response.statusCode = io.HttpStatus.badRequest;
+          response.close();
+          return;
+      }
+      
+      final Map<String, dynamic> jsonRpc = jsonDecode(content);
+      final result = await _processJsonRpc(jsonRpc);
+
+      final response = request.response;
+      response.headers.contentType = io.ContentType.json;
+      response.headers.add('Access-Control-Allow-Origin', '*');
+      
+      if (result != null) {
+        response.write(jsonEncode(result));
+      } else {
+        // 通知类消息不需要返回内容，返回 202 Accepted
+        response.statusCode = 202;
+      }
+      response.close();
+    } catch (e) {
+      logger.e('MCP Message Error', error: e);
+      final response = request.response;
+      response.statusCode = io.HttpStatus.internalServerError;
+      response.write(jsonEncode({'error': e.toString()}));
+      await response.close();
+    }
+  }
+
+  /// 广播 SSE 事件
+  void _broadcastEvent(String event, Object data) {
+      var deadConnections = <io.HttpResponse>[];
+      // 使用快照遍历，避免遍历期间被并发修改
+      for (var conn in _snapshotSseConnections()) {
+          try {
+              conn.write('event: $event\n');
+              conn.write('data: ${jsonEncode(data)}\n');
+              conn.write('\n');
+              // 立即刷新确保数据及时发送，避免缓冲延迟
+              conn.flush();
+          } catch (e) {
+              // 标记死连接以便移除
+              deadConnections.add(conn);
+          }
+      }
+      // 清理失败的连接
+      if (deadConnections.isNotEmpty) {
+          for (var conn in deadConnections) {
+              _removeSseConnection(conn);
+          }
+      }
+  }
+
+  /// 配置变更时通知所有 SSE 客户端刷新
+  void _notifyConfigChanged(String category, [Map<String, dynamic>? details]) {
+    _broadcastEvent('config_changed', {
+      'category': category,
+      'timestamp': DateTime.now().toIso8601String(),
+      if (details != null) ...details,
+    });
+  }
+
+  Future<Map<String, dynamic>?> _processJsonRpc(Map<String, dynamic> request) async {
+    final method = request['method'];
+    final id = request['id'];
+    
+    // JSON-RPC Response 结构
+    Map<String, dynamic> response(dynamic result) {
+        return {'jsonrpc': '2.0', 'id': id, 'result': result};
+    }
+    
+    Map<String, dynamic> error(int code, String message) {
+        return {'jsonrpc': '2.0', 'id': id, 'error': {'code': code, 'message': message}};
+    }
+
+    try {
+      switch (method) {
+        case 'initialize':
+          return response({
+            'protocolVersion': '2024-11-05',
+            'capabilities': {
+              'tools': {},
+              'resources': {}
+            },
+            'serverInfo': {'name': 'ProxyPin MCP', 'version': '1.0.0'}
+          });
+          
+        case 'notifications/initialized':
+          // 通知类消息不需要返回响应
+          return null;
+          
+        case 'notifications/cancelled':
+          // 客户端取消请求通知，不需要返回响应
+          logger.i('Received cancellation notification: ${request['params']}');
+          return null;
+          
+        case 'tools/list':
+          return response({
+            'tools': _getToolsList()
+          });
+          
+        case 'tools/call':
+          final params = request['params'] as Map<String, dynamic>?;
+          if (params == null) {
+            return error(-32602, 'Missing params');
+          }
+          final name = params['name'];
+          final args = Map<String, dynamic>.from(params['arguments'] ?? {});
+          final result = await _executeTool(name, args);
+          return response({
+              'content': [
+                  {'type': 'text', 'text': jsonEncode(result)}
+              ]
+          });
+          
+        case 'resources/list':
+          return response({
+              'resources': [
+                  {
+                      'uri': 'proxypin://requests/latest',
+                      'name': 'Latest Requests',
+                      'mimeType': 'application/json'
+                  },
+                  {
+                      'uri': 'proxypin://config/current',
+                      'name': 'Current Configuration',
+                      'mimeType': 'application/json'
+                  },
+                  {
+                      'uri': 'proxypin://breakpoints/rules',
+                      'name': 'Breakpoint Rules',
+                      'mimeType': 'application/json'
+                  },
+                  {
+                      'uri': 'proxypin://network/conditions',
+                      'name': 'Weak Network Configuration',
+                      'mimeType': 'application/json'
+                  },
+                  {
+                      'uri': 'proxypin://environments/list',
+                      'name': 'Environment Variables',
+                      'mimeType': 'application/json'
+                  }
+              ]
+          });
+          
+        case 'resources/read':
+          final params = request['params'] as Map<String, dynamic>?;
+          if (params == null) {
+            return error(-32602, 'Missing params');
+          }
+          final uri = params['uri'];
+          final content = await _readResource(uri);
+          return response({
+              'contents': [
+                  {
+                      'uri': uri,
+                      'mimeType': 'application/json',
+                      'text': jsonEncode(content)
+                  }
+              ]
+          });
+
+        case 'ping':
+          return response({});
+          
+        default:
+          return error(-32601, 'Method not found: $method');
+      }
+    } catch (e, stack) {
+      logger.e('MCP Execution Error', error: e, stackTrace: stack);
+      return error(-32603, 'Internal error: $e');
+    }
+  }
+
+  List<Map<String, dynamic>> _getToolsList() {
+    return [
+      {
+        'name': 'set_config',
+        'description': 'Update ProxyPin configuration (System Proxy, SSL Capture).',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'system_proxy': {'type': 'boolean', 'description': 'Enable/Disable system proxy'},
+            'ssl_capture': {'type': 'boolean', 'description': 'Enable/Disable SSL capture (MITM)'}
+          }
+        }
+      },
+      {
+        'name': 'add_host_mapping',
+        'description': 'Add a domain mapping (like hosts file).',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'domain': {'type': 'string', 'description': 'Domain name (e.g. example.com)'},
+            'ip': {'type': 'string', 'description': 'Target IP or domain (e.g. 127.0.0.1)'}
+          },
+          'required': ['domain', 'ip']
+        }
+      },
+      {
+        'name': 'add_response_rewrite',
+        'description': 'Mock/Rewrite response (headers, status code, or body) for a specific URL.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'url_pattern': {'type': 'string', 'description': 'URL pattern to match (e.g. "api.com/users")'},
+            'rewrite_type': {'type': 'string', 'description': 'Type: updateHeader, updateStatusCode, updateBody', 'enum': ['updateHeader', 'updateStatusCode', 'updateBody']},
+            'key': {'type': 'string', 'description': 'Header name (for updateHeader) or "body" for body replacement'},
+            'value': {'type': 'string', 'description': 'New value (header value, status code, or body content)'}
+          },
+          'required': ['url_pattern', 'rewrite_type', 'value']
+        }
+      },
+      {
+        'name': 'export_har',
+        'description': 'Export captured requests to HAR (HTTP Archive) format.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'limit': {'type': 'integer', 'description': 'Max requests to export (default 100)'},
+             'request_ids': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Specific request IDs to export'}
+          }
+        }
+      },
+      {
+        'name': 'import_har',
+        'description': 'Import HAR (HTTP Archive) data into ProxyPin session.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'har_content': {'type': 'string', 'description': 'HAR JSON content string'}
+          },
+          'required': ['har_content']
+        }
+      },
+      {
+        'name': 'search_requests',
+        'description': 'Search and filter captured HTTP requests with powerful filters.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'query': {'type': 'string', 'description': 'Keyword in URL'},
+            'method': {'type': 'string', 'description': 'HTTP Method (GET, POST...)'},
+            'status_code': {'type': 'string', 'description': 'Status code pattern (e.g. "200", "4xx", "5xx")'},
+            'domain': {'type': 'string', 'description': 'Domain name filter'},
+            'header_search': {'type': 'string', 'description': 'Search in request/response headers (key or value)'},
+            'request_body_search': {'type': 'string', 'description': 'Search in request body'},
+            'response_body_search': {'type': 'string', 'description': 'Search in response body'},
+            'min_duration': {'type': 'integer', 'description': 'Minimum duration in ms'},
+            'max_duration': {'type': 'integer', 'description': 'Maximum duration in ms'},
+            'limit': {'type': 'integer', 'description': 'Max results (default 20)'}
+          }
+        }
+      },
+      {
+        'name': 'generate_code',
+        'description': 'Generate code for a specific request in Python, JavaScript, or cURL.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'request_id': {'type': 'string', 'description': 'The ID of the request'},
+            'language': {'type': 'string', 'description': 'Target language: python, js, curl', 'enum': ['python', 'js', 'curl']}
+          },
+          'required': ['request_id', 'language']
+        }
+      },
+      {
+        'name': 'get_curl',
+        'description': 'Generate cURL command for a specific request.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'request_id': {'type': 'string', 'description': 'The ID of the request'}
+          },
+          'required': ['request_id']
+        }
+      },
+      {
+        'name': 'get_recent_requests',
+        'description': 'Get a list of recent HTTP requests (Legacy, use search_requests instead).',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'limit': {'type': 'integer', 'description': 'Max number of requests (default 20)'},
+            'url_filter': {'type': 'string', 'description': 'Filter by URL keyword'},
+            'method': {'type': 'string', 'description': 'Filter by HTTP Method (GET, POST...)'}
+          }
+        }
+      },
+      {
+        'name': 'get_request_details',
+        'description': '''Get full details (headers, body) of a specific request.
+
+Response includes:
+- request.body: Request body content
+- request.bodySize: Body size in bytes
+- request.bodyEncoding: Encoding type ('utf8', 'base64', or 'none')
+- response.body: Response body content
+- response.bodySize: Body size in bytes
+- response.bodyEncoding: Encoding type ('utf8', 'base64', or 'none')
+
+Body Encoding Rules:
+- bodyEncoding='utf8': Text data (JSON, HTML, XML, etc.), use directly
+- bodyEncoding='base64': Binary data (images, files, etc.), decode with base64.b64decode() in Python
+- bodyEncoding='none': Empty body''',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'request_id': {'type': 'string', 'description': 'The ID of the request'}
+          },
+          'required': ['request_id']
+        }
+      },
+      {
+        'name': 'start_proxy',
+        'description': 'Start the ProxyPin server on a specific port.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'port': {'type': 'integer', 'description': 'Port number (default 9099)'}
+          }
+        }
+      },
+      {
+        'name': 'stop_proxy',
+        'description': 'Stop the ProxyPin server.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {}
+        }
+      },
+      {
+        'name': 'get_proxy_status',
+        'description': 'Get current status of the proxy server.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {}
+        }
+      },
+      {
+        'name': 'clear_requests',
+        'description': 'Clear all captured requests (session history and UI list).',
+        'inputSchema': {
+           'type': 'object',
+           'properties': {}
+        }
+      },
+      {
+        'name': 'replay_request',
+        'description': 'Replay/resend a captured HTTP request.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'request_id': {'type': 'string', 'description': 'The ID of the request to replay'}
+          },
+          'required': ['request_id']
+        }
+      },
+      {
+        'name': 'block_url',
+        'description': 'Block requests or responses matching a URL pattern.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'url_pattern': {'type': 'string', 'description': 'URL pattern to block (supports wildcard *)'},
+            'block_type': {'type': 'string', 'description': 'Type: blockRequest or blockResponse', 'enum': ['blockRequest', 'blockResponse']}
+          },
+          'required': ['url_pattern', 'block_type']
+        }
+      },
+      {
+        'name': 'add_request_rewrite',
+        'description': 'Add a request rewrite rule (modify headers, query params, or body).',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'url_pattern': {'type': 'string', 'description': 'URL pattern to match'},
+            'rewrite_type': {'type': 'string', 'description': 'Type: updateHeader, updateQueryParam, updateBody', 'enum': ['updateHeader', 'updateQueryParam', 'updateBody']},
+            'key': {'type': 'string', 'description': 'Header name, query param name, or "body" for body replacement'},
+            'value': {'type': 'string', 'description': 'New value'}
+          },
+          'required': ['url_pattern', 'rewrite_type', 'key', 'value']
+        }
+      },
+      {
+        'name': 'update_script',
+        'description': 'Update or create a JavaScript script for request/response modification.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'name': {'type': 'string', 'description': 'Script name'},
+            'url_pattern': {'type': 'string', 'description': 'URL pattern to match (supports wildcard *)'},
+            'script_content': {'type': 'string', 'description': 'JavaScript code (onRequest/onResponse functions)'}
+          },
+          'required': ['name', 'url_pattern', 'script_content']
+        }
+      },
+      {
+        'name': 'get_scripts',
+        'description': 'Get all configured scripts.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {}
+        }
+      },
+      {
+        'name': 'get_statistics',
+        'description': 'Get statistics of captured requests (methods, status codes, domains, etc.).',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {}
+        }
+      },
+      {
+        'name': 'compare_requests',
+        'description': 'Compare two requests side by side (useful for debugging API changes).',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'request_id_1': {'type': 'string', 'description': 'First request ID'},
+            'request_id_2': {'type': 'string', 'description': 'Second request ID'}
+          },
+          'required': ['request_id_1', 'request_id_2']
+        }
+      },
+      {
+        'name': 'find_similar_requests',
+        'description': 'Find requests similar to a given request (same URL pattern, method, etc.).',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'request_id': {'type': 'string', 'description': 'Reference request ID'},
+            'limit': {'type': 'integer', 'description': 'Max results (default 10)'}
+          },
+          'required': ['request_id']
+        }
+      },
+      {
+        'name': 'extract_api_endpoints',
+        'description': 'Extract and group unique API endpoints from captured requests.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'domain_filter': {'type': 'string', 'description': 'Filter by domain (optional)'}
+          }
+        }
+      },
+      // ==================== Breakpoint Debugging Tools (1.3.1+) ====================
+      {
+        'name': 'add_breakpoint_rule',
+        'description': 'Add a breakpoint rule to intercept requests or responses for debugging. The request will be paused until manually resumed via UI.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'url_pattern': {'type': 'string', 'description': 'URL regex pattern to match (e.g. "api.example.com/v1/.*")'},
+            'name': {'type': 'string', 'description': 'Rule name (optional)'},
+            'intercept_request': {'type': 'boolean', 'description': 'Intercept request (default true)'},
+            'intercept_response': {'type': 'boolean', 'description': 'Intercept response (default true)'},
+            'method': {'type': 'string', 'description': 'HTTP method filter (GET, POST, etc.). Empty = all methods', 'enum': ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']},
+            'enabled': {'type': 'boolean', 'description': 'Enable the rule (default true)'}
+          },
+          'required': ['url_pattern']
+        }
+      },
+      {
+        'name': 'remove_breakpoint_rule',
+        'description': 'Remove a breakpoint rule by URL pattern.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'url_pattern': {'type': 'string', 'description': 'URL pattern of the rule to remove'}
+          },
+          'required': ['url_pattern']
+        }
+      },
+      {
+        'name': 'list_breakpoint_rules',
+        'description': 'List all breakpoint rules and their status.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {}
+        }
+      },
+      {
+        'name': 'toggle_breakpoint',
+        'description': 'Enable or disable the breakpoint debugging feature globally.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'enabled': {'type': 'boolean', 'description': 'true to enable, false to disable'}
+          },
+          'required': ['enabled']
+        }
+      },
+      // ==================== Weak Network Simulation Tools (1.3.1+) ====================
+      {
+        'name': 'add_weak_network_rule',
+        'description': 'Add a weak network simulation rule for a URL pattern. Simulates bandwidth limiting, latency, jitter, packet loss, or offline mode.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'url_pattern': {'type': 'string', 'description': 'URL pattern to match (supports wildcard *)'},
+            'profile_id': {'type': 'string', 'description': 'Preset profile ID. Built-in: weak, slow, g2, g3, g4, g5, wifi. Or use a custom profile ID.'},
+            'enabled': {'type': 'boolean', 'description': 'Enable this rule (default true)'}
+          },
+          'required': ['url_pattern', 'profile_id']
+        }
+      },
+      {
+        'name': 'add_custom_network_profile',
+        'description': 'Create a custom weak network profile with specific parameters.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'name': {'type': 'string', 'description': 'Profile name'},
+            'upload_kbps': {'type': 'integer', 'description': 'Upload bandwidth limit in kbps (null = unlimited)'},
+            'download_kbps': {'type': 'integer', 'description': 'Download bandwidth limit in kbps (null = unlimited)'},
+            'request_latency_ms': {'type': 'integer', 'description': 'Request latency in milliseconds (default 0)'},
+            'response_latency_ms': {'type': 'integer', 'description': 'Response latency in milliseconds (default 0)'},
+            'jitter_ms': {'type': 'integer', 'description': 'Jitter in milliseconds (default 0)'},
+            'loss_rate': {'type': 'number', 'description': 'Packet loss rate 0.0-1.0 (default 0)'},
+            'offline': {'type': 'boolean', 'description': 'Simulate offline mode (default false)'}
+          },
+          'required': ['name']
+        }
+      },
+      {
+        'name': 'list_weak_network_rules',
+        'description': 'List all weak network simulation rules and profiles.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {}
+        }
+      },
+      {
+        'name': 'remove_weak_network_rule',
+        'description': 'Remove a weak network rule by URL pattern.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'url_pattern': {'type': 'string', 'description': 'URL pattern of the rule to remove'}
+          },
+          'required': ['url_pattern']
+        }
+      },
+      {
+        'name': 'toggle_weak_network',
+        'description': 'Enable or disable the weak network simulation feature globally.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'enabled': {'type': 'boolean', 'description': 'true to enable, false to disable'}
+          },
+          'required': ['enabled']
+        }
+      },
+      // ==================== Environment Variable Tools (1.3.1+) ====================
+      {
+        'name': 'list_environments',
+        'description': 'List all environments and their variables. Shows which environment is currently active.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {}
+        }
+      },
+      {
+        'name': 'set_environment_variable',
+        'description': 'Set or update an environment variable. Variables can be referenced in requests using {{variable_name}} syntax.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'key': {'type': 'string', 'description': 'Variable name'},
+            'value': {'type': 'string', 'description': 'Variable value (null to delete)'},
+            'environment_id': {'type': 'string', 'description': 'Target environment ID (default: global or active environment)'},
+            'enabled': {'type': 'boolean', 'description': 'Enable the variable (default true)'}
+          },
+          'required': ['key']
+        }
+      },
+      {
+        'name': 'create_environment',
+        'description': 'Create a new named environment (e.g. Dev, Staging, Prod).',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'name': {'type': 'string', 'description': 'Environment name'}
+          },
+          'required': ['name']
+        }
+      },
+      {
+        'name': 'set_active_environment',
+        'description': 'Set the active environment by ID, or pass null to deactivate (only Global remains).',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'environment_id': {'type': 'string', 'description': 'Environment ID to activate, or empty string to deactivate'}
+          }
+        }
+      },
+      {
+        'name': 'remove_environment',
+        'description': 'Remove a named environment by ID. Cannot remove the Global environment.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'environment_id': {'type': 'string', 'description': 'Environment ID to remove'}
+          },
+          'required': ['environment_id']
+        }
+      },
+      {
+        'name': 'toggle_environment_variables',
+        'description': 'Enable or disable the environment variable feature globally.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'enabled': {'type': 'boolean', 'description': 'true to enable, false to disable'}
+          },
+          'required': ['enabled']
+        }
+      },
+      // ==================== Device Control Tools (Android only) ====================
+      {
+        'name': 'get_device_info',
+        'description': 'Get Android device info (model, brand, Android version, WiFi IP, root/accessibility status).',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {}
+        }
+      },
+      {
+        'name': 'get_current_activity',
+        'description': 'Get the current foreground activity/package name.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {}
+        }
+      },
+      {
+        'name': 'dump_ui',
+        'description': 'Dump the current Android UI hierarchy as JSON array of elements.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'clickable_only': {'type': 'boolean', 'description': 'Only include clickable elements (default false)'},
+            'package_filter': {'type': 'string', 'description': 'Filter by package name'}
+          }
+        }
+      },
+      {
+        'name': 'tap_screen',
+        'description': 'Perform a tap at the given screen coordinates.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'x': {'type': 'integer', 'description': 'X coordinate'},
+            'y': {'type': 'integer', 'description': 'Y coordinate'}
+          },
+          'required': ['x', 'y']
+        }
+      },
+      {
+        'name': 'long_press',
+        'description': 'Perform a long press at the given coordinates for a duration.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'x': {'type': 'integer', 'description': 'X coordinate'},
+            'y': {'type': 'integer', 'description': 'Y coordinate'},
+            'duration': {'type': 'integer', 'description': 'Press duration in ms (default 50)'}
+          },
+          'required': ['x', 'y']
+        }
+      },
+      {
+        'name': 'swipe_screen',
+        'description': 'Perform a swipe gesture from one point to another.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'x1': {'type': 'integer', 'description': 'Start X'},
+            'y1': {'type': 'integer', 'description': 'Start Y'},
+            'x2': {'type': 'integer', 'description': 'End X'},
+            'y2': {'type': 'integer', 'description': 'End Y'},
+            'duration': {'type': 'integer', 'description': 'Swipe duration in ms (default 300)'}
+          },
+          'required': ['x1', 'y1', 'x2', 'y2']
+        }
+      },
+      {
+        'name': 'key_event',
+        'description': 'Send a key event. Keycodes: 3=HOME, 4=BACK, 26=POWER, 82=MENU, 187=RECENTS.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'keycode': {'type': 'integer', 'description': 'Android keycode (3=HOME, 4=BACK, 26=POWER, 82=MENU, 187=RECENTS)'}
+          },
+          'required': ['keycode']
+        }
+      },
+      {
+        'name': 'input_text',
+        'description': 'Set text on the currently focused input element.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'text': {'type': 'string', 'description': 'Text to input'}
+          },
+          'required': ['text']
+        }
+      },
+      {
+        'name': 'screenshot',
+        'description': 'Take a screenshot and return as Base64 PNG (requires root).',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {}
+        }
+      },
+      {
+        'name': 'open_accessibility_settings',
+        'description': 'Open the Android accessibility settings page.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {}
+        }
+      },
+      {
+        'name': 'shell',
+        'description': 'Execute a shell command on the device (optionally with root).',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'command': {'type': 'string', 'description': 'Shell command to execute'},
+            'use_su': {'type': 'boolean', 'description': 'Use root (su) for execution (default false)'},
+            'timeout_ms': {'type': 'integer', 'description': 'Timeout in milliseconds (default 10000)'}
+          },
+          'required': ['command']
+        }
+      }
+    ];
+  }
+
+  Future<dynamic> _executeTool(String name, Map<String, dynamic> args) async {
+    switch (name) {
+      case 'set_config':
+        var config = await Configuration.instance;
+        var changed = false;
+        
+        if (args.containsKey('system_proxy')) {
+            bool enable = args['system_proxy'];
+            config.enableSystemProxy = enable;
+            if (ProxyServer.current?.isRunning == true) {
+                if (Platforms.isDesktop()) {
+                    // 桌面端：直接调用 setSystemProxyEnable
+                    await ProxyServer.current?.setSystemProxyEnable(enable);
+                } else if (Vpn.isVpnStarted) {
+                    // 移动端：VPN 运行时需要重启 VPN 以应用新的 system_proxy 设置
+                    Vpn.restartVpn("127.0.0.1", ProxyServer.current!.port, config);
+                }
+            }
+            changed = true;
+        }
+        
+        if (args.containsKey('ssl_capture')) {
+            bool enable = args['ssl_capture'];
+            config.enableSsl = enable;
+            ProxyServer.current?.enableSsl = enable;
+            changed = true;
+        }
+        
+        if (changed) await config.flushConfig();
+        return {'status': 'success', 'system_proxy': config.enableSystemProxy, 'ssl_capture': config.enableSsl};
+
+      case 'add_host_mapping':
+        final domain = args['domain'];
+        final ip = args['ip'];
+        var hostsManager = await HostsManager.instance;
+        await hostsManager.addHosts(HostsItem(host: domain, toAddress: ip, enabled: true));
+        await hostsManager.flushConfig();
+        return {'status': 'success', 'message': 'Added host mapping: $domain -> $ip'};
+
+      case 'add_response_rewrite':
+        final urlPattern = args['url_pattern'];
+        final rewriteTypeStr = args['rewrite_type'] ?? 'updateBody';
+        final key = args['key'];
+        final value = args['value'];
+
+        try {
+          var manager = await RequestRewriteManager.instance;
+
+          RewriteItem item;
+          RuleType ruleType;
+
+          if (rewriteTypeStr == 'updateHeader') {
+            // updateHeader 属于修改类型，应使用 responseUpdate
+            ruleType = RuleType.responseUpdate;
+            item = RewriteItem(RewriteType.updateHeader, true)
+              ..key = key
+              ..value = value;
+          } else if (rewriteTypeStr == 'updateStatusCode') {
+            // replaceResponseStatus 属于替换类型，使用 responseReplace
+            ruleType = RuleType.responseReplace;
+            item = RewriteItem(RewriteType.replaceResponseStatus, true)
+              ..statusCode = int.tryParse(value) ?? 200;
+          } else {
+            // updateBody -> replaceResponseBody 属于替换类型，使用 responseReplace
+            ruleType = RuleType.responseReplace;
+            item = RewriteItem(RewriteType.replaceResponseBody, true)
+              ..body = value;
+          }
+
+          var rule = RequestRewriteRule(
+            type: ruleType,
+            url: urlPattern,
+            name: 'MCP: Response $rewriteTypeStr for $urlPattern'
+          );
+          
+          await manager.addRule(rule, [item]);
+          await manager.flushRequestRewriteConfig();
+          return {'status': 'success', 'message': 'Added response rewrite rule for $urlPattern'};
+        } catch (e) {
+          return {'error': 'Failed to add response rewrite rule: $e'};
+        }
+
+      case 'export_har':
+        final limit = (args['limit'] as num?)?.toInt() ?? 100;
+        final requestIds = args['request_ids'];
+        
+        var list = McpBridge().source;
+        if (requestIds != null) {
+            list = list.where((r) => requestIds.contains(r.requestId)).toList();
+        } else {
+            // 默认导出最近的
+            list = list.reversed.take(limit).toList(); 
+        }
+        
+        return _generateHar(list);
+
+      case 'import_har':
+        final content = args['har_content'];
+        try {
+            var json = jsonDecode(content);
+            var entries = json['log']['entries'] as List;
+            int count = 0;
+            for (var entry in entries) {
+                var req = _parseHarEntry(entry);
+                if (req != null) {
+                    McpBridge().addRequest(req);
+                    count++;
+                }
+            }
+            return {'status': 'success', 'imported_count': count};
+        } catch (e) {
+            return {'error': 'Failed to import HAR: $e'};
+        }
+        
+      case 'search_requests':
+        final limit = (args['limit'] as num?)?.toInt() ?? 20;
+        final query = args['query'] as String?;
+        final method = args['method'] as String?;
+        final statusCode = args['status_code'] as String?;
+        final domain = args['domain'] as String?;
+        final headerSearch = args['header_search'] as String?;
+        final requestBodySearch = args['request_body_search'] as String?;
+        final responseBodySearch = args['response_body_search'] as String?;
+        final minDuration = (args['min_duration'] as num?)?.toInt();
+        final maxDuration = (args['max_duration'] as num?)?.toInt();
+
+        try {
+           // 委托给 McpBridge 的增强过滤方法
+           var list = McpBridge().getRecentRequests(
+             limit: limit,
+             urlFilter: query,
+             method: method,
+             statusCode: statusCode,
+             domain: domain,
+             headerSearch: headerSearch,
+             requestBodySearch: requestBodySearch,
+             responseBodySearch: responseBodySearch,
+             minDuration: minDuration,
+             maxDuration: maxDuration,
+           );
+           
+           return list.map((r) => {
+             'id': r.requestId,
+             'url': r.requestUrl,
+             'method': r.method.name,
+             'statusCode': r.response?.status.code,
+             'contentType': r.response?.headers.contentType,
+             'timestamp': r.requestTime.toIso8601String(),
+             'duration': r.response != null ? r.response!.responseTime.difference(r.requestTime).inMilliseconds : 0
+           }).toList();
+           
+        } catch (e) {
+           return {'error': 'Failed to search requests: $e'};
+        }
+
+      case 'generate_code':
+        final id = args['request_id'];
+        final lang = args['language'];
+        
+        try {
+            var req = McpBridge().source.firstWhere((r) => r.requestId == id);
+            String code;
+            if (lang == 'python') {
+                code = _generatePythonCode(req);
+            } else if (lang == 'js') {
+                code = _generateJsCode(req);
+            } else {
+                code = _generateCurl(req);
+            }
+            return {'code': code, 'language': lang};
+        } catch (e) {
+            return {'error': 'Request not found or generation failed: $e'};
+        }
+
+      case 'get_curl':
+        final id = args['request_id'];
+        try {
+            var req = McpBridge().source.firstWhere((r) => r.requestId == id);
+            return {'curl': _generateCurl(req)};
+        } catch (e) {
+            return {'error': 'Request not found'};
+        }
+
+      case 'get_request_details':
+        final id = args['request_id'];
+        
+        final req = McpBridge().getRequestById(id);
+        if (req == null) return {'error': 'Request not found'};
+        
+        return McpBridge.requestToJson(req, includeBody: true);
+        
+      case 'start_proxy':
+        int port = (args['port'] as num?)?.toInt() ?? 9099;
+        var config = await Configuration.instance;
+        config.port = port;
+        if (ProxyServer.current?.isRunning == true) {
+             await ProxyServer.current?.stop();
+        }
+        var server = ProxyServer(config);
+        // 重新注册 McpBridge 监听器，确保代理重启后仍能接收流量事件
+        server.addListener(McpBridge());
+        await server.start();
+        return {'status': 'started', 'port': port};
+        
+      case 'stop_proxy':
+        await ProxyServer.current?.stop();
+        return {'status': 'stopped'};
+        
+      case 'get_proxy_status':
+        final isRunning = ProxyServer.current?.isRunning ?? false;
+        final port = ProxyServer.current?.port;
+        return {'isRunning': isRunning, 'port': port};
+        
+      case 'clear_requests':
+        // 调用真正的清除方法（对应UI垃圾桶图标）
+        final success = McpBridge().clearWithUI();
+        if (success) {
+          return {'status': 'cleared', 'message': 'All requests cleared (UI and storage)'};
+        } else {
+          // 降级方案：只清空内存容器
+          McpBridge().clear();
+          return {'status': 'cleared', 'message': 'Requests cleared from memory only'};
+        }
+
+      case 'replay_request':
+        final id = args['request_id'];
+        try {
+          var req = McpBridge().source.firstWhere((r) => r.requestId == id);
+          
+          var startTime = DateTime.now();
+          var response = await HttpClients.proxyRequest(req, timeout: const Duration(seconds: 30));
+          
+          return {
+            'status': 'success',
+            'response': {
+              'statusCode': response.status.code,
+              'statusText': response.status.reasonPhrase,
+              'headers': response.headers.toMap(),
+              'body': response.bodyAsString,
+              'duration': response.responseTime.difference(startTime).inMilliseconds
+            }
+          };
+        } catch (e) {
+          return {'error': 'Failed to replay request: $e'};
+        }
+
+      case 'block_url':
+        final urlPattern = args['url_pattern'];
+        final blockTypeStr = args['block_type'];
+        
+        try {
+          var manager = await RequestBlockManager.instance;
+          var blockType = BlockType.nameOf(blockTypeStr);
+          var item = RequestBlockItem(true, urlPattern, blockType);
+          manager.addBlockRequest(item);
+          return {'status': 'success', 'message': 'Added block rule for $urlPattern'};
+        } catch (e) {
+          return {'error': 'Failed to add block rule: $e'};
+        }
+
+      case 'add_request_rewrite':
+        final urlPattern = args['url_pattern'];
+        final rewriteTypeStr = args['rewrite_type'];
+        final key = args['key'];
+        final value = args['value'];
+        
+        try {
+          var manager = await RequestRewriteManager.instance;
+
+          RewriteItem item;
+          RuleType ruleType;
+
+          if (rewriteTypeStr == 'updateHeader') {
+            // updateHeader 属于修改类型，使用 requestUpdate
+            ruleType = RuleType.requestUpdate;
+            item = RewriteItem(RewriteType.updateHeader, true)
+              ..key = key
+              ..value = value;
+          } else if (rewriteTypeStr == 'updateQueryParam') {
+            // updateQueryParam 属于修改类型，使用 requestUpdate
+            ruleType = RuleType.requestUpdate;
+            item = RewriteItem(RewriteType.updateQueryParam, true)
+              ..key = key
+              ..value = value;
+          } else {
+            // updateBody -> replaceRequestBody 属于替换类型，使用 requestReplace
+            ruleType = RuleType.requestReplace;
+            item = RewriteItem(RewriteType.replaceRequestBody, true)
+              ..body = value;
+          }
+
+          var rule = RequestRewriteRule(
+            type: ruleType,
+            url: urlPattern,
+            name: 'MCP: $rewriteTypeStr $key'
+          );
+          
+          await manager.addRule(rule, [item]);
+          await manager.flushRequestRewriteConfig();
+          return {'status': 'success', 'message': 'Added request rewrite rule for $urlPattern'};
+        } catch (e) {
+          return {'error': 'Failed to add request rewrite rule: $e'};
+        }
+
+      case 'update_script':
+        final name = args['name'];
+        final urlPattern = args['url_pattern'];
+        final scriptContent = args['script_content'];
+        
+        try {
+          var manager = await ScriptManager.instance;
+          
+          var existingIndex = manager.list.indexWhere((s) => s.name == name);
+          
+          if (existingIndex >= 0) {
+            var item = manager.list[existingIndex];
+            item.urls = [urlPattern];
+            item.urlRegs = null;
+            await manager.updateScript(item, scriptContent);
+            await manager.flushConfig();
+            return {'status': 'success', 'message': 'Updated script: $name'};
+          } else {
+            var item = ScriptItem(true, name, [urlPattern]);
+            await manager.addScript(item, scriptContent);
+            await manager.flushConfig();
+            return {'status': 'success', 'message': 'Created script: $name'};
+          }
+        } catch (e) {
+          return {'error': 'Failed to update script: $e'};
+        }
+
+      case 'get_scripts':
+        try {
+          var manager = await ScriptManager.instance;
+          var scripts = manager.list.map((s) => {
+            'name': s.name,
+            'enabled': s.enabled,
+            'urls': s.urls,
+            'scriptPath': s.scriptPath
+          }).toList();
+          return {'scripts': scripts, 'enabled': manager.enabled};
+        } catch (e) {
+          return {'error': 'Failed to get scripts: $e'};
+        }
+
+      case 'get_recent_requests':
+        final limit = (args['limit'] as num?)?.toInt() ?? 20;
+        final urlFilter = args['url_filter'] as String?;
+        final method = args['method'] as String?;
+        
+        final requests = McpBridge().getRecentRequests(
+          limit: limit,
+          urlFilter: urlFilter,
+          method: method,
+        );
+        
+        return requests.map((r) => McpBridge.requestToJson(r)).toList();
+
+      case 'get_statistics':
+        return McpBridge().getStatistics();
+
+      case 'compare_requests':
+        final id1 = args['request_id_1'];
+        final id2 = args['request_id_2'];
+        
+        final req1 = McpBridge().getRequestById(id1);
+        final req2 = McpBridge().getRequestById(id2);
+        
+        if (req1 == null) return {'error': 'Request 1 not found'};
+        if (req2 == null) return {'error': 'Request 2 not found'};
+        
+        // Header 差异对比
+        var reqHeaders1 = req1.headers.toMap();
+        var reqHeaders2 = req2.headers.toMap();
+        var respHeaders1 = req1.response?.headers.toMap() ?? {};
+        var respHeaders2 = req2.response?.headers.toMap() ?? {};
+        
+        var headerDiff = _compareHeaders(reqHeaders1, reqHeaders2);
+        var respHeaderDiff = _compareHeaders(respHeaders1, respHeaders2);
+        
+        // Body 差异对比（如果是 JSON）
+        var bodyDiff = _compareBody(req1.bodyAsString, req2.bodyAsString);
+        var respBodyDiff = _compareBody(
+          req1.response?.bodyAsString ?? '',
+          req2.response?.bodyAsString ?? ''
+        );
+        
+        return {
+          'request_1': McpBridge.requestToJson(req1, includeBody: true),
+          'request_2': McpBridge.requestToJson(req2, includeBody: true),
+          'comparison': {
+            'same_url': req1.requestUrl == req2.requestUrl,
+            'same_method': req1.method == req2.method,
+            'same_status': req1.response?.status.code == req2.response?.status.code,
+            'duration_diff': (req1.response?.responseTime.difference(req1.requestTime).inMilliseconds ?? 0) - 
+                            (req2.response?.responseTime.difference(req2.requestTime).inMilliseconds ?? 0),
+            'request_header_diff': headerDiff,
+            'response_header_diff': respHeaderDiff,
+            'request_body_diff': bodyDiff,
+            'response_body_diff': respBodyDiff,
+          }
+        };
+
+      case 'find_similar_requests':
+        final refId = args['request_id'] as String;
+        final limit = (args['limit'] as num?)?.toInt() ?? 10;
+        
+        final refReq = McpBridge().getRequestById(refId);
+        if (refReq == null) return {'error': 'Reference request not found'};
+        
+        try {
+          var refUri = Uri.parse(refReq.requestUrl);
+          var refPath = refUri.path;
+          
+          // 查找相似的请求（相同路径模式和方法）
+          var similar = McpBridge().source.where((req) {
+            if (req.requestId == refId) return false; // 排除自己
+            if (req.method != refReq.method) return false; // 方法必须相同
+            
+            try {
+              var uri = Uri.parse(req.requestUrl);
+              // 相同域名和路径
+              return uri.host == refUri.host && uri.path == refPath;
+            } catch (e) {
+              return false;
+            }
+          }).take(limit).toList();
+          
+          return {
+            'reference': McpBridge.requestToJson(refReq),
+            'similar_requests': similar.map((r) => McpBridge.requestToJson(r)).toList(),
+            'count': similar.length,
+          };
+        } catch (e) {
+          return {'error': 'Failed to find similar requests: $e'};
+        }
+
+      case 'extract_api_endpoints':
+        final domainFilter = args['domain_filter'];
+        
+        try {
+          var requests = McpBridge().source;
+          var endpoints = <String, ApiEndpoint>{};
+          
+          for (var req in requests) {
+            try {
+              var uri = Uri.parse(req.requestUrl);
+              
+              // 域名过滤
+              if (domainFilter != null && !uri.host.contains(domainFilter)) {
+                continue;
+              }
+              
+              var key = '${req.method.name} ${uri.host}${uri.path}';
+              
+              if (!endpoints.containsKey(key)) {
+                endpoints[key] = ApiEndpoint(req.method.name, uri.host, uri.path);
+              }
+              
+              endpoints[key]!.addRequest(req);
+            } catch (e) {
+              // 忽略解析失败的 URL
+            }
+          }
+          
+          // 转换为列表并按请求数量排序
+          var result = endpoints.values.toList();
+          result.sort((a, b) => b.count.compareTo(a.count));
+          
+          return {
+            'endpoints': result.map((e) => e.toJson()).toList(),
+            'total_unique': result.length,
+          };
+        } catch (e) {
+          return {'error': 'Failed to extract endpoints: $e'};
+        }
+
+      // ==================== Device Control Tools (Android only) ====================
+      case 'get_device_info':
+        if (!McpScreen.isSupported) {
+          return {'error': 'Device control is only available on Android'};
+        }
+        try {
+          return await McpScreen.getDeviceInfo();
+        } catch (e) {
+          return {'error': 'Failed to get device info: $e'};
+        }
+
+      case 'get_current_activity':
+        if (!McpScreen.isSupported) {
+          return {'error': 'Device control is only available on Android'};
+        }
+        try {
+          var activity = await McpScreen.getCurrentActivity();
+          return {'activity': activity};
+        } catch (e) {
+          return {'error': 'Failed to get current activity: $e'};
+        }
+
+      case 'dump_ui':
+        if (!McpScreen.isSupported) {
+          return {'error': 'Device control is only available on Android'};
+        }
+        try {
+          var clickableOnly = args['clickable_only'] as bool? ?? false;
+          var packageFilter = args['package_filter'] as String?;
+          var uiJson = await McpScreen.dumpUi(clickableOnly: clickableOnly, packageFilter: packageFilter);
+          return {'ui': jsonDecode(uiJson)};
+        } catch (e) {
+          return {'error': 'Failed to dump UI: $e'};
+        }
+
+      case 'tap_screen':
+        if (!McpScreen.isSupported) {
+          return {'error': 'Device control is only available on Android'};
+        }
+        try {
+          var x = (args['x'] as num).toInt();
+          var y = (args['y'] as num).toInt();
+          var success = await McpScreen.tap(x, y);
+          return {'success': success};
+        } catch (e) {
+          return {'error': 'Failed to tap: $e'};
+        }
+
+      case 'long_press':
+        if (!McpScreen.isSupported) {
+          return {'error': 'Device control is only available on Android'};
+        }
+        try {
+          var x = (args['x'] as num).toInt();
+          var y = (args['y'] as num).toInt();
+          var duration = (args['duration'] as num?)?.toInt() ?? 50;
+          var success = await McpScreen.click(x, y, duration: duration);
+          return {'success': success};
+        } catch (e) {
+          return {'error': 'Failed to long press: $e'};
+        }
+
+      case 'swipe_screen':
+        if (!McpScreen.isSupported) {
+          return {'error': 'Device control is only available on Android'};
+        }
+        try {
+          var x1 = (args['x1'] as num).toInt();
+          var y1 = (args['y1'] as num).toInt();
+          var x2 = (args['x2'] as num).toInt();
+          var y2 = (args['y2'] as num).toInt();
+          var duration = (args['duration'] as num?)?.toInt() ?? 300;
+          var success = await McpScreen.swipe(x1, y1, x2, y2, duration: duration);
+          return {'success': success};
+        } catch (e) {
+          return {'error': 'Failed to swipe: $e'};
+        }
+
+      case 'key_event':
+        if (!McpScreen.isSupported) {
+          return {'error': 'Device control is only available on Android'};
+        }
+        try {
+          var keycode = (args['keycode'] as num).toInt();
+          var success = await McpScreen.keyEvent(keycode);
+          return {'success': success};
+        } catch (e) {
+          return {'error': 'Failed to send key event: $e'};
+        }
+
+      case 'input_text':
+        if (!McpScreen.isSupported) {
+          return {'error': 'Device control is only available on Android'};
+        }
+        try {
+          var text = args['text'] as String;
+          var success = await McpScreen.inputText(text);
+          return {'success': success};
+        } catch (e) {
+          return {'error': 'Failed to input text: $e'};
+        }
+
+      case 'screenshot':
+        if (!McpScreen.isSupported) {
+          return {'error': 'Device control is only available on Android'};
+        }
+        try {
+          var base64 = await McpScreen.screenshot();
+          return {'image': base64, 'format': 'png_base64'};
+        } catch (e) {
+          return {'error': 'Failed to take screenshot: $e'};
+        }
+
+      case 'open_accessibility_settings':
+        if (!McpScreen.isSupported) {
+          return {'error': 'Device control is only available on Android'};
+        }
+        try {
+          var success = await McpScreen.openAccessibilitySettings();
+          return {'success': success};
+        } catch (e) {
+          return {'error': 'Failed to open accessibility settings: $e'};
+        }
+
+      case 'shell':
+        if (!McpScreen.isSupported) {
+          return {'error': 'Device control is only available on Android'};
+        }
+        try {
+          var command = args['command'] as String;
+          var useSu = args['use_su'] as bool? ?? false;
+          var timeoutMs = (args['timeout_ms'] as num?)?.toInt() ?? 10000;
+          return await McpScreen.shell(command, useSu: useSu, timeoutMs: timeoutMs);
+        } catch (e) {
+          return {'error': 'Failed to execute shell command: $e'};
+        }
+
+      // ==================== Breakpoint Debugging Tools (1.3.1+) ====================
+      case 'add_breakpoint_rule':
+        try {
+          final urlPattern = args['url_pattern'] as String;
+          final ruleName = args['name'] as String? ?? 'MCP Breakpoint';
+          final interceptRequest = args['intercept_request'] as bool? ?? true;
+          final interceptResponse = args['intercept_response'] as bool? ?? true;
+          final methodStr = args['method'] as String?;
+          final enabled = args['enabled'] as bool? ?? true;
+
+          HttpMethod? method;
+          if (methodStr != null && methodStr.isNotEmpty) {
+            method = HttpMethod.valueOf(methodStr);
+          }
+
+          var manager = await RequestBreakpointManager.instance;
+          var rule = RequestBreakpointRule(
+            enabled: enabled,
+            name: ruleName,
+            url: urlPattern,
+            interceptRequest: interceptRequest,
+            interceptResponse: interceptResponse,
+            method: method,
+          );
+          manager.add(rule);
+          _notifyConfigChanged('breakpoint', {'action': 'add', 'url': urlPattern});
+          return {
+            'status': 'success',
+            'message': 'Added breakpoint rule for $urlPattern',
+            'rule': rule.toJson()
+          };
+        } catch (e) {
+          return {'error': 'Failed to add breakpoint rule: $e'};
+        }
+
+      case 'remove_breakpoint_rule':
+        try {
+          final urlPattern = args['url_pattern'] as String;
+          var manager = await RequestBreakpointManager.instance;
+          manager.list.removeWhere((r) => r.url == urlPattern);
+          await manager.save();
+          _notifyConfigChanged('breakpoint', {'action': 'remove', 'url': urlPattern});
+          return {
+            'status': 'success',
+            'message': 'Removed breakpoint rule for $urlPattern'
+          };
+        } catch (e) {
+          return {'error': 'Failed to remove breakpoint rule: $e'};
+        }
+
+      case 'list_breakpoint_rules':
+        try {
+          var manager = await RequestBreakpointManager.instance;
+          return {
+            'enabled': manager.enabled,
+            'rules': manager.list.map((r) => r.toJson()).toList(),
+            'total': manager.list.length,
+          };
+        } catch (e) {
+          return {'error': 'Failed to list breakpoint rules: $e'};
+        }
+
+      case 'toggle_breakpoint':
+        try {
+          final enabled = args['enabled'] as bool;
+          var manager = await RequestBreakpointManager.instance;
+          manager.enabled = enabled;
+          await manager.save();
+          _notifyConfigChanged('breakpoint', {'action': 'toggle', 'enabled': enabled});
+          return {
+            'status': 'success',
+            'enabled': manager.enabled,
+          };
+        } catch (e) {
+          return {'error': 'Failed to toggle breakpoint: $e'};
+        }
+
+      // ==================== Weak Network Simulation Tools (1.3.1+) ====================
+      case 'add_weak_network_rule':
+        try {
+          final urlPattern = args['url_pattern'] as String;
+          final profileId = args['profile_id'] as String;
+          final enabled = args['enabled'] as bool? ?? true;
+
+          var manager = await NetworkConditionManager.instance;
+
+          // Validate profile exists
+          var profile = manager.findProfile(profileId);
+          if (profile == null) {
+            return {'error': 'Profile not found: $profileId. Available: ${manager.allProfiles.map((p) => p.id).join(", ")}'};
+          }
+
+          var rule = NetworkConditionRule(
+            enabled: enabled,
+            url: urlPattern,
+            profileId: profileId,
+          );
+          manager.rules.add(rule);
+          await manager.flushConfig();
+          _notifyConfigChanged('weak_network', {'action': 'add_rule', 'url': urlPattern});
+          return {
+            'status': 'success',
+            'message': 'Added weak network rule for $urlPattern with profile $profileId',
+            'rule': rule.toJson(),
+          };
+        } catch (e) {
+          return {'error': 'Failed to add weak network rule: $e'};
+        }
+
+      case 'add_custom_network_profile':
+        try {
+          final name = args['name'] as String;
+          final uploadKbps = (args['upload_kbps'] as num?)?.toInt();
+          final downloadKbps = (args['download_kbps'] as num?)?.toInt();
+          final requestLatencyMs = (args['request_latency_ms'] as num?)?.toInt() ?? 0;
+          final responseLatencyMs = (args['response_latency_ms'] as num?)?.toInt() ?? 0;
+          final jitterMs = (args['jitter_ms'] as num?)?.toInt() ?? 0;
+          final lossRate = (args['loss_rate'] as num?)?.toDouble() ?? 0.0;
+          final offline = args['offline'] as bool? ?? false;
+
+          var manager = await NetworkConditionManager.instance;
+          var profile = NetworkConditionProfile(
+            id: NetworkConditionManager.newCustomId(),
+            name: name,
+            uploadKbps: uploadKbps,
+            downloadKbps: downloadKbps,
+            requestLatencyMs: requestLatencyMs,
+            responseLatencyMs: responseLatencyMs,
+            jitterMs: jitterMs,
+            lossRate: lossRate,
+            offline: offline,
+          );
+          await manager.upsertCustomProfile(profile);
+          _notifyConfigChanged('weak_network', {'action': 'add_profile', 'name': name});
+          return {
+            'status': 'success',
+            'message': 'Created custom network profile: $name',
+            'profile': profile.toJson(),
+          };
+        } catch (e) {
+          return {'error': 'Failed to create custom network profile: $e'};
+        }
+
+      case 'list_weak_network_rules':
+        try {
+          var manager = await NetworkConditionManager.instance;
+          return {
+            'enabled': manager.enabled,
+            'rules': manager.rules.map((r) => r.toJson()).toList(),
+            'builtin_profiles': NetworkConditionProfile.builtin.map((p) => p.toJson()).toList(),
+            'custom_profiles': manager.customProfiles.map((p) => p.toJson()).toList(),
+            'total_rules': manager.rules.length,
+          };
+        } catch (e) {
+          return {'error': 'Failed to list weak network rules: $e'};
+        }
+
+      case 'remove_weak_network_rule':
+        try {
+          final urlPattern = args['url_pattern'] as String;
+          var manager = await NetworkConditionManager.instance;
+          manager.rules.removeWhere((r) => r.url == urlPattern);
+          await manager.flushConfig();
+          _notifyConfigChanged('weak_network', {'action': 'remove_rule', 'url': urlPattern});
+          return {
+            'status': 'success',
+            'message': 'Removed weak network rule for $urlPattern'
+          };
+        } catch (e) {
+          return {'error': 'Failed to remove weak network rule: $e'};
+        }
+
+      case 'toggle_weak_network':
+        try {
+          final enabled = args['enabled'] as bool;
+          var manager = await NetworkConditionManager.instance;
+          manager.enabled = enabled;
+          await manager.flushConfig();
+          _notifyConfigChanged('weak_network', {'action': 'toggle', 'enabled': enabled});
+          return {
+            'status': 'success',
+            'enabled': manager.enabled,
+          };
+        } catch (e) {
+          return {'error': 'Failed to toggle weak network: $e'};
+        }
+
+      // ==================== Environment Variable Tools (1.3.1+) ====================
+      case 'list_environments':
+        try {
+          var manager = await EnvironmentManager.instance;
+          return {
+            'enabled': manager.enabled,
+            'active_id': manager.activeId,
+            'active_name': manager.active?.name,
+            'environments': manager.environments.map((e) => e.toJson()).toList(),
+            'flat_variables': manager.flatMap(),
+            'total_environments': manager.environments.length,
+          };
+        } catch (e) {
+          return {'error': 'Failed to list environments: $e'};
+        }
+
+      case 'set_environment_variable':
+        try {
+          final key = args['key'] as String;
+          final value = args['value'] as String?;
+          final environmentId = args['environment_id'] as String?;
+          final enabled = args['enabled'] as bool? ?? true;
+
+          var manager = await EnvironmentManager.instance;
+
+          // Determine target environment
+          Environment target;
+          if (environmentId != null && environmentId.isNotEmpty) {
+            // Find by explicit ID; return error if not found
+            var found = manager.environments.firstWhere(
+              (e) => e.id == environmentId,
+              orElse: () => Environment(id: '', name: ''),
+            );
+            if (found.id.isEmpty) {
+              return {'error': 'Environment not found: $environmentId'};
+            }
+            target = found;
+          } else {
+            // Default: write to active environment or Global
+            target = manager.active ?? manager.global;
+          }
+
+          if (value == null) {
+            // Delete the variable
+            target.variables.removeWhere((v) => v.key == key);
+          } else {
+            // Update or add
+            var existing = target.variables.firstWhere(
+              (v) => v.key == key,
+              orElse: () => EnvironmentVariable(key: '', value: ''),
+            );
+            if (existing.key.isNotEmpty) {
+              existing.value = value;
+              existing.enabled = enabled;
+            } else {
+              target.variables.add(EnvironmentVariable(key: key, value: value, enabled: enabled));
+            }
+          }
+          await manager.flushConfig();
+          _notifyConfigChanged('environment', {'action': 'set_variable', 'key': key});
+          return {
+            'status': 'success',
+            'message': value == null
+                ? 'Deleted variable $key from ${target.name}'
+                : 'Set variable $key=$value in ${target.name}',
+            'environment': target.name,
+          };
+        } catch (e) {
+          return {'error': 'Failed to set environment variable: $e'};
+        }
+
+      case 'create_environment':
+        try {
+          final name = args['name'] as String;
+          var manager = await EnvironmentManager.instance;
+          var env = Environment(
+            id: RandomUtil.randomString(8),
+            name: name,
+          );
+          manager.upsertEnvironment(env);
+          await manager.flushConfig();
+          _notifyConfigChanged('environment', {'action': 'create', 'name': name});
+          return {
+            'status': 'success',
+            'message': 'Created environment: $name',
+            'environment': env.toJson(),
+          };
+        } catch (e) {
+          return {'error': 'Failed to create environment: $e'};
+        }
+
+      case 'set_active_environment':
+        try {
+          final environmentId = args['environment_id'] as String?;
+          var manager = await EnvironmentManager.instance;
+
+          if (environmentId == null || environmentId.isEmpty) {
+            manager.setActive(null);
+          } else {
+            // Verify the environment exists and is not Global
+            var env = manager.environments.firstWhere(
+              (e) => e.id == environmentId && !e.isGlobal,
+              orElse: () => Environment(id: '', name: ''),
+            );
+            if (env.id.isEmpty) {
+              return {'error': 'Named environment not found: $environmentId'};
+            }
+            manager.setActive(environmentId);
+          }
+          await manager.flushConfig();
+          _notifyConfigChanged('environment', {'action': 'set_active', 'active_id': manager.activeId});
+          return {
+            'status': 'success',
+            'active_id': manager.activeId,
+            'active_name': manager.active?.name,
+          };
+        } catch (e) {
+          return {'error': 'Failed to set active environment: $e'};
+        }
+
+      case 'remove_environment':
+        try {
+          final environmentId = args['environment_id'] as String;
+          var manager = await EnvironmentManager.instance;
+
+          // Prevent removing Global
+          if (environmentId == 'global') {
+            return {'error': 'Cannot remove the Global environment'};
+          }
+
+          manager.removeEnvironment(environmentId);
+          await manager.flushConfig();
+          _notifyConfigChanged('environment', {'action': 'remove', 'environment_id': environmentId});
+          return {
+            'status': 'success',
+            'message': 'Removed environment: $environmentId'
+          };
+        } catch (e) {
+          return {'error': 'Failed to remove environment: $e'};
+        }
+
+      case 'toggle_environment_variables':
+        try {
+          final enabled = args['enabled'] as bool;
+          var manager = await EnvironmentManager.instance;
+          manager.setEnabled(enabled);
+          await manager.flushConfig();
+          _notifyConfigChanged('environment', {'action': 'toggle', 'enabled': enabled});
+          return {
+            'status': 'success',
+            'enabled': manager.enabled,
+          };
+        } catch (e) {
+          return {'error': 'Failed to toggle environment variables: $e'};
+        }
+
+      default:
+        throw Exception('Unknown tool: $name');
+    }
+  }
+
+  String _generateCurl(HttpRequest req) {
+    var sb = StringBuffer();
+    sb.write("curl -X ${req.method.name} '${req.requestUrl}'");
+    
+    req.headers.forEach((key, values) {
+        for (var v in values) {
+            sb.write(" -H '$key: $v'");
+        }
+    });
+    
+    var body = req.bodyAsString;
+    if (body.isNotEmpty) {
+        var escapedBody = body.replaceAll("'", "'\\''");
+        sb.write(" -d '$escapedBody'");
+    }
+    
+    if (req.headers.contentEncoding == 'gzip') {
+         sb.write(" --compressed");
+    }
+    return sb.toString();
+  }
+
+  String _generatePythonCode(HttpRequest req) {
+    var sb = StringBuffer();
+    sb.writeln("import requests");
+    sb.writeln();
+    sb.writeln("url = \"${req.requestUrl}\"");
+    sb.writeln();
+    
+    sb.writeln("headers = {");
+    req.headers.forEach((key, values) {
+       // Python requests usually takes the first value if multiple, or list
+       var val = values.length == 1 ? values.first : values.join(','); 
+       // Escape quotes
+       val = val.replaceAll('"', '\\"');
+       sb.writeln("    \"$key\": \"$val\",");
+    });
+    sb.writeln("}");
+    sb.writeln();
+    
+    var body = req.bodyAsString;
+    if (body.isNotEmpty) {
+        // Try to pretty print JSON if possible
+        try {
+            // Check if it's json
+            if (req.headers.contentType.contains("json")) {
+                 // Use json parameter
+                 sb.writeln("payload = $body"); // Assume body is valid json string, maybe problematic if not formatted
+                 // Safe way: treat as string then json.loads? Or just raw string
+                 // Let's just use data for now to be safe
+                 sb.writeln("response = requests.request(\"${req.method.name}\", url, headers=headers, data='''$body''')");
+            } else {
+                 sb.writeln("response = requests.request(\"${req.method.name}\", url, headers=headers, data='''$body''')");
+            }
+        } catch(e) {
+             sb.writeln("response = requests.request(\"${req.method.name}\", url, headers=headers, data='''$body''')");
+        }
+    } else {
+        sb.writeln("response = requests.request(\"${req.method.name}\", url, headers=headers)");
+    }
+    
+    sb.writeln();
+    sb.writeln("print(response.text)");
+    return sb.toString();
+  }
+
+  String _generateJsCode(HttpRequest req) {
+    var sb = StringBuffer();
+    sb.writeln("const url = \"${req.requestUrl}\";");
+    sb.writeln("const options = {");
+    sb.writeln("  method: \"${req.method.name}\",");
+    sb.writeln("  headers: {");
+    req.headers.forEach((key, values) {
+        var val = values.join(',');
+        val = val.replaceAll('"', '\\"');
+        sb.writeln("    \"$key\": \"$val\",");
+    });
+    sb.writeln("  },");
+    
+    var body = req.bodyAsString;
+    if (body.isNotEmpty) {
+        // 转义 backtick 和 ${} 防止模板字符串注入
+        var escapedBody = body
+            .replaceAll('\\', '\\\\')
+            .replaceAll('`', '\\`')
+            .replaceAll('\$', '\\\$');
+        sb.writeln("  body: `$escapedBody`");
+    }
+    sb.writeln("};");
+    sb.writeln();
+    sb.writeln("fetch(url, options)");
+    sb.writeln("  .then(response => response.text())");
+    sb.writeln("  .then(result => console.log(result))");
+    sb.writeln("  .catch(error => console.error('error', error));");
+    return sb.toString();
+  }
+
+  Map<String, dynamic> _generateHar(Iterable<HttpRequest> requests) {
+    var entries = [];
+    for (var req in requests) {
+        var response = req.response;
+        var duration = response != null ? response.responseTime.difference(req.requestTime).inMilliseconds : 0;
+        
+        entries.add({
+            "startedDateTime": req.requestTime.toIso8601String(),
+            "time": duration,
+            "request": {
+                "method": req.method.name,
+                "url": req.requestUrl,
+                "httpVersion": req.protocolVersion,
+                "cookies": _parseCookies(req.headers.get('cookie')),
+                "headers": req.headers.entries.map((e) => {"name": e.key, "value": e.value.join(',')}).toList(),
+                "queryString": _parseQueryString(req.requestUrl),
+                "headersSize": -1,
+                "bodySize": req.packageSize ?? -1,
+                "postData": req.bodyAsString.isNotEmpty ? {"mimeType": req.headers.contentType, "text": req.bodyAsString} : null
+            },
+            "response": {
+                "status": response?.status.code ?? 0,
+                "statusText": response?.status.reasonPhrase ?? "",
+                "httpVersion": response?.protocolVersion ?? "HTTP/1.1",
+                "cookies": [],
+                "headers": response?.headers.entries.map((e) => {"name": e.key, "value": e.value.join(',')}).toList() ?? [],
+                "content": {
+                    "size": response?.body?.length ?? 0,
+                    "mimeType": response?.headers.contentType ?? "",
+                    "text": response?.bodyAsString
+                },
+                "redirectURL": "",
+                "headersSize": -1,
+                "bodySize": response?.packageSize ?? -1,
+            },
+            "cache": {},
+            "timings": {
+                "send": 0,
+                "wait": duration,
+                "receive": 0
+            }
+        });
+    }
+
+    return {
+        "log": {
+            "version": "1.2",
+            "creator": {"name": "ProxyPin MCP", "version": "1.0"},
+            "entries": entries
+        }
+    };
+  }
+
+  HttpRequest? _parseHarEntry(Map<String, dynamic> entry) {
+     try {
+         var requestJson = entry['request'];
+         var url = requestJson['url'];
+         var method = requestJson['method'];
+         var req = HttpRequest(HttpMethod.valueOf(method), url);
+         
+         if (entry['startedDateTime'] != null) {
+             req.requestTime = DateTime.parse(entry['startedDateTime']);
+         }
+         
+         // Headers
+         if (requestJson['headers'] != null) {
+             for (var h in requestJson['headers']) {
+                 req.headers.add(h['name'], h['value']);
+             }
+         }
+         
+         // Body
+         if (requestJson['postData'] != null && requestJson['postData']['text'] != null) {
+             req.body = utf8.encode(requestJson['postData']['text']);
+         }
+         
+         // Response
+         var responseJson = entry['response'];
+         if (responseJson != null) {
+             var status = responseJson['status'];
+             var statusText = responseJson['statusText'];
+             var res = HttpResponse(HttpStatus(status is num ? status.toInt() : (int.tryParse(status.toString()) ?? 0), statusText?.toString() ?? ""));
+             
+             if (responseJson['headers'] != null) {
+                 for (var h in responseJson['headers']) {
+                     res.headers.add(h['name'], h['value']);
+                 }
+             }
+             
+             if (responseJson['content'] != null && responseJson['content']['text'] != null) {
+                 res.body = utf8.encode(responseJson['content']['text']);
+             }
+             
+             res.request = req;
+             // Calculate response time from duration
+             var time = entry['time'] ?? 0;
+             res.responseTime = req.requestTime.add(Duration(milliseconds: time is num ? time.toInt() : 0));
+             req.response = res;
+         }
+         
+         return req;
+     } catch (e) {
+         logger.e("Failed to parse HAR entry", error: e);
+         return null;
+     }
+  }
+  
+  Future<dynamic> _readResource(String uri) async {
+      if (uri == 'proxypin://requests/latest') {
+          return McpBridge().getRecentRequests(limit: 50).map((r) => McpBridge.requestToJson(r)).toList();
+      } else if (uri == 'proxypin://config/current') {
+          var config = await Configuration.instance;
+          return config.toJson();
+      } else if (uri == 'proxypin://breakpoints/rules') {
+          var manager = await RequestBreakpointManager.instance;
+          return {
+            'enabled': manager.enabled,
+            'rules': manager.list.map((r) => r.toJson()).toList(),
+          };
+      } else if (uri == 'proxypin://network/conditions') {
+          var manager = await NetworkConditionManager.instance;
+          return {
+            'enabled': manager.enabled,
+            'rules': manager.rules.map((r) => r.toJson()).toList(),
+            'custom_profiles': manager.customProfiles.map((p) => p.toJson()).toList(),
+          };
+      } else if (uri == 'proxypin://environments/list') {
+          var manager = await EnvironmentManager.instance;
+          return {
+            'enabled': manager.enabled,
+            'active_id': manager.activeId,
+            'environments': manager.environments.map((e) => e.toJson()).toList(),
+            'flat_variables': manager.flatMap(),
+          };
+      }
+      throw Exception('Resource not found: $uri');
+  }
+
+  /// 比较两个 Header Map 的差异
+  Map<String, dynamic> _compareHeaders(Map<String, String> h1, Map<String, String> h2) {
+    var added = <String, String>{};
+    var removed = <String, String>{};
+    var changed = <String, Map<String, String>>{};
+    
+    // 检查新增和修改
+    h2.forEach((key, value) {
+      if (!h1.containsKey(key)) {
+        added[key] = value;
+      } else if (h1[key] != value) {
+        changed[key] = {'old': h1[key]!, 'new': value};
+      }
+    });
+    
+    // 检查删除
+    h1.forEach((key, value) {
+      if (!h2.containsKey(key)) {
+        removed[key] = value;
+      }
+    });
+    
+    return {
+      'added': added,
+      'removed': removed,
+      'changed': changed,
+      'has_diff': added.isNotEmpty || removed.isNotEmpty || changed.isNotEmpty,
+    };
+  }
+
+  /// 比较两个 Body 的差异（支持 JSON）
+  Map<String, dynamic> _compareBody(String body1, String body2) {
+    if (body1 == body2) {
+      return {'same': true, 'type': 'identical'};
+    }
+    
+    // 尝试作为 JSON 对比
+    try {
+      var json1 = jsonDecode(body1);
+      var json2 = jsonDecode(body2);
+      
+      if (json1 is Map && json2 is Map) {
+        return {
+          'same': false,
+          'type': 'json',
+          'diff': _compareJsonObjects(json1, json2),
+        };
+      }
+    } catch (e) {
+      // 不是 JSON，按文本对比
+    }
+    
+    return {
+      'same': false,
+      'type': 'text',
+      'length_diff': body2.length - body1.length,
+      'body1_length': body1.length,
+      'body2_length': body2.length,
+    };
+  }
+
+  /// 比较两个 JSON 对象
+  Map<String, dynamic> _compareJsonObjects(Map json1, Map json2) {
+    var added = <String, dynamic>{};
+    var removed = <String, dynamic>{};
+    var changed = <String, Map<String, dynamic>>{};
+    
+    // 检查新增和修改
+    json2.forEach((key, value) {
+      if (!json1.containsKey(key)) {
+        added[key.toString()] = value;
+      } else if (json1[key] != value) {
+        changed[key.toString()] = {'old': json1[key], 'new': value};
+      }
+    });
+    
+    // 检查删除
+    json1.forEach((key, value) {
+      if (!json2.containsKey(key)) {
+        removed[key.toString()] = value;
+      }
+    });
+    
+    return {
+      'added': added,
+      'removed': removed,
+      'changed': changed,
+    };
+  }
+
+  /// 解析 Cookie 字符串为 HAR 格式
+  List<Map<String, String>> _parseCookies(String? cookieHeader) {
+    if (cookieHeader == null || cookieHeader.isEmpty) return [];
+    
+    var cookies = <Map<String, String>>[];
+    var parts = cookieHeader.split(';');
+    
+    for (var part in parts) {
+      var trimmed = part.trim();
+      var index = trimmed.indexOf('=');
+      if (index > 0) {
+        var name = trimmed.substring(0, index);
+        var value = trimmed.substring(index + 1);
+        cookies.add({'name': name, 'value': value});
+      }
+    }
+    
+    return cookies;
+  }
+
+  /// 解析 URL 查询参数为 HAR 格式
+  List<Map<String, String>> _parseQueryString(String url) {
+    try {
+      var uri = Uri.parse(url);
+      return uri.queryParameters.entries
+          .map((e) => {'name': e.key, 'value': e.value})
+          .toList();
+    } catch (e) {
+      return [];
+    }
+  }
+}
+
+/// API 端点信息类
+class ApiEndpoint {
+  final String method;
+  final String domain;
+  final String path;
+  final List<HttpRequest> requests = [];
+  final Set<int> statusCodes = {};
+  
+  ApiEndpoint(this.method, this.domain, this.path);
+  
+  void addRequest(HttpRequest req) {
+    requests.add(req);
+    if (req.response?.status.code != null) {
+      statusCodes.add(req.response!.status.code);
+    }
+  }
+  
+  int get count => requests.length;
+  
+  Map<String, dynamic> toJson() {
+    return {
+      'method': method,
+      'domain': domain,
+      'path': path,
+      'count': count,
+      'status_codes': statusCodes.toList()..sort(),
+    };
+  }
+}
