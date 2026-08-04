@@ -44,6 +44,7 @@ import 'package:proxypin/ui/mobile/setting/request_breakpoint.dart';
 
 import '../../../network/components/manager/request_breakpoint_manager.dart';
 import '../../component/widgets.dart';
+import '../setting/mcp_connection.dart';
 import '../setting/proxy.dart';
 import '../setting/request_map.dart';
 
@@ -336,6 +337,16 @@ class SettingPage extends StatelessWidget {
                 // const SizedBox(height: 10),
               ])),
           const SizedBox(height: 12),
+          // MCP Connection entry
+          if (Platform.isAndroid)
+            section([
+              ListTile(
+                  title: const Text('MCP Connection'),
+                  leading: const Icon(Icons.cast_connected, color: Colors.pink),
+                  trailing: const Icon(Icons.keyboard_arrow_right),
+                  onTap: () => navigator(context, const McpConnectionPage())),
+            ]),
+          if (Platform.isAndroid) const SizedBox(height: 12),
           section([
             ListTile(
                 title: Text(localizations.setting),
