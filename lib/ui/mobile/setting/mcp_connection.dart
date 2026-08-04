@@ -25,7 +25,23 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
   @override
   void initState() {
     super.initState();
+    // 注册状态变化回调，实现实时更新
+    McpServer().onStatusChanged = _onMcpStatusChanged;
     _loadInfo();
+  }
+
+  @override
+  void dispose() {
+    // 清除回调，避免页面销毁后仍被调用
+    McpServer().onStatusChanged = null;
+    super.dispose();
+  }
+
+  /// MCP 服务器状态变化时刷新 UI
+  void _onMcpStatusChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _loadInfo() async {
@@ -47,8 +63,9 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
     final port = mcpServer.port;
     final ip = _deviceIp ?? '127.0.0.1';
     final apiUrl = 'http://$ip:$port/mcp';
-    final wsUrl = 'ws://$ip:$port/ws';
+    final sseUrl = 'http://$ip:$port/sse';
     final isRunning = mcpServer.isRunning;
+    final lastError = mcpServer.lastError;
 
     final mode = _deviceInfo?['mode'] as String? ?? 'none';
     final hasRoot = _deviceInfo?['hasRoot'] as bool? ?? false;
@@ -74,15 +91,21 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
               children: [
                 // Server Status
                 Card(
-                  child: ListTile(
-                    leading: Icon(
-                      isRunning ? Icons.check_circle : Icons.error,
-                      color: isRunning ? Colors.green : Colors.red,
-                    ),
-                    title: const Text('MCP API Server'),
-                    subtitle: Text(isRunning
-                        ? 'Running on port $port'
-                        : 'Not running'),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: Icon(
+                          isRunning ? Icons.check_circle : Icons.error,
+                          color: isRunning ? Colors.green : Colors.red,
+                        ),
+                        title: const Text('MCP API Server'),
+                        subtitle: Text(isRunning
+                            ? 'Running on port $port'
+                            : (lastError != null
+                                ? 'Not running: $lastError'
+                                : 'Not running')),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -119,12 +142,12 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
                       ),
                       const Divider(height: 0),
                       ListTile(
-                        title: const Text('WebSocket'),
-                        subtitle: Text(wsUrl),
+                        title: const Text('SSE URL'),
+                        subtitle: Text(sseUrl),
                         trailing: IconButton(
                           icon: const Icon(Icons.copy, size: 20),
                           onPressed: () {
-                            Clipboard.setData(ClipboardData(text: wsUrl));
+                            Clipboard.setData(ClipboardData(text: sseUrl));
                             FlutterToastr.show('Copied', context);
                           },
                         ),

@@ -33,8 +33,12 @@ class McpServer {
 
   io.HttpServer? _server;
   int? _port;
-  
+  String? _lastError;
+
   int get port => _port ?? 9010;
+
+  /// 上次启动错误信息（端口冲突等），供 UI 展示
+  String? get lastError => _lastError;
   
   // SSE 连接池 — 使用 List 的 copy-then-iterate 模式保证并发安全
   final List<io.HttpResponse> _sseConnections = [];
@@ -64,12 +68,13 @@ class McpServer {
   Future<void> start() async {
     try {
       if (isRunning) return;
-      
+
       var config = await Configuration.instance;
       _port = config.mcpPort;
-      
+
       // 绑定 0.0.0.0 允许局域网访问
       _server = await io.HttpServer.bind(io.InternetAddress.anyIPv4, _port!);
+      _lastError = null; // 清除之前的错误
       logger.i('MCP Server listening on http://0.0.0.0:$_port');
 
       _server!.listen((request) {
@@ -111,6 +116,7 @@ class McpServer {
       onStatusChanged?.call();
       
     } catch (e) {
+      _lastError = e.toString();
       logger.e('Failed to start MCP server', error: e);
     }
   }
@@ -118,7 +124,7 @@ class McpServer {
   Future<void> stop() async {
       _heartbeatTimer?.cancel();
       _heartbeatTimer = null;
-      
+
       // 关闭所有 SSE 连接（先取快照再遍历）
       for (var conn in _snapshotSseConnections()) {
           try {
@@ -128,12 +134,14 @@ class McpServer {
           }
       }
       _sseConnections.clear();
-      
+
       // 清除回调
       McpBridge().onRequestCompleted = null;
-      
+
       await _server?.close();
       _server = null;
+      // 手动停止时清除错误状态
+      _lastError = null;
       // 通知状态变化
       onStatusChanged?.call();
   }
@@ -173,6 +181,7 @@ class McpServer {
   Future<void> _handleMessages(io.HttpRequest request) async {
     if (request.method != 'POST') {
       final response = request.response;
+      response.headers.add('Access-Control-Allow-Origin', '*');
       response.statusCode = 405; // Method Not Allowed
       response.close();
       return;
@@ -182,18 +191,20 @@ class McpServer {
       final content = await utf8.decoder.bind(request).join();
       if (content.isEmpty) {
           final response = request.response;
+          response.headers.add('Access-Control-Allow-Origin', '*');
           response.statusCode = io.HttpStatus.badRequest;
           response.close();
           return;
       }
-      
-      final Map<String, dynamic> jsonRpc = jsonDecode(content);
-      final result = await _processJsonRpc(jsonRpc);
 
+      // 先设置 CORS 和 Content-Type，确保异常时响应也包含 CORS 头
       final response = request.response;
       response.headers.contentType = io.ContentType.json;
       response.headers.add('Access-Control-Allow-Origin', '*');
-      
+
+      final Map<String, dynamic> jsonRpc = jsonDecode(content);
+      final result = await _processJsonRpc(jsonRpc);
+
       if (result != null) {
         response.write(jsonEncode(result));
       } else {
@@ -204,6 +215,7 @@ class McpServer {
     } catch (e) {
       logger.e('MCP Message Error', error: e);
       final response = request.response;
+      response.headers.set('Access-Control-Allow-Origin', '*');
       response.statusCode = io.HttpStatus.internalServerError;
       response.write(jsonEncode({'error': e.toString()}));
       await response.close();
@@ -214,14 +226,10 @@ class McpServer {
   /// POST: JSON-RPC 请求/响应
   /// GET: SSE 流式连接
   Future<void> _handleMcp(io.HttpRequest request) async {
-    // CORS
-    request.response.headers.add('Access-Control-Allow-Origin', '*');
-    request.response.headers.add('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-    request.response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept');
-
     if (request.method == 'GET') {
       // SSE 流式连接
       final response = request.response;
+      response.headers.add('Access-Control-Allow-Origin', '*');
       response.headers.contentType = io.ContentType('text', 'event-stream');
       response.headers.add('Cache-Control', 'no-cache');
       response.headers.add('Connection', 'keep-alive');
@@ -245,6 +253,7 @@ class McpServer {
 
     if (request.method != 'POST') {
       final response = request.response;
+      response.headers.add('Access-Control-Allow-Origin', '*');
       response.statusCode = 405;
       response.close();
       return;
@@ -254,15 +263,19 @@ class McpServer {
       final content = await utf8.decoder.bind(request).join();
       if (content.isEmpty) {
           final response = request.response;
+          response.headers.add('Access-Control-Allow-Origin', '*');
           response.statusCode = io.HttpStatus.badRequest;
           response.close();
           return;
       }
 
+      // 先设置 CORS 和 Content-Type，确保异常时响应也包含 CORS 头
+      final response = request.response;
+      response.headers.add('Access-Control-Allow-Origin', '*');
+      response.headers.contentType = io.ContentType.json;
+
       // 支持批量请求
       final decoded = jsonDecode(content);
-      final response = request.response;
-      response.headers.contentType = io.ContentType.json;
 
       if (decoded is List) {
         // 批量请求
@@ -288,6 +301,7 @@ class McpServer {
     } catch (e) {
       logger.e('MCP /mcp Error', error: e);
       final response = request.response;
+      response.headers.set('Access-Control-Allow-Origin', '*');
       response.statusCode = io.HttpStatus.internalServerError;
       response.write(jsonEncode({'error': e.toString()}));
       await response.close();
@@ -373,12 +387,22 @@ class McpServer {
           }
           final name = params['name'];
           final args = Map<String, dynamic>.from(params['arguments'] ?? {});
-          final result = await _executeTool(name, args);
-          return response({
-              'content': [
-                  {'type': 'text', 'text': jsonEncode(result)}
-              ]
-          });
+          try {
+            final result = await _executeTool(name, args);
+            return response({
+                'content': [
+                    {'type': 'text', 'text': jsonEncode(result)}
+                ]
+            });
+          } catch (e) {
+            // MCP 规范：工具执行错误应作为结果返回（isError: true），而非 JSON-RPC 错误
+            return response({
+                'content': [
+                    {'type': 'text', 'text': jsonEncode({'error': e.toString()})}
+                ],
+                'isError': true
+            });
+          }
           
         case 'resources/list':
           return response({
