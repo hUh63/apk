@@ -1,0 +1,241 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_toastr/flutter_toastr.dart';
+import 'package:proxypin/network/mcp/mcp_server.dart';
+import 'package:proxypin/native/mcp_screen.dart';
+import 'package:proxypin/utils/ip.dart';
+
+/// MCP Connection 设置页面
+/// 展示 MCP 服务器状态、连接信息、控制模式和配置 JSON
+class McpConnectionPage extends StatefulWidget {
+  const McpConnectionPage({super.key});
+
+  @override
+  State<McpConnectionPage> createState() => _McpConnectionPageState();
+}
+
+class _McpConnectionPageState extends State<McpConnectionPage> {
+  Map<String, dynamic>? _deviceInfo;
+  bool _loading = true;
+  String? _deviceIp;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInfo();
+  }
+
+  Future<void> _loadInfo() async {
+    setState(() => _loading = true);
+    try {
+      _deviceIp = await localIp();
+      if (McpScreen.isSupported) {
+        _deviceInfo = await McpScreen.getDeviceInfo();
+      }
+    } catch (e) {
+      // ignore
+    }
+    setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mcpServer = McpServer();
+    final port = mcpServer.port;
+    final ip = _deviceIp ?? '127.0.0.1';
+    final apiUrl = 'http://$ip:$port/mcp';
+    final wsUrl = 'ws://$ip:$port/ws';
+    final isRunning = mcpServer.isRunning;
+
+    final mode = _deviceInfo?['mode'] as String? ?? 'none';
+    final hasRoot = _deviceInfo?['hasRoot'] as bool? ?? false;
+    final accessibilityEnabled = _deviceInfo?['accessibilityEnabled'] as bool? ?? false;
+
+    final configJson = const JsonEncoder.withIndent('  ').convert({
+      'mcpServers': {
+        'proxypin': {
+          'url': apiUrl,
+        }
+      }
+    });
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('MCP Connection'),
+        centerTitle: true,
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                // Server Status
+                Card(
+                  child: ListTile(
+                    leading: Icon(
+                      isRunning ? Icons.check_circle : Icons.error,
+                      color: isRunning ? Colors.green : Colors.red,
+                    ),
+                    title: const Text('MCP API Server'),
+                    subtitle: Text(isRunning
+                        ? 'Running on port $port'
+                        : 'Not running'),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Connection Info
+                Text('Connection Info',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Card(
+                  child: Column(
+                    children: [
+                      ListTile(
+                        title: const Text('Device IP'),
+                        subtitle: Text(ip),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.copy, size: 20),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: ip));
+                            FlutterToastr.show('Copied', context);
+                          },
+                        ),
+                      ),
+                      const Divider(height: 0),
+                      ListTile(
+                        title: const Text('API URL'),
+                        subtitle: Text(apiUrl),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.copy, size: 20),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: apiUrl));
+                            FlutterToastr.show('Copied', context);
+                          },
+                        ),
+                      ),
+                      const Divider(height: 0),
+                      ListTile(
+                        title: const Text('WebSocket'),
+                        subtitle: Text(wsUrl),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.copy, size: 20),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: wsUrl));
+                            FlutterToastr.show('Copied', context);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Control Mode
+                Text('Control Mode',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Card(
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.settings_applications),
+                        title: const Text('Current Mode'),
+                        trailing: Text(
+                          mode,
+                          style: TextStyle(
+                            color: mode == 'none' ? Colors.orange : Colors.green,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 0),
+                      ListTile(
+                        leading: const Icon(Icons.admin_panel_settings),
+                        title: const Text('Root Access'),
+                        trailing: Text(
+                          hasRoot ? 'Available' : 'Not available',
+                          style: TextStyle(
+                            color: hasRoot ? Colors.green : Colors.grey,
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 0),
+                      ListTile(
+                        leading: const Icon(Icons.accessibility),
+                        title: const Text('Accessibility'),
+                        trailing: Text(
+                          accessibilityEnabled ? 'Enabled' : 'Disabled',
+                          style: TextStyle(
+                            color: accessibilityEnabled
+                                ? Colors.green
+                                : Colors.red,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (!accessibilityEnabled && McpScreen.isSupported) ...[
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      icon: const Icon(Icons.accessibility),
+                      label: const Text('Open Accessibility Settings'),
+                      onPressed: () async {
+                        await McpScreen.openAccessibilitySettings();
+                      },
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
+
+                // MCP Config
+                Text('MCP Config (for Claude/Windsurf/Cursor)',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Card(
+                  color: Colors.grey.shade100,
+                  child: Stack(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: SelectableText(
+                          configJson,
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: IconButton(
+                          icon: const Icon(Icons.copy, size: 20),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: configJson));
+                            FlutterToastr.show('Copied', context);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Center(
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Refresh'),
+                    onPressed: _loadInfo,
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+}

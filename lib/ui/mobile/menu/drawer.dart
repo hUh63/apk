@@ -50,6 +50,7 @@ import 'package:proxypin/utils/listenable_list.dart';
 import '../../component/proxy_port_setting.dart';
 import '../../component/widgets.dart';
 import '../../desktop/setting/external_proxy.dart';
+import '../setting/mcp_connection.dart';
 
 ///左侧抽屉
 class DrawerWidget extends StatelessWidget {
@@ -333,6 +334,16 @@ class _SettingPage extends StatelessWidget {
                 const SizedBox(height: 10),
               ])),
           const SizedBox(height: 12),
+          // MCP Connection entry
+          if (Platform.isAndroid)
+            section([
+              ListTile(
+                  title: const Text('MCP Connection'),
+                  leading: const Icon(Icons.cast_connected, color: Colors.pink),
+                  trailing: const Icon(Icons.keyboard_arrow_right),
+                  onTap: () => navigator(context, const McpConnectionPage())),
+            ]),
+          if (Platform.isAndroid) const SizedBox(height: 12),
           section([
             ListTile(
                 title: Text(localizations.preference),

@@ -34,7 +34,7 @@ class McpServer {
   io.HttpServer? _server;
   int? _port;
   
-  int get port => _port ?? 17777;
+  int get port => _port ?? 9010;
   
   // SSE 连接池 — 使用 List 的 copy-then-iterate 模式保证并发安全
   final List<io.HttpResponse> _sseConnections = [];
@@ -68,9 +68,9 @@ class McpServer {
       var config = await Configuration.instance;
       _port = config.mcpPort;
       
-      // 绑定 loopback 保证安全
-      _server = await io.HttpServer.bind(io.InternetAddress.loopbackIPv4, _port!);
-      logger.i('MCP Server listening on http://127.0.0.1:$_port');
+      // 绑定 0.0.0.0 允许局域网访问
+      _server = await io.HttpServer.bind(io.InternetAddress.anyIPv4, _port!);
+      logger.i('MCP Server listening on http://0.0.0.0:$_port');
 
       _server!.listen((request) {
         // CORS 处理
@@ -84,6 +84,8 @@ class McpServer {
           _handleSse(request);
         } else if (path == '/messages') {
           _handleMessages(request);
+        } else if (path == '/mcp') {
+          _handleMcp(request);
         } else {
           final response = request.response;
           response.statusCode = io.HttpStatus.notFound;
@@ -140,7 +142,7 @@ class McpServer {
     final response = request.response;
     response.headers.add('Access-Control-Allow-Origin', '*');
     response.headers.add('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type');
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept');
     response.close();
   }
 
@@ -201,6 +203,90 @@ class McpServer {
       response.close();
     } catch (e) {
       logger.e('MCP Message Error', error: e);
+      final response = request.response;
+      response.statusCode = io.HttpStatus.internalServerError;
+      response.write(jsonEncode({'error': e.toString()}));
+      await response.close();
+    }
+  }
+
+  /// 处理 /mcp 端点 - Streamable HTTP 传输
+  /// POST: JSON-RPC 请求/响应
+  /// GET: SSE 流式连接
+  Future<void> _handleMcp(io.HttpRequest request) async {
+    // CORS
+    request.response.headers.add('Access-Control-Allow-Origin', '*');
+    request.response.headers.add('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+    request.response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept');
+
+    if (request.method == 'GET') {
+      // SSE 流式连接
+      final response = request.response;
+      response.headers.contentType = io.ContentType('text', 'event-stream');
+      response.headers.add('Cache-Control', 'no-cache');
+      response.headers.add('Connection', 'keep-alive');
+
+      final endpoint = '/mcp';
+      response.write('event: endpoint\ndata: $endpoint\n\n');
+      response.flush();
+
+      _addSseConnection(response);
+
+      logger.i('New MCP streamable HTTP connection');
+
+      response.done.then((_) {
+        _removeSseConnection(response);
+        logger.i('MCP streamable HTTP connection closed');
+      }).catchError((e) {
+        _removeSseConnection(response);
+      });
+      return;
+    }
+
+    if (request.method != 'POST') {
+      final response = request.response;
+      response.statusCode = 405;
+      response.close();
+      return;
+    }
+
+    try {
+      final content = await utf8.decoder.bind(request).join();
+      if (content.isEmpty) {
+          final response = request.response;
+          response.statusCode = io.HttpStatus.badRequest;
+          response.close();
+          return;
+      }
+
+      // 支持批量请求
+      final decoded = jsonDecode(content);
+      final response = request.response;
+      response.headers.contentType = io.ContentType.json;
+
+      if (decoded is List) {
+        // 批量请求
+        final results = <Map<String, dynamic>>[];
+        for (var item in decoded) {
+          final result = await _processJsonRpc(Map<String, dynamic>.from(item));
+          if (result != null) {
+            results.add(result);
+          }
+        }
+        response.write(jsonEncode(results));
+      } else {
+        final Map<String, dynamic> jsonRpc = decoded;
+        final result = await _processJsonRpc(jsonRpc);
+
+        if (result != null) {
+          response.write(jsonEncode(result));
+        } else {
+          response.statusCode = 202;
+        }
+      }
+      response.close();
+    } catch (e) {
+      logger.e('MCP /mcp Error', error: e);
       final response = request.response;
       response.statusCode = io.HttpStatus.internalServerError;
       response.write(jsonEncode({'error': e.toString()}));

@@ -61,7 +61,7 @@ class Configuration {
   int historyCacheTime = 0;
 
   //MCP Server 端口
-  int mcpPort = 17777;
+  int mcpPort = 9010;
 
   //默认是否启动
   bool startup = false;
@@ -95,7 +95,7 @@ class Configuration {
 
     proxyPassDomains = config['proxyPassDomains'] ?? SystemProxy.proxyPassDomains;
     historyCacheTime = config['historyCacheTime'] ?? 0;
-    mcpPort = config['mcpPort'] ?? 17777;
+    mcpPort = config['mcpPort'] ?? 9010;
     if (config['externalProxy'] != null) {
       externalProxy = ProxyInfo.fromJson(config['externalProxy']);
     }
