@@ -49,7 +49,7 @@ jobs:
           echo "storePassword=android" > android/key.properties
           echo "keyPassword=android" >> android/key.properties
           echo "keyAlias=androiddebugkey" >> android/key.properties
-          echo "storeFile=app/debug-keystore.jks" >> android/key.properties
+          echo "storeFile=debug-keystore.jks" >> android/key.properties
 
       - name: Build Release APK
         run: flutter build apk --release
