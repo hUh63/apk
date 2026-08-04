@@ -46,12 +46,10 @@ jobs:
 
       - name: Create key.properties
         run: |
-          cat > android/key.properties << 'EOF'
-storePassword=android
-keyPassword=android
-keyAlias=androiddebugkey
-storeFile=app/debug-keystore.jks
-EOF
+          echo "storePassword=android" > android/key.properties
+          echo "keyPassword=android" >> android/key.properties
+          echo "keyAlias=androiddebugkey" >> android/key.properties
+          echo "storeFile=app/debug-keystore.jks" >> android/key.properties
 
       - name: Build Release APK
         run: |
