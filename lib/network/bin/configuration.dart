@@ -63,6 +63,9 @@ class Configuration {
   //MCP Server 端口
   int mcpPort = 9010;
 
+  //MCP Server 是否启用
+  bool mcpEnabled = true;
+
   //默认是否启动
   bool startup = false;
 
@@ -96,6 +99,7 @@ class Configuration {
     proxyPassDomains = config['proxyPassDomains'] ?? SystemProxy.proxyPassDomains;
     historyCacheTime = config['historyCacheTime'] ?? 0;
     mcpPort = config['mcpPort'] ?? 9010;
+    mcpEnabled = config['mcpEnabled'] ?? true;
     if (config['externalProxy'] != null) {
       externalProxy = ProxyInfo.fromJson(config['externalProxy']);
     }
@@ -154,6 +158,7 @@ class Configuration {
       'appBlacklist': appBlacklist,
       'historyCacheTime': historyCacheTime,
       'mcpPort': mcpPort,
+      'mcpEnabled': mcpEnabled,
       'enabledHttp2': enabledHttp2,
       'whitelist': HostFilter.whitelist.toJson(),
       'blacklist': HostFilter.blacklist.toJson(),

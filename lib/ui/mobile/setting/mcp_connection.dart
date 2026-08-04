@@ -4,12 +4,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_toastr/flutter_toastr.dart';
+import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/network/mcp/mcp_server.dart';
 import 'package:proxypin/native/mcp_screen.dart';
 import 'package:proxypin/utils/ip.dart';
 
 /// MCP Connection 设置页面
-/// 展示 MCP 服务器状态、连接信息、控制模式和配置 JSON
+/// 展示 MCP 服务器状态、连接信息、控制模式、服务开关、端口配置和配置 JSON
 class McpConnectionPage extends StatefulWidget {
   const McpConnectionPage({super.key});
 
@@ -22,9 +23,17 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
   bool _loading = true;
   String? _deviceIp;
 
+  // 端口输入控制器
+  late TextEditingController _portController;
+  // 配置中的端口（可能与运行中端口不同）
+  int _configuredPort = 9010;
+  // MCP 服务是否启用
+  bool _mcpEnabled = true;
+
   @override
   void initState() {
     super.initState();
+    _portController = TextEditingController(text: '9010');
     // 注册状态变化回调，实现实时更新
     McpServer().onStatusChanged = _onMcpStatusChanged;
     _loadInfo();
@@ -34,6 +43,7 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
   void dispose() {
     // 清除回调，避免页面销毁后仍被调用
     McpServer().onStatusChanged = null;
+    _portController.dispose();
     super.dispose();
   }
 
@@ -48,6 +58,10 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
     setState(() => _loading = true);
     try {
       _deviceIp = await localIp();
+      final config = await Configuration.instance;
+      _configuredPort = config.mcpPort;
+      _mcpEnabled = config.mcpEnabled;
+      _portController.text = _configuredPort.toString();
       if (McpScreen.isSupported) {
         _deviceInfo = await McpScreen.getDeviceInfo();
       }
@@ -57,10 +71,55 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
     setState(() => _loading = false);
   }
 
+  /// 切换 MCP 服务开关
+  Future<void> _toggleMcpService(bool enabled) async {
+    final config = await Configuration.instance;
+    config.mcpEnabled = enabled;
+    await config.flushConfig();
+
+    if (enabled) {
+      await McpServer().start();
+    } else {
+      await McpServer().stop();
+    }
+
+    setState(() {
+      _mcpEnabled = enabled;
+    });
+  }
+
+  /// 应用新端口
+  Future<void> _applyPort() async {
+    final newPort = int.tryParse(_portController.text.trim());
+    if (newPort == null || newPort < 1 || newPort > 65535) {
+      FlutterToastr.show('Invalid port number (1-65535)', context);
+      return;
+    }
+
+    if (newPort == _configuredPort) {
+      FlutterToastr.show('Port unchanged', context);
+      return;
+    }
+
+    final config = await Configuration.instance;
+    config.mcpPort = newPort;
+    await config.flushConfig();
+
+    // 如果 MCP 服务正在运行，重启以应用新端口
+    if (config.mcpEnabled) {
+      await McpServer().restart();
+    }
+
+    setState(() {
+      _configuredPort = newPort;
+    });
+    FlutterToastr.show('Port applied: $newPort', context);
+  }
+
   @override
   Widget build(BuildContext context) {
     final mcpServer = McpServer();
-    final port = mcpServer.port;
+    final port = _configuredPort;
     final ip = _deviceIp ?? '127.0.0.1';
     final apiUrl = 'http://$ip:$port/mcp';
     final sseUrl = 'http://$ip:$port/sse';
@@ -69,7 +128,8 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
 
     final mode = _deviceInfo?['mode'] as String? ?? 'none';
     final hasRoot = _deviceInfo?['hasRoot'] as bool? ?? false;
-    final accessibilityEnabled = _deviceInfo?['accessibilityEnabled'] as bool? ?? false;
+    final accessibilityEnabled =
+        _deviceInfo?['accessibilityEnabled'] as bool? ?? false;
 
     final configJson = const JsonEncoder.withIndent('  ').convert({
       'mcpServers': {
@@ -89,21 +149,68 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                // Server Status
+                // MCP Service Toggle & Port Configuration
                 Card(
                   child: Column(
                     children: [
-                      ListTile(
-                        leading: Icon(
-                          isRunning ? Icons.check_circle : Icons.error,
-                          color: isRunning ? Colors.green : Colors.red,
+                      // Service Enable/Disable Switch
+                      SwitchListTile(
+                        title: const Text('MCP Service'),
+                        subtitle: Text(_mcpEnabled
+                            ? (isRunning
+                                ? 'Running on port $port'
+                                : (lastError != null
+                                    ? 'Error: $lastError'
+                                    : 'Enabled (not running)'))
+                            : 'Disabled'),
+                        secondary: Icon(
+                          _mcpEnabled
+                              ? (isRunning ? Icons.cloud_done : Icons.cloud_queue)
+                              : Icons.cloud_off,
+                          color: _mcpEnabled
+                              ? (isRunning ? Colors.green : Colors.orange)
+                              : Colors.grey,
                         ),
-                        title: const Text('MCP API Server'),
-                        subtitle: Text(isRunning
-                            ? 'Running on port $port'
-                            : (lastError != null
-                                ? 'Not running: $lastError'
-                                : 'Not running')),
+                        value: _mcpEnabled,
+                        onChanged: _toggleMcpService,
+                      ),
+                      const Divider(height: 0),
+                      // Port Configuration
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        child: Row(
+                          children: [
+                            const Text('Service Port'),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: SizedBox(
+                                height: 40,
+                                child: TextField(
+                                  controller: _portController,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(5),
+                                  ],
+                                  decoration: const InputDecoration(
+                                    contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 8),
+                                    border: OutlineInputBorder(),
+                                    hintText: '9010',
+                                  ),
+                                  style: const TextStyle(fontSize: 14),
+                                  onSubmitted: (_) => _applyPort(),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton(
+                              onPressed: _applyPort,
+                              child: const Text('Apply'),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -170,7 +277,8 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
                         trailing: Text(
                           mode,
                           style: TextStyle(
-                            color: mode == 'none' ? Colors.orange : Colors.green,
+                            color:
+                                mode == 'none' ? Colors.orange : Colors.green,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -232,6 +340,7 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
                           style: const TextStyle(
                             fontFamily: 'monospace',
                             fontSize: 13,
+                            color: Colors.black,
                           ),
                         ),
                       ),

@@ -65,11 +65,24 @@ class McpServer {
 
   bool get isRunning => _server != null;
 
+  /// 重启 MCP 服务器（用于端口变更后）
+  Future<void> restart() async {
+    await stop();
+    await start();
+  }
+
   Future<void> start() async {
     try {
       if (isRunning) return;
 
       var config = await Configuration.instance;
+
+      // 检查是否启用 MCP 服务
+      if (!config.mcpEnabled) {
+        logger.i('MCP Server is disabled by configuration, skipping start');
+        return;
+      }
+
       _port = config.mcpPort;
 
       // 绑定 0.0.0.0 允许局域网访问
