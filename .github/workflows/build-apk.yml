@@ -58,13 +58,13 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: proxypin-apk
-          path: build/app/outputs/flutter-apk/proxypin-android.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
 
       - name: Create Release (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: build/app/outputs/flutter-apk/proxypin-android.apk
+          files: build/app/outputs/flutter-apk/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
