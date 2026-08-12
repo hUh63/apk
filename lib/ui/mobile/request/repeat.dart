@@ -219,6 +219,29 @@ class _CustomRepeatState extends State<MobileCustomRepeat> {
         SizedBox(width: 83, child: Text(localizations.repeatInterval)),
         Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // 时间单位选择器 (#887)
+          Row(children: [
+            SizedBox(
+                width: 70,
+                child: DropdownButton<int>(
+                  value: timeUnit,
+                  isDense: true,
+                  isExpanded: true,
+                  underline: const SizedBox(),
+                  items: const [
+                    DropdownMenuItem(value: 0, child: Text('毫秒', style: TextStyle(fontSize: 12))),
+                    DropdownMenuItem(value: 1, child: Text('秒', style: TextStyle(fontSize: 12))),
+                    DropdownMenuItem(value: 2, child: Text('分钟', style: TextStyle(fontSize: 12))),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => timeUnit = val);
+                    }
+                  },
+                )),
+            const Spacer(),
+          ]),
+          const SizedBox(height: 5),
           //Checkbox样式 固定和随机
           Row(children: [
             SizedBox(
