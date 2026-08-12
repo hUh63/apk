@@ -4,7 +4,7 @@
 2026-08-12
 
 ## 优化概览
-本轮优化共完成 **7 项改进**，涉及 **6 个代码文件** 和 **1 个文档**，新增代码 **175 行**，删除 **25 行**。
+本轮优化共完成 **8 项改进**，涉及 **10 个代码文件** 和 **1 个文档**，新增代码 **231 行**，删除 **29 行**。
 
 ---
 
@@ -73,20 +73,44 @@ intervalValue = int.parse(interval.text) * multiplier;
 **文件**: 
 - `lib/ui/component/model/search_model.dart`
 - `lib/ui/component/search_condition.dart`
+- `lib/ui/mobile/request/request_sequence.dart`
+- `lib/ui/desktop/request/request_sequence.dart`
+- `lib/ui/desktop/request/domains.dart`
 
-**功能**: 支持按时间/耗时/状态码排序
+**功能**: 支持按时间/耗时/状态码排序，支持升序/降序
 **实现**:
 - 新增 `SortBy` 枚举：`time`/`duration`/`statusCode`
 - 新增 `SortOrder` 枚举：`asc`/`desc`
 - UI 添加排序字段和方向选择器
+- `SearchModel.sortResults()` 方法实现排序逻辑
+- 移动端/桌面端请求列表搜索集成排序
+- 桌面端域名请求列表搜索集成排序
 
 **代码变更**:
 ```dart
-enum SortBy { time, duration, statusCode }
-enum SortOrder { asc, desc }
-
-SortBy sortBy = SortBy.time;
-SortOrder sortOrder = SortOrder.desc;
+// SearchModel 排序方法
+List<HttpRequest> sortResults(List<HttpRequest> results) {
+  results.sort((a, b) {
+    int comparison = 0;
+    switch (sortBy) {
+      case SortBy.time:
+        comparison = a.requestTime.compareTo(b.requestTime);
+        break;
+      case SortBy.duration:
+        int durationA = a.response?.responseTime.difference(a.requestTime).inMilliseconds ?? 0;
+        int durationB = b.response?.responseTime.difference(b.requestTime).inMilliseconds ?? 0;
+        comparison = durationA.compareTo(durationB);
+        break;
+      case SortBy.statusCode:
+        int codeA = a.response?.status.code ?? 0;
+        int codeB = b.response?.status.code ?? 0;
+        comparison = codeA.compareTo(codeB);
+        break;
+    }
+    return sortOrder == SortOrder.asc ? comparison : -comparison;
+  });
+  return results;
+}
 ```
 
 ---
@@ -146,16 +170,20 @@ static Future<HttpResponse> request(
 | `lib/network/http/http_client.dart` | 38 | 11 | +27 |
 | `lib/ui/mobile/request/repeat.dart` | 36 | 2 | +34 |
 | `lib/ui/component/search_condition.dart` | 33 | 0 | +33 |
+| `lib/ui/component/model/search_model.dart` | 45 | 0 | +45 |
+| `lib/ui/mobile/request/request_sequence.dart` | 8 | 2 | +6 |
+| `lib/ui/desktop/request/request_sequence.dart` | 8 | 2 | +6 |
+| `lib/ui/desktop/request/domains.dart` | 26 | 2 | +24 |
 | `lib/ui/mobile/setting/config_management.dart` | 23 | 6 | +17 |
-| `lib/ui/component/model/search_model.dart` | 13 | 0 | +13 |
 | `H2_OPTIMIZATION.md` | 57 | 0 | +57 |
-| **总计** | **175** | **25** | **+150** |
+| **总计** | **231** | **29** | **+202** |
 
 ---
 
 ## 提交历史
 
 ```
+b4c13f3 feat: 添加搜索结果排序功能 (#843)
 7da0494 docs: 添加 HTTP/2 兼容性优化方案 (#871)
 ddcfb20 feat: 添加 HTTP 请求重试机制 (#892)
 4db2aad feat: 添加搜索排序功能 (#843)
@@ -215,6 +243,8 @@ d56e120 fix: 修复批量导出 iOS 'Is a directory' 错误 (#893)
 ---
 
 ## 构建状态
-- 最新提交：`7da0494`
+- 最新提交：`b4c13f3`
+- 总提交数：46
+- 本轮提交：15
 - 触发构建：自动
 - Release: v1.3.1-36 (待创建)
