@@ -235,13 +235,82 @@ class McpScriptWorkflow {
 
 ## 实施优先级
 
-| 优先级 | 场景 | 预计工作量 | 用户价值 |
-|--------|------|------------|----------|
-| 🔴 高 | 定时任务调度 | 2-3 小时 | 自动备份、定时代理 |
-| 🔴 高 | 配置变更自动保存 | 1 小时 | 防止配置丢失 |
-| 🟡 中 | 事件触发自动化 | 4-5 小时 | 智能抓包、场景联动 |
-| 🟡 中 | 条件规则引擎 | 3-4 小时 | 自动优化、资源管理 |
-| 🟢 低 | 脚本联动增强 | 2-3 小时 | 高级自动化 |
+| 优先级 | 场景 | 预计工作量 | 用户价值 | 状态 |
+|--------|------|------------|----------|------|
+| 🔴 高 | 定时任务调度 | 2-3 小时 | 自动备份、定时代理 | ✅ 已完成 (v1.3.1-36) |
+| 🔴 高 | 配置变更自动保存 | 1 小时 | 防止配置丢失 | ✅ 已完成 (v1.3.1-36) |
+| 🟡 中 | 事件触发自动化 | 4-5 小时 | 智能抓包、场景联动 | 📋 待实现 |
+| 🟡 中 | 条件规则引擎 | 3-4 小时 | 自动优化、资源管理 | 📋 待实现 |
+| 🟢 低 | 脚本联动增强 | 2-3 小时 | 高级自动化 | 📋 待实现 |
+
+---
+
+## 已实现功能详情 (v1.3.1-36)
+
+### 定时任务调度框架
+
+**文件**: `lib/network/mcp/mcp_scheduler.dart`
+
+**核心功能**:
+- ✅ 支持一次性任务和每日重复任务
+- ✅ 10 秒轮询检查机制
+- ✅ 自动清理已完成的一次性任务
+- ✅ 任务执行异常捕获
+- ✅ 任务列表查询接口
+
+**API 示例**:
+```dart
+// 添加每日重复任务
+McpScheduler().scheduleTask(
+  name: '每日配置备份',
+  executeAt: DateTime.now().add(Duration(hours: 1)),
+  action: () => ConfigManager.backup(),
+  repeatDaily: true,
+);
+
+// 添加一次性任务
+McpScheduler().scheduleTask(
+  name: '数据同步',
+  executeAt: DateTime.now().add(Duration(minutes: 10)),
+  action: () => DataSync.sync(),
+  repeatDaily: false,
+);
+
+// 取消所有任务
+McpScheduler().cancelAll();
+```
+
+**使用示例**: `lib/network/mcp/mcp_scheduler_example.dart`
+- 每日缓存清理（凌晨 2 点）
+- 一次性数据同步（10 分钟后）
+- 每日配置备份（23:00）
+- 每小时更新检查
+
+---
+
+### 配置自动保存
+
+**文件**: `lib/network/bin/configuration.dart`
+
+**核心功能**:
+- ✅ 配置变更防抖自动保存（2 秒延迟）
+- ✅ 避免频繁写入
+- ✅ 使用 `flushConfig()` 方法
+
+**实现代码**:
+```dart
+class Configuration {
+  Timer? _saveTimer;
+  
+  void _autoSaveOnChange() {
+    _saveTimer?.cancel();
+    _saveTimer = Timer(Duration(seconds: 2), () async {
+      await flushConfig();
+      logger.d('配置自动保存成功');
+    });
+  }
+}
+```
 
 ---
 
