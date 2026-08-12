@@ -233,4 +233,66 @@ class ConfigImportExport {
     final jsonStr = await file.readAsString();
     return importConfig(jsonStr);
   }
+
+  /// 自动备份配置（中期优化）
+  /// 备份到应用数据目录，保留最近 7 份备份
+  static Future<String> autoBackupConfig() async {
+    try {
+      final config = await Configuration.instance;
+      final jsonStr = config.exportConfig();
+      
+      final separator = Platform.pathSeparator;
+      final home = await FileRead.homeDir();
+      final backupDir = '${home.path}${separator}proxypin_backups';
+      final timestamp = DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
+      final backupPath = '$backupDir${separator}proxypin_config_$timestamp.json';
+      
+      // 创建备份目录
+      final dir = Directory(backupDir);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      
+      // 写入备份文件
+      final file = File(backupPath);
+      await file.create(recursive: true);
+      await file.writeAsString(jsonStr);
+      
+      // 清理旧备份（保留最近 7 份）
+      await _cleanupOldBackups(backupDir, maxBackups: 7);
+      
+      logger.i('配置自动备份：$backupPath');
+      return backupPath;
+    } catch (e) {
+      logger.e('自动备份配置失败', error: e, stackTrace: StackTrace.current);
+      rethrow;
+    }
+  }
+
+  /// 清理旧备份文件
+  static Future<void> _cleanupOldBackups(String backupDir, {int maxBackups = 7}) async {
+    try {
+      final dir = Directory(backupDir);
+      if (!await dir.exists()) return;
+      
+      final files = await dir.list().toList();
+      final configFiles = files
+          .whereType<File>()
+          .where((f) => f.path.contains('proxypin_config_'))
+          .toList();
+      
+      if (configFiles.length > maxBackups) {
+        // 按修改时间排序，删除最旧的文件
+        configFiles.sort((a, b) => a.statSync().modified.compareTo(b.statSync().modified));
+        
+        final toDelete = configFiles.length - maxBackups;
+        for (var i = 0; i < toDelete; i++) {
+          await configFiles[i].delete();
+          logger.d('删除旧备份：${configFiles[i].path}');
+        }
+      }
+    } catch (e) {
+      logger.w('清理旧备份失败', error: e);
+    }
+  }
 }

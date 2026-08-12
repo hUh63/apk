@@ -149,15 +149,21 @@ Future<Map<String, dynamic>?> generateExportFileData(
 /// [type] 导出类型
 /// [context] 上下文
 /// [onSuccess] 成功回调，参数为成功导出的文件数
+/// [onProgress] 进度回调，参数为当前进度 (0.0-1.0)
 Future<void> exportRequestsAsFiles(
   List<HttpRequest> requests,
   String folderName,
   ExportType type, {
   required BuildContext context,
   Function(int successCount)? onSuccess,
+  Function(double progress)? onProgress,
 }) async {
   try {
     int successCount = 0;
+    final total = requests.length;
+
+    // 通知开始导出
+    onProgress?.call(0.0);
 
     final isDesktop = Platforms.isDesktop();
     if (isDesktop || Platform.isAndroid) {
@@ -217,6 +223,10 @@ Future<void> exportRequestsAsFiles(
               break;
           }
           successCount++;
+          
+          // 更新进度
+          final progress = (i + 1) / total;
+          onProgress?.call(progress);
         } catch (e) {
           logger.e('Export error: $e');
         }
