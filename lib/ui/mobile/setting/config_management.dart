@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -129,12 +131,17 @@ class _ConfigManagementState extends State<ConfigManagement> {
       final timestamp = DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
       final defaultName = 'proxypin_config_$timestamp.json';
 
-      // 使用 FilePicker 选择保存位置 (v12+ API)
+      // 导出配置
+      final jsonStr = configuration.exportConfig();
+      final bytes = Uint8List.fromList(utf8.encode(jsonStr));
+
+      // 使用 FilePicker v12+ API 保存文件 (直接传入 bytes)
       String? outputPath = await FilePicker.saveFile(
         dialogTitle: '选择保存位置',
         fileName: defaultName,
         type: FileType.custom,
         allowedExtensions: ['json'],
+        bytes: bytes,
       );
 
       if (outputPath == null || outputPath.isEmpty) {
@@ -142,15 +149,9 @@ class _ConfigManagementState extends State<ConfigManagement> {
         return;
       }
 
-      // 导出配置
-      final jsonStr = configuration.exportConfig();
-      final file = File(outputPath);
-      await file.create(recursive: true);
-      await file.writeAsString(jsonStr);
-
       if (mounted) {
         FlutterToastr.show(
-          '配置已导出到：${file.path}',
+          '配置已导出到：$outputPath',
           context,
           duration: 3,
           backgroundColor: Colors.green,
