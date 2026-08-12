@@ -4,7 +4,7 @@
 2026-08-12
 
 ## 优化概览
-本轮优化共完成 **8 项改进**，涉及 **10 个代码文件** 和 **1 个文档**，新增代码 **231 行**，删除 **29 行**。
+本轮优化共完成 **9 项改进**，涉及 **12 个代码文件** 和 **2 个文档**，新增代码 **537 行**，删除 **36 行**。
 
 ---
 
@@ -163,6 +163,42 @@ static Future<HttpResponse> request(
 
 ---
 
+### 7. MCP 定时任务调度框架 ✅
+**文件**: 
+- `lib/network/mcp/mcp_scheduler.dart` (新建)
+- `lib/network/mcp/mcp_scheduler_example.dart` (新建)
+- `MCP_AUTOMATION_PLAN.md` (更新)
+
+**功能**: MCP 自动化场景定时任务调度
+**实现**:
+- 支持一次性任务和每日重复任务
+- 10 秒轮询检查机制
+- 自动清理已完成的一次性任务
+- 任务执行异常捕获
+- 任务列表查询接口
+
+**代码变更**:
+```dart
+// 添加定时任务
+McpScheduler().scheduleTask(
+  name: '每日配置备份',
+  executeAt: DateTime.now().add(Duration(hours: 1)),
+  action: () => ConfigManager.backup(),
+  repeatDaily: true,
+);
+
+// 取消所有任务
+McpScheduler().cancelAll();
+```
+
+**使用示例**:
+- 每日缓存清理（凌晨 2 点）
+- 一次性数据同步（10 分钟后）
+- 每日配置备份（23:00）
+- 每小时更新检查
+
+---
+
 ## 代码统计
 
 | 文件 | 新增 | 删除 | 净增 |
@@ -175,8 +211,11 @@ static Future<HttpResponse> request(
 | `lib/ui/desktop/request/request_sequence.dart` | 8 | 2 | +6 |
 | `lib/ui/desktop/request/domains.dart` | 26 | 2 | +24 |
 | `lib/ui/mobile/setting/config_management.dart` | 23 | 6 | +17 |
+| `lib/network/mcp/mcp_scheduler.dart` | 135 | 0 | +135 |
+| `lib/network/mcp/mcp_scheduler_example.dart` | 88 | 0 | +88 |
 | `H2_OPTIMIZATION.md` | 57 | 0 | +57 |
-| **总计** | **231** | **29** | **+202** |
+| `MCP_AUTOMATION_PLAN.md` | 70 | 7 | +63 |
+| **总计** | **567** | **36** | **+531** |
 
 ---
 
