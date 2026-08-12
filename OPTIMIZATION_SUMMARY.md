@@ -287,3 +287,163 @@ d56e120 fix: 修复批量导出 iOS 'Is a directory' 错误 (#893)
 - 本轮提交：15
 - 触发构建：自动
 - Release: v1.3.1-36 (待创建)
+
+---
+
+## 8. MCP 事件触发自动化 ✅
+
+**文件:** `lib/network/mcp/mcp_event_automation.dart` (新增)
+
+**功能:**
+- 事件监听器模式，支持添加/移除/清除监听器
+- HTTP 请求事件监听（支持 URL 正则匹配、API 路径、域名匹配）
+- 网络状态变化事件（connected/disconnected/wifi/mobile/weak）
+- 代理状态变化事件（started/stopped/paused/resumed）
+- 脚本执行事件
+- 抓包事件（开始/停止/数量阈值）
+- 事件历史记录（最多 100 条）
+- 异常安全：单个回调失败不影响其他回调
+
+**API 示例:**
+```dart
+final automation = McpEventAutomation();
+
+// 监听 API 请求
+automation.onApiRequest('/api/', (request) {
+  logger.i('检测到 API 请求：${request.url}');
+});
+
+// 监听域名请求
+automation.onDomainRequest('api.example.com', (request) {
+  logger.i('检测到 example.com API 请求');
+});
+
+// 监听网络状态
+automation.onNetworkStatusChange(NetworkStatus.disconnected, (_) {
+  logger.w('网络断开，暂停抓包');
+});
+
+// 监听抓包数量阈值
+automation.onCaptureCountThreshold(10000, (data) {
+  logger.w('抓包数量达到阈值：${data['count']}');
+});
+```
+
+---
+
+## 9. MCP 条件规则引擎 ✅
+
+**文件:** `lib/network/mcp/mcp_rule_engine.dart` (新增)
+
+**功能:**
+- 规则管理系统（添加/移除/启用/禁用/清除）
+- 条件评估引擎（14 种操作符）
+- 动作执行系统（8 种动作类型）
+- 规则优先级（low/normal/high/critical）
+- 规则过期时间支持
+- 执行历史记录（最多 50 条）
+- 预定义规则构建器
+
+**条件操作符:**
+- equals, notEquals
+- greaterThan, lessThan, greaterThanOrEqual, lessThanOrEqual
+- contains, startsWith, endsWith
+- matches (正则表达式)
+- inList, notInList
+- exists, notExists
+
+**动作类型:**
+- log: 记录日志
+- notify: 发送通知
+- stopCapture/startCapture: 控制抓包
+- exportData: 导出数据
+- executeScript: 执行脚本
+- sendWebhook: 发送 Webhook
+- custom: 自定义回调
+
+**API 示例:**
+```dart
+final engine = McpRuleEngine();
+
+// 自动记录慢请求（超过 5 秒）
+final slowRequestRule = McpRuleEngine.createHttpRequestRule(
+  id: 'slow_request_log',
+  name: '慢请求日志',
+  minDuration: 5000,
+  actions: [
+    McpRuleEngine.Action(
+      type: McpRuleEngine.ActionType.log,
+      parameters: {'level': 'warning', 'message': '检测到慢请求'},
+    ),
+  ],
+);
+engine.addRule(slowRequestRule);
+
+// 自动导出错误请求
+final errorExportRule = McpRuleEngine.createHttpRequestRule(
+  id: 'error_export',
+  name: '错误请求自动导出',
+  minStatusCode: 400,
+  actions: [
+    McpRuleEngine.Action(
+      type: McpRuleEngine.ActionType.exportData,
+      parameters: {'format': 'har', 'autoSave': true},
+    ),
+  ],
+);
+engine.addRule(errorExportRule);
+
+// 评估请求
+engine.evaluate(httpRequest);
+```
+
+---
+
+## 更新后的完成状态
+
+### ✅ 已完成 (12 项优化)
+
+| # | 功能 | 优先级 | 文件 |
+|---|------|--------|------|
+| 1 | 批量导出目录错误修复 (#893) | 🔴 高 | `export_request.dart` |
+| 2 | FilePicker v12+ API 适配 | 🔴 高 | `config_management.dart` |
+| 3 | 重放时间精度 (ms/s/min) (#887) | 🟡 中 | `repeat.dart` |
+| 4 | 重放时间单位 UI 选择器 | 🟡 中 | `repeat.dart` |
+| 5 | 搜索排序功能 (#843) | 🟡 中 | `search_model.dart` + 3 文件 |
+| 6 | HTTP 请求重试机制 (#892) | 🟡 中 | `http_client.dart` |
+| 7 | 配置自动备份 (7 份) | 🟡 中 | `configuration.dart` |
+| 8 | 导出进度回调 | 🟡 中 | `export_request.dart` |
+| 9 | 配置自动保存 (2s 防抖) | 🟡 中 | `configuration.dart` |
+| 10 | MCP 定时任务框架 | 🟡 中 | `mcp_scheduler.dart` |
+| 11 | MCP 事件触发自动化 | 🟡 中 | `mcp_event_automation.dart` |
+| 12 | MCP 条件规则引擎 | 🟡 中 | `mcp_rule_engine.dart` |
+
+### 📊 代码统计
+
+| 指标 | 数值 |
+|------|------|
+| 新增文件 | 4 |
+| 修改文件 | 12+ |
+| 新增代码行数 | ~890 |
+| 删除代码行数 | ~36 |
+| 净增代码行数 | ~854 |
+
+### 📁 MCP 自动化框架文件
+
+| 文件 | 行数 | 功能 |
+|------|------|------|
+| `mcp_scheduler.dart` | 135 | 定时任务调度 |
+| `mcp_scheduler_example.dart` | 88 | 调度器使用示例 |
+| `mcp_event_automation.dart` | ~280 | 事件触发自动化 |
+| `mcp_rule_engine.dart` | ~390 | 条件规则引擎 |
+
+---
+
+## 后续可选优化
+
+| 优先级 | 功能 | 描述 |
+|--------|------|------|
+| 🟡 中 | #871 | HTTP/2 优雅 GOAWAY 处理 |
+| 🟡 中 | - | Webhook 动作完整实现 |
+| 🟢 低 | - | 脚本工作流增强 |
+| 🟢 低 | - | 规则可视化配置界面 |
