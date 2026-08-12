@@ -461,8 +461,30 @@ class DomainRequests extends StatefulWidget {
 
   ///根据文本过滤
   Iterable<RequestWidget> search(SearchModel searchModel) {
-    return body
-        .where((element) => searchModel.filter(element.request, element.response.get() ?? element.request.response));
+    var filtered = body
+        .where((element) => searchModel.filter(element.request, element.response.get() ?? element.request.response))
+        .toList();
+    // 对搜索结果进行排序
+    filtered.sort((a, b) {
+      int comparison = 0;
+      switch (searchModel.sortBy) {
+        case SortBy.time:
+          comparison = a.request.requestTime.compareTo(b.request.requestTime);
+          break;
+        case SortBy.duration:
+          int durationA = a.response.get()?.responseTime.difference(a.request.requestTime).inMilliseconds ?? 0;
+          int durationB = b.response.get()?.responseTime.difference(b.request.requestTime).inMilliseconds ?? 0;
+          comparison = durationA.compareTo(durationB);
+          break;
+        case SortBy.statusCode:
+          int codeA = a.response.get()?.status.code ?? 0;
+          int codeB = b.response.get()?.status.code ?? 0;
+          comparison = codeA.compareTo(codeB);
+          break;
+      }
+      return searchModel.sortOrder == SortOrder.asc ? comparison : -comparison;
+    });
+    return filtered;
   }
 
   ///复制

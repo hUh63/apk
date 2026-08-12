@@ -158,7 +158,10 @@ class RequestSequenceState extends State<RequestSequence> with AutomaticKeepAliv
     if (searchModel.isEmpty) {
       view = Queue.of(widget.container.source.reversed);
     } else {
-      view = Queue.of(widget.container.where((it) => searchModel.filter(it, it.response)).toList().reversed);
+      // 先过滤，再排序，最后反转
+      var filtered = widget.container.where((it) => searchModel.filter(it, it.response)).toList();
+      searchModel.sortResults(filtered);
+      view = Queue.of(filtered.reversed);
     }
     selectionController.prune(view.map((request) => request.requestId));
     changeState();

@@ -134,6 +134,30 @@ class SearchModel {
   String? _matcherCacheKey;
   bool Function(String)? _cachedMatcher;
 
+  /// 对搜索结果进行排序
+  List<HttpRequest> sortResults(List<HttpRequest> results) {
+    results.sort((a, b) {
+      int comparison = 0;
+      switch (sortBy) {
+        case SortBy.time:
+          comparison = a.requestTime.compareTo(b.requestTime);
+          break;
+        case SortBy.duration:
+          int durationA = a.response?.responseTime.difference(a.requestTime).inMilliseconds ?? 0;
+          int durationB = b.response?.responseTime.difference(b.requestTime).inMilliseconds ?? 0;
+          comparison = durationA.compareTo(durationB);
+          break;
+        case SortBy.statusCode:
+          int codeA = a.response?.status.code ?? 0;
+          int codeB = b.response?.status.code ?? 0;
+          comparison = codeA.compareTo(codeB);
+          break;
+      }
+      return sortOrder == SortOrder.asc ? comparison : -comparison;
+    });
+    return results;
+  }
+
   ///是否匹配
   bool filter(HttpRequest request, HttpResponse? response) {
     if (isEmpty) {
