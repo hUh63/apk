@@ -176,3 +176,57 @@
 - [GitHub Issues](https://github.com/wanghongenpin/proxypin/issues)
 - [Actions 构建](https://github.com/wanghongenpin/proxypin/actions)
 - [Releases](https://github.com/wanghongenpin/proxypin/releases)
+
+## ✅ 已实施优化 (v1.3.1-36)
+
+### 1. MCP 控制模式增强
+- **requestShizukuAuthorization()**: 弹出 Shizuku 授权弹窗（使用 ACTIVITY_PERMISSION Intent）
+- **requestDhizukuAuthorization()**: 打开 Dhizuku 应用请求授权
+- **requestRootAuthorization()**: 执行 su 命令触发 Magisk/KernelSU 授权弹窗
+- **UI 改进**: "打开 Shizuku 授权" → "请求 Shizuku 授权"
+
+### 2. 配置导入导出功能 (#891)
+- **ConfigImportExport 类**: 配置导入导出工具
+  - `exportConfig()`: 导出配置为 JSON 字符串
+  - `exportConfigToFile()`: 导出配置到文件
+  - `importConfig()`: 从 JSON 字符串导入配置
+  - `importConfigFromFile()`: 从文件导入配置
+- **配置管理页面**: 独立的导入/导出 UI
+  - 导出配置：选择保存位置，生成带时间戳的 JSON 文件
+  - 导入配置：文件选择器 + 确认对话框 + Toast 提示
+  - 注意事项提示卡片
+
+### 3. 代码质量改进
+- 添加详细的 KDoc 文档注释
+- 统一的错误处理和日志记录
+- 用户友好的 Toast 提示
+
+### 4. 构建优化
+- GitHub Actions 自动构建 + 自动发布 Release
+- 版本号规范：1.3.1+36
+
+---
+
+## 📋 待实施优化建议
+
+### 短期（1-2 周）
+1. **批量导出修复** (#893): iOS 导出 "Is a directory" 错误
+2. **高级重放成功率** (#892): 增加重试机制和失败日志
+3. **搜索排序优化** (#843): 按时间/相关性排序
+4. **重放时间精度** (#887): 增加秒级/毫秒级输入
+
+### 中期（1 个月）
+1. HTTP/2 兼容性优化 (#871)
+2. 配置同步功能（多设备）
+3. 自动备份功能（定期导出配置）
+4. 性能分析工具集成
+
+### 长期（2-3 个月）
+1. 插件系统架构
+2. 脚本引擎增强
+3. 云同步功能
+4. 桌面端功能对齐
+
+---
+
+*文档生成时间：2026-08-12*

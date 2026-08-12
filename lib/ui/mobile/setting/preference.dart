@@ -8,6 +8,7 @@ import 'package:proxypin/network/bin/server.dart';
 import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/ui/component/widgets.dart';
 import 'package:proxypin/ui/configuration.dart';
+import 'package:proxypin/ui/mobile/setting/config_management.dart';
 import 'package:proxypin/ui/mobile/setting/theme.dart';
 
 ///设置
@@ -197,6 +198,24 @@ class _PreferenceState extends State<Preference> {
                 style: const TextStyle(fontSize: 12),
               ),
               trailing: maxRequestCount(context, localizations),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          // 配置管理区块
+          section([
+            ListTile(
+              leading: const Icon(Icons.settings_backup_restore, color: Colors.blue),
+              title: const Text('配置管理'),
+              subtitle: const Text('导入/导出配置，备份或恢复设置'),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ConfigManagement(proxyServer: proxyServer),
+                  ),
+                );
+              },
             ),
           ]),
           const SizedBox(height: 15),
