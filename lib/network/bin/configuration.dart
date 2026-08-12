@@ -66,6 +66,12 @@ class Configuration {
   //MCP Server 是否启用
   bool mcpEnabled = true;
 
+  //MCP Server 是否随应用启动自动启动
+  bool mcpAutoStart = false;
+
+  //MCP 工具启用状态（工具名 -> 是否启用），默认全部启用
+  Map<String, bool> mcpToolsEnabled = {};
+
   //默认是否启动
   bool startup = false;
 
@@ -87,6 +93,9 @@ class Configuration {
     return _instance!;
   }
 
+  /// 同步获取已加载的配置（未加载时返回 null，用于非异步场景）
+  static Configuration? get loaded => _instance;
+
   /// 加载配置
   Configuration.fromJson(Map<String, dynamic> config) {
     port = config['port'] ?? port;
@@ -100,6 +109,11 @@ class Configuration {
     historyCacheTime = config['historyCacheTime'] ?? 0;
     mcpPort = config['mcpPort'] ?? 9010;
     mcpEnabled = config['mcpEnabled'] ?? true;
+    mcpAutoStart = config['mcpAutoStart'] ?? false;
+    if (config['mcpToolsEnabled'] is Map) {
+      mcpToolsEnabled = (config['mcpToolsEnabled'] as Map)
+          .map((key, value) => MapEntry(key.toString(), value == true));
+    }
     if (config['externalProxy'] != null) {
       externalProxy = ProxyInfo.fromJson(config['externalProxy']);
     }
@@ -159,6 +173,8 @@ class Configuration {
       'historyCacheTime': historyCacheTime,
       'mcpPort': mcpPort,
       'mcpEnabled': mcpEnabled,
+      'mcpAutoStart': mcpAutoStart,
+      'mcpToolsEnabled': mcpToolsEnabled,
       'enabledHttp2': enabledHttp2,
       'whitelist': HostFilter.whitelist.toJson(),
       'blacklist': HostFilter.blacklist.toJson(),

@@ -137,7 +137,10 @@ class MobileHomeState extends State<MobileHomePage> implements EventListener, Li
       MobileApp.requestStateKey.currentState?.clean();
     };
     proxyServer.addListener(McpBridge());
-    McpServer().start();
+    // 根据配置决定是否随应用启动自动启动 MCP 服务
+    if (widget.configuration.mcpAutoStart) {
+      McpServer().start();
+    }
 
     if (widget.appConfiguration.upgradeNoticeV30) {
       WidgetsBinding.instance.addPostFrameCallback((_) {

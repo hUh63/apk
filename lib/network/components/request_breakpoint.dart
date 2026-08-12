@@ -19,6 +19,25 @@ class RequestBreakpointInterceptor extends Interceptor {
   final ExpiringCache<String, Completer<HttpRequest?>> _pausedRequests = ExpiringCache(Duration(minutes: 10));
   final ExpiringCache<String, Completer<HttpResponse?>> _pausedResponses = ExpiringCache(Duration(minutes: 10));
 
+  // 被暂停请求/响应的详情（供 MCP 拦截队列查询）
+  final Map<String, HttpRequest> _pausedRequestDetails = {};
+  final Map<String, HttpResponse> _pausedResponseDetails = {};
+
+  /// 待处理拦截数量（请求 + 响应）
+  int get pendingCount => _pausedRequests.length + _pausedResponses.length;
+
+  /// 是否有指定 ID 的暂停项
+  bool isPaused(String id) => _pausedRequests.containsKey(id) || _pausedResponses.containsKey(id);
+
+  /// 指定 ID 是否为暂停的请求
+  bool isRequestPaused(String id) => _pausedRequests.containsKey(id);
+
+  /// 指定 ID 是否为暂停的响应
+  bool isResponsePaused(String id) => _pausedResponses.containsKey(id);
+
+  /// 获取被暂停的请求对象（供 MCP approve 修改使用），不存在返回 null
+  HttpRequest? getPausedRequest(String id) => _pausedRequestDetails[id];
+
   RequestBreakpointInterceptor._();
 
   /// 用环境变量渲染 {{name}}。若 EnvironmentManager 未加载或未启用,返回原字符串。
@@ -94,6 +113,7 @@ class RequestBreakpointInterceptor extends Interceptor {
       if (rule.match(url, method: request.method) && rule.interceptRequest) {
         Completer<HttpRequest?> completer = Completer();
         _pausedRequests[request.requestId] = completer;
+        _pausedRequestDetails[request.requestId] = request;
 
         // Open Breakpoint Executor Window
         MultiWindow.openWindow("Breakpoint - Request", 'BreakpointExecutor',
@@ -139,6 +159,7 @@ class RequestBreakpointInterceptor extends Interceptor {
       if (rule.match(url, method: request.method) && rule.interceptResponse) {
         Completer<HttpResponse?> completer = Completer();
         _pausedResponses[request.requestId] = completer;
+        _pausedResponseDetails[request.requestId] = response;
 
         // Open Breakpoint Executor Window
         MultiWindow.openWindow("Breakpoint - Response", 'BreakpointExecutor', args: {
@@ -173,11 +194,41 @@ class RequestBreakpointInterceptor extends Interceptor {
     if (_pausedRequests.containsKey(requestId)) {
       _pausedRequests.remove(requestId)?.complete(request);
     }
+    _pausedRequestDetails.remove(requestId);
   }
 
   void resumeResponse(String requestId, HttpResponse? response) {
     if (_pausedResponses.containsKey(requestId)) {
       _pausedResponses.remove(requestId)?.complete(response);
     }
+    _pausedResponseDetails.remove(requestId);
+  }
+
+  /// 获取待处理拦截的详情列表（供 MCP get_pending_intercepts 工具使用）
+  List<Map<String, dynamic>> pendingIntercepts() {
+    final result = <Map<String, dynamic>>[];
+
+    _pausedRequestDetails.forEach((id, req) {
+      result.add({
+        'id': id,
+        'type': 'request',
+        'method': req.method,
+        'url': req.requestUrl,
+        'headers': req.headers.toJson(),
+        'body': req.body != null ? utf8.decode(req.body!, allowMalformed: true) : null,
+      });
+    });
+
+    _pausedResponseDetails.forEach((id, res) {
+      result.add({
+        'id': id,
+        'type': 'response',
+        'status': res.status.code,
+        'headers': res.headers.toJson(),
+        'body': res.body != null ? utf8.decode(res.body!, allowMalformed: true) : null,
+      });
+    });
+
+    return result;
   }
 }

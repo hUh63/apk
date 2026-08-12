@@ -3,6 +3,7 @@ import 'package:proxypin/l10n/app_localizations.dart';
 import 'package:proxypin/network/bin/server.dart';
 import 'package:proxypin/ui/component/multi_window.dart';
 import 'package:proxypin/ui/mobile/request/request_editor.dart';
+import 'package:proxypin/ui/mobile/setting/mcp_connection.dart';
 import 'package:proxypin/ui/toolbox/qr_code_page.dart';
 import 'package:proxypin/ui/toolbox/regexp.dart';
 import 'package:proxypin/ui/toolbox/timestamp.dart';
@@ -229,6 +230,17 @@ class _ToolboxState extends State<Toolbox> {
                       icon: Icons.qr_code_2,
                       text: localizations.qrCode,
                       tooltip: localizations.qrCode),
+                  IconText(
+                      onTap: () async {
+                        if (Platforms.isMobile()) {
+                          Navigator.of(context).push(MaterialPageRoute(builder: (context) => const McpConnectionPage()));
+                          return;
+                        }
+                        MultiWindow.openWindow('MCP', 'McpConnectionPage');
+                      },
+                      icon: Icons.cast_connected,
+                      text: 'MCP',
+                      tooltip: 'MCP Server 设置'),
                 ],
               ),
             ],

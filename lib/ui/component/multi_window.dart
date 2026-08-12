@@ -44,6 +44,7 @@ import 'package:window_manager/window_manager.dart';
 import '../desktop/setting/request_breakpoint.dart';
 import '../desktop/setting/request_crypto.dart';
 import '../desktop/setting/request_map.dart';
+import '../mobile/setting/mcp_connection.dart';
 import '../toolbox/cert_hash.dart';
 import '../toolbox/encoder.dart';
 import '../toolbox/js_run.dart';
@@ -150,6 +151,10 @@ Widget multiWindow(String windowId, Map<dynamic, dynamic> argument) {
   }
   if (argument['name'] == 'TimestampPage') {
     return TimestampPage(windowId: windowId);
+  }
+
+  if (argument['name'] == 'McpConnectionPage') {
+    return const McpConnectionPage();
   }
 
   if (argument['name'] == 'AesPage') {

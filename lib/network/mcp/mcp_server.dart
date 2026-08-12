@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
+import 'dart:math' as math;
 
 import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/network/bin/server.dart';
@@ -12,6 +13,7 @@ import 'package:proxypin/network/components/manager/script_manager.dart';
 import 'package:proxypin/network/components/manager/request_breakpoint_manager.dart';
 import 'package:proxypin/network/components/manager/network_condition_manager.dart';
 import 'package:proxypin/network/components/manager/environment_manager.dart';
+import 'package:proxypin/network/components/request_breakpoint.dart';
 import 'package:proxypin/network/http/http_client.dart';
 import 'package:proxypin/network/channel/host_port.dart';
 import 'package:proxypin/network/mcp/mcp_bridge.dart';
@@ -39,7 +41,25 @@ class McpServer {
 
   /// 上次启动错误信息（端口冲突等），供 UI 展示
   String? get lastError => _lastError;
-  
+
+  /// MCP 协议版本：最新稳定版 2026-07-28（无状态核心）
+  /// 同时兼容旧版 2024-11-05 / 2025-11-25（initialize 握手路径）
+  static const String protocolVersion = '2026-07-28';
+
+  /// 兼容的旧版协议版本列表（仍支持握手路径）
+  static const List<String> legacyProtocolVersions = ['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25'];
+
+  /// 是否启用 Streamable HTTP（新式传输，支持 /mcp 端点与会话）
+  static const bool streamableHttpEnabled = true;
+
+  /// 是否启用 2026-07-28 无状态模式（Stateless Core）
+  /// 无状态模式下：不要求 initialize 握手、不创建 Mcp-Session-Id，
+  /// 请求通过 MCP-Protocol-Version / Mcp-Method / Mcp-Name 头或 _meta 字段自描述
+  static const bool statelessEnabled = true;
+
+  // Streamable HTTP 会话管理（sessionId -> 该会话的 SSE 输出流）
+  final Map<String, _StreamableSession> _streamSessions = {};
+
   // SSE 连接池 — 使用 List 的 copy-then-iterate 模式保证并发安全
   final List<io.HttpResponse> _sseConnections = [];
 
@@ -103,7 +123,18 @@ class McpServer {
         } else if (path == '/messages') {
           _handleMessages(request);
         } else if (path == '/mcp') {
-          _handleMcp(request);
+          if (streamableHttpEnabled) {
+            _handleStreamableHttp(request);
+          } else {
+            _handleMcp(request);
+          }
+        } else if (path == '/health') {
+          // 健康检查端点，供客户端探测服务是否可用
+          final response = request.response;
+          response.headers.contentType = io.ContentType.json;
+          response.headers.add('Access-Control-Allow-Origin', '*');
+          response.write(jsonEncode({'status': 'ok', 'server': 'ProxyPin MCP'}));
+          response.close();
         } else {
           final response = request.response;
           response.statusCode = io.HttpStatus.notFound;
@@ -118,7 +149,6 @@ class McpServer {
               // 可以在这里推送增量更新
           });
       };
-      
       // 启动 SSE 心跳保活（每 30 秒发送 ping）
       _heartbeatTimer?.cancel();
       _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
@@ -153,6 +183,9 @@ class McpServer {
 
       await _server?.close();
       _server = null;
+
+      // 清理 Streamable HTTP 会话
+      _streamSessions.clear();
       // 手动停止时清除错误状态
       _lastError = null;
       // 通知状态变化
@@ -321,9 +354,200 @@ class McpServer {
     }
   }
 
+  /// 生成 MCP 会话 ID
+  String _generateSessionId() {
+    return RandomUtil.randomString(32);
+  }
+
+  /// Streamable HTTP 传输处理（MCP 最新传输方式）
+  /// GET /mcp: 建立 SSE 流（可携带 Mcp-Session-Id）
+  /// POST /mcp: JSON-RPC 请求（可携带 Mcp-Session-Id 并返回流式响应）
+  Future<void> _handleStreamableHttp(io.HttpRequest request) async {
+    if (request.method == 'GET') {
+      _handleStreamableHttpGet(request);
+      return;
+    }
+    if (request.method != 'POST') {
+      final response = request.response;
+      _setCorsHeaders(response);
+      response.statusCode = io.HttpStatus.methodNotAllowed;
+      response.close();
+      return;
+    }
+
+    try {
+      final content = await utf8.decoder.bind(request).join();
+      final response = request.response;
+      _setCorsHeaders(response);
+      response.headers.contentType = io.ContentType.json;
+
+      if (content.trim().isEmpty) {
+        response.statusCode = io.HttpStatus.badRequest;
+        response.write(jsonEncode({'error': 'empty request body'}));
+        await response.close();
+        return;
+      }
+
+      final decoded = jsonDecode(content);
+      final requests = decoded is List ? decoded.cast<dynamic>().toList() : [decoded];
+      final responses = <Map<String, dynamic>>[];
+
+      // 2026-07-28 无状态模式：客户端通过 MCP-Protocol-Version 头声明协议版本
+      // 无状态模式不使用会话，直接处理请求
+      final clientProtocol = request.headers.value('MCP-Protocol-Version');
+
+      for (final item in requests) {
+        if (item is! Map) continue;
+        final jsonRpc = Map<String, dynamic>.from(item);
+
+        // 无状态模式：校验请求头与 body 一致性（-32020），并解析 _meta 中的协议版本
+        if (statelessEnabled && clientProtocol != null && clientProtocol != '2024-11-05') {
+          final metaResult = _applyStatelessHeaders(request, jsonRpc);
+          if (metaResult != null) {
+            responses.add(metaResult);
+            continue;
+          }
+        }
+
+        final result = await _processJsonRpc(jsonRpc);
+        if (result != null) responses.add(result);
+      }
+
+      // 会话建立：仅旧版（2024-11-05 等握手协议）在 initialize 成功后返回会话 ID
+      // 无状态模式（2026-07-28）不创建会话
+      final sessionId = _getOrCreateSession(request, decoded);
+      if (sessionId != null) {
+        response.headers.set('Mcp-Session-Id', sessionId);
+      }
+
+      if (responses.isEmpty) {
+        response.statusCode = io.HttpStatus.accepted;
+      } else if (decoded is List) {
+        response.write(jsonEncode(responses));
+      } else {
+        response.write(jsonEncode(responses.first));
+      }
+      await response.close();
+    } catch (e) {
+      logger.e('MCP /mcp streamable error', error: e);
+      try {
+        final response = request.response;
+        _setCorsHeaders(response);
+        response.statusCode = io.HttpStatus.internalServerError;
+        response.write(jsonEncode({'error': e.toString()}));
+        await response.close();
+      } catch (_) {
+        // response already closed
+      }
+    }
+  }
+
+  /// 2026-07-28 无状态模式：校验 MCP-Protocol-Version / Mcp-Method / Mcp-Name 头
+  /// 与 JSON-RPC body 一致性。不一致时返回 -32020 错误。
+  /// 返回 null 表示校验通过，可继续正常处理。
+  Map<String, dynamic>? _applyStatelessHeaders(io.HttpRequest request, Map<String, dynamic> jsonRpc) {
+    final headerVersion = request.headers.value('MCP-Protocol-Version');
+    final headerMethod = request.headers.value('Mcp-Method');
+    final headerName = request.headers.value('Mcp-Name');
+
+    // body 中的协议版本（_meta 字段）与头不一致时拒绝
+    final metaVersion = (jsonRpc['_meta'] is Map) ? (jsonRpc['_meta'] as Map)['protocolVersion'] : null;
+    if (headerVersion != null && metaVersion != null && headerVersion != metaVersion) {
+      return {
+        'jsonrpc': '2.0',
+        'id': jsonRpc['id'],
+        'error': {
+          'code': -32020,
+          'message': 'MCP-Protocol-Version header ($headerVersion) does not match _meta.protocolVersion ($metaVersion)'
+        }
+      };
+    }
+
+    // 头部 method 与 body method 不一致时拒绝
+    final bodyMethod = jsonRpc['method'];
+    if (headerMethod != null && bodyMethod != null && headerMethod != bodyMethod) {
+      return {
+        'jsonrpc': '2.0',
+        'id': jsonRpc['id'],
+        'error': {
+          'code': -32020,
+          'message': 'Mcp-Method header ($headerMethod) does not match body method ($bodyMethod)'
+        }
+      };
+    }
+
+    return null;
+  }
+
+  /// 根据请求提取或创建 Streamable HTTP 会话
+  String? _getOrCreateSession(io.HttpRequest request, dynamic decoded) {
+    // 客户端请求头中带的会话 ID
+    final existingId = request.headers.value('Mcp-Session-Id');
+    if (existingId != null && _streamSessions.containsKey(existingId)) {
+      return existingId;
+    }
+
+    // 仅对 initialize 请求创建新会话
+    final isInitialize = decoded is Map && decoded['method'] == 'initialize';
+    if (!isInitialize) return null;
+
+    final sessionId = _generateSessionId();
+    _streamSessions[sessionId] = _StreamableSession();
+    // 清理过期会话（简单保护：超过 1 小时未使用）
+    Timer(const Duration(hours: 1), () {
+      _streamSessions.remove(sessionId);
+    });
+    return sessionId;
+  }
+
+  /// GET /mcp — 建立 SSE 输出流（Streamable HTTP 的 GET 模式）
+  void _handleStreamableHttpGet(io.HttpRequest request) {
+    final response = request.response;
+    _setCorsHeaders(response);
+    response.headers.contentType = io.ContentType('text', 'event-stream');
+    response.headers.add('Cache-Control', 'no-cache');
+    response.headers.add('Connection', 'keep-alive');
+
+    // 关联到会话（若有）
+    final sessionId = request.headers.value('Mcp-Session-Id');
+    if (sessionId != null && _streamSessions.containsKey(sessionId)) {
+      _streamSessions[sessionId]!.stream = response;
+      logger.i('MCP streamable HTTP session $sessionId connected (GET)');
+    }
+
+    response.write('event: endpoint\ndata: /mcp\n\n');
+    response.flush();
+
+    _addSseConnection(response);
+    response.done.then((_) {
+      _removeSseConnection(response);
+      if (sessionId != null && _streamSessions[sessionId]?.stream == response) {
+        _streamSessions[sessionId]!.stream = null;
+      }
+    }).catchError((_) {
+      _removeSseConnection(response);
+      if (sessionId != null && _streamSessions[sessionId]?.stream == response) {
+        _streamSessions[sessionId]!.stream = null;
+      }
+    });
+  }
+
+  /// 设置统一的 CORS 头
+  void _setCorsHeaders(io.HttpResponse response) {
+    response.headers.add('Access-Control-Allow-Origin', '*');
+    response.headers.add('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+    response.headers.add('Access-Control-Allow-Headers',
+        'Content-Type, Accept, Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Last-Event-ID');
+    response.headers.add('Access-Control-Expose-Headers', 'Mcp-Session-Id');
+  }
+
+  /// 工具是否启用（可在设置中单独开关）
+  bool _isToolEnabled(String name) {
+    return McpBridge().isToolEnabled(name);
+  }
+
   /// 广播 SSE 事件
-  void _broadcastEvent(String event, Object data) {
-      var deadConnections = <io.HttpResponse>[];
+  void _broadcastEvent(String event, Object data) {      var deadConnections = <io.HttpResponse>[];
       // 使用快照遍历，避免遍历期间被并发修改
       for (var conn in _snapshotSseConnections()) {
           try {
@@ -370,13 +594,25 @@ class McpServer {
     try {
       switch (method) {
         case 'initialize':
+          // 协议协商：客户端声明支持的版本，服务端返回双方共同支持的最高版本
+          // 2026-07-28 无状态客户端通常不再发 initialize，但保留兼容
+          var negotiated = protocolVersion;
+          final params = request['params'] as Map<String, dynamic>?;
+          final clientVersion = params?['protocolVersion'] as String?;
+          if (clientVersion != null) {
+            if (legacyProtocolVersions.contains(clientVersion)) {
+              // 旧版客户端：回复其版本，走有状态握手路径
+              negotiated = clientVersion;
+            }
+            // 客户端版本比服务端新或相同：返回服务端版本
+          }
           return response({
-            'protocolVersion': '2024-11-05',
+            'protocolVersion': negotiated,
             'capabilities': {
-              'tools': {},
+              'tools': {'listChanged': false},
               'resources': {}
             },
-            'serverInfo': {'name': 'ProxyPin MCP', 'version': '1.0.0'}
+            'serverInfo': {'name': 'ProxyPin MCP', 'version': '1.3.1'}
           });
           
         case 'notifications/initialized':
@@ -390,7 +626,7 @@ class McpServer {
           
         case 'tools/list':
           return response({
-            'tools': _getToolsList()
+            'tools': _getToolsList().where((t) => _isToolEnabled(t['name'] as String)).toList()
           });
           
         case 'tools/call':
@@ -477,6 +713,9 @@ class McpServer {
     }
   }
 
+  /// 获取全部可用工具列表（供 UI 页面展示，不经过启用过滤）
+  List<Map<String, dynamic>> getTools() => _getToolsList();
+
   List<Map<String, dynamic>> _getToolsList() {
     return [
       {
@@ -559,12 +798,12 @@ class McpServer {
       },
       {
         'name': 'generate_code',
-        'description': 'Generate code for a specific request in Python, JavaScript, or cURL.',
+        'description': 'Generate code for a specific request in Python, JavaScript, Go, Node.js, or cURL.',
         'inputSchema': {
           'type': 'object',
           'properties': {
             'request_id': {'type': 'string', 'description': 'The ID of the request'},
-            'language': {'type': 'string', 'description': 'Target language: python, js, curl', 'enum': ['python', 'js', 'curl']}
+            'language': {'type': 'string', 'description': 'Target language: python, js, go, nodejs, curl', 'enum': ['python', 'js', 'go', 'nodejs', 'curl']}
           },
           'required': ['request_id', 'language']
         }
@@ -748,6 +987,61 @@ Body Encoding Rules:
           'properties': {
             'domain_filter': {'type': 'string', 'description': 'Filter by domain (optional)'}
           }
+        }
+      },
+      // ==================== 安全分析工具（2.x 增强） ====================
+      {
+        'name': 'analyze_auth',
+        'description': 'Analyze authentication information in requests (Authorization headers, tokens, cookies, API keys).',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'request_id': {'type': 'string', 'description': 'Specific request ID (optional, defaults to recent 100)'}
+          }
+        }
+      },
+      {
+        'name': 'find_sensitive_data',
+        'description': 'Search requests for sensitive data: passwords, API keys, secrets, tokens, private keys, phone numbers, ID cards.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'request_id': {'type': 'string', 'description': 'Specific request ID (optional, defaults to recent 100)'},
+            'search_body': {'type': 'boolean', 'description': 'Search request bodies (default true)'}
+          }
+        }
+      },
+      {
+        'name': 'get_cookie_info',
+        'description': 'Get cookie analysis for a domain or request (names, values, HttpOnly, Secure, domains).',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'domain': {'type': 'string', 'description': 'Domain to filter (e.g. example.com)'},
+            'request_id': {'type': 'string', 'description': 'Specific request ID (overrides domain)'}
+          }
+        }
+      },
+      {
+        'name': 'get_domain_summary',
+        'description': 'Get traffic statistics summary for a domain (methods, status codes, avg duration, error count).',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'domain': {'type': 'string', 'description': 'Domain to analyze (required)'}
+          },
+          'required': ['domain']
+        }
+      },
+      {
+        'name': 'calculate_entropy',
+        'description': 'Calculate Shannon entropy of a string (for evaluating randomness / key strength).',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'text': {'type': 'string', 'description': 'Text to analyze (required)'}
+          },
+          'required': ['text']
         }
       },
       // ==================== Breakpoint Debugging Tools (1.3.1+) ====================
@@ -1043,11 +1337,58 @@ Body Encoding Rules:
           },
           'required': ['command']
         }
+      },
+      {
+        'name': 'get_pending_intercepts',
+        'description': 'Get all requests/responses currently paused by breakpoint interception.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {}
+        }
+      },
+      {
+        'name': 'approve_intercept',
+        'description': 'Approve (release) a paused intercept. Optionally modify the request before releasing.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'request_id': {'type': 'string', 'description': 'ID of the paused intercept'},
+            'modifier': {
+              'type': 'object',
+              'description': 'Optional request modifications: method, url, headers, body',
+              'properties': {
+                'method': {'type': 'string'},
+                'url': {'type': 'string'},
+                'headers': {'type': 'object'},
+                'body': {'type': 'string'}
+              }
+            }
+          },
+          'required': ['request_id']
+        }
+      },
+      {
+        'name': 'reject_intercept',
+        'description': 'Reject a paused intercept. Request is aborted, response is dropped.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'request_id': {'type': 'string', 'description': 'ID of the paused intercept'},
+            'reason': {'type': 'string', 'description': 'Rejection reason (optional)'}
+          },
+          'required': ['request_id']
+        }
       }
     ];
   }
 
   Future<dynamic> _executeTool(String name, Map<String, dynamic> args) async {
+    // 工具启用检查：被禁用的工具返回错误，不执行
+    if (!_isToolEnabled(name)) {
+      return {
+        'error': 'Tool is disabled: $name. Enable it in the MCP settings page first.'
+      };
+    }
     switch (name) {
       case 'set_config':
         var config = await Configuration.instance;
@@ -1211,8 +1552,12 @@ Body Encoding Rules:
             String code;
             if (lang == 'python') {
                 code = _generatePythonCode(req);
-            } else if (lang == 'js') {
+            } else if (lang == 'js' || lang == 'javascript') {
                 code = _generateJsCode(req);
+            } else if (lang == 'go' || lang == 'golang') {
+                code = _generateGoCode(req);
+            } else if (lang == 'node' || lang == 'nodejs') {
+                code = _generateNodeJsCode(req);
             } else {
                 code = _generateCurl(req);
             }
@@ -1524,6 +1869,334 @@ Body Encoding Rules:
           return {'error': 'Failed to extract endpoints: $e'};
         }
 
+      // ==================== 安全分析工具（2.x 增强） ====================
+      case 'analyze_auth':
+        // 分析请求中的认证信息（Authorization 头、Cookie、Token、ApiKey）
+        try {
+          final requestId = args['request_id'] as String?;
+          final requests = requestId != null
+              ? McpBridge().source.where((r) => r.requestId == requestId).toList()
+              : McpBridge().source.take(100).toList();
+
+          final findings = <Map<String, dynamic>>[];
+          for (var req in requests) {
+            var authHeader = req.headers.get('authorization');
+            if (authHeader != null && authHeader.isNotEmpty) {
+              findings.add({
+                'type': 'authorization_header',
+                'request_id': req.requestId,
+                'url': req.requestUrl,
+                'scheme': authHeader.split(' ').first,
+                'preview': authHeader.length > 40 ? '${authHeader.substring(0, 40)}...' : authHeader,
+              });
+            }
+
+            // 常见 Token 头
+            for (var header in ['x-api-key', 'api-key', 'x-token', 'token', 'x-access-token', 'x-auth-token']) {
+              var val = req.headers.get(header);
+              if (val != null && val.isNotEmpty) {
+                findings.add({
+                  'type': 'token_header',
+                  'request_id': req.requestId,
+                  'url': req.requestUrl,
+                  'header': header,
+                  'preview': val.length > 40 ? '${val.substring(0, 40)}...' : val,
+                });
+              }
+            }
+
+            // URL 中的 token 参数
+            try {
+              var uri = Uri.parse(req.requestUrl);
+              for (var param in ['token', 'access_token', 'api_key', 'apikey', 'sign', 'sig']) {
+                if (uri.queryParameters.containsKey(param)) {
+                  var val = uri.queryParameters[param]!;
+                  findings.add({
+                    'type': 'url_query_token',
+                    'request_id': req.requestId,
+                    'url': req.requestUrl,
+                    'param': param,
+                    'preview': val.length > 40 ? '${val.substring(0, 40)}...' : val,
+                  });
+                }
+              }
+            } catch (_) {}
+
+            // Cookie 中的会话标识
+            var cookieHeader = req.headers.get('cookie');
+            if (cookieHeader != null && cookieHeader.isNotEmpty) {
+              var cookies = _parseCookies(cookieHeader);
+              for (var c in cookies) {
+                var name = (c['name'] ?? '').toLowerCase();
+                if (name.contains('session') || name.contains('token') || name.contains('auth') || name.contains('jwt')) {
+                  findings.add({
+                    'type': 'cookie',
+                    'request_id': req.requestId,
+                    'url': req.requestUrl,
+                    'cookie_name': c['name'],
+                    'preview': (c['value'] ?? '').length > 40 ? '${c['value']!.substring(0, 40)}...' : c['value'],
+                  });
+                }
+              }
+            }
+          }
+
+          return {
+            'count': findings.length,
+            'requests_scanned': requestId != null ? 1 : requests.length,
+            'findings': findings,
+            'warning': 'Sensitive credentials detected. Handle with care.',
+          };
+        } catch (e) {
+          return {'error': 'Failed to analyze auth: $e'};
+        }
+
+      case 'find_sensitive_data':
+        // 在请求/响应中搜索敏感数据（密钥、密码、手机号、身份证等）
+        try {
+          final requestId = args['request_id'] as String?;
+          final searchBody = args['search_body'] as bool? ?? true;
+          final requests = requestId != null
+              ? McpBridge().source.where((r) => r.requestId == requestId).toList()
+              : McpBridge().source.take(100).toList();
+
+          // 敏感模式列表（非 raw 字符串，正则中 \\ 表示 \）
+          final patterns = <Map<String, String>>[
+            {'name': 'password', 'regex': "(?i)(password|passwd|pwd)\\s*[=:]\\s*[\"']?([^\"'&\\s,;]{4,})"},
+            {'name': 'api_key', 'regex': "(?i)(api[_-]?key|apikey)\\s*[=:]\\s*[\"']?([^\"'&\\s,;]{8,})"},
+            {'name': 'secret', 'regex': "(?i)(secret|client[_-]?secret)\\s*[=:]\\s*[\"']?([^\"'&\\s,;]{8,})"},
+            {'name': 'token', 'regex': "(?i)(access[_-]?token|auth[_-]?token|bearer)\\s*[=:]\\s*[\"']?([^\"'&\\s,;]{8,})"},
+            {'name': 'private_key', 'regex': '-----BEGIN [A-Z ]*PRIVATE KEY-----'},
+            {'name': 'phone', 'regex': r'(?<!\d)1[3-9]\d{9}(?!\d)'},
+            {'name': 'id_card', 'regex': r'(?<!\d)[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?!\d)'},
+            {'name': 'email', 'regex': r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'},
+          ];
+
+          final findings = <Map<String, dynamic>>[];
+          for (var req in requests) {
+            // 请求头
+            req.headers.forEach((key, values) {
+              for (var v in values) {
+                for (var p in patterns) {
+                  try {
+                    var re = RegExp(p['regex']!);
+                    if (re.hasMatch('$key: $v')) {
+                      findings.add({
+                        'type': p['name'],
+                        'location': 'request_header',
+                        'request_id': req.requestId,
+                        'url': req.requestUrl,
+                        'detail': '$key: ${v.length > 60 ? v.substring(0, 60) : v}',
+                      });
+                    }
+                  } catch (_) {}
+                }
+              }
+            });
+
+            // 请求体
+            if (searchBody) {
+              var body = req.bodyAsString;
+              if (body.isNotEmpty) {
+                for (var p in patterns) {
+                  try {
+                    var re = RegExp(p['regex']!);
+                    var match = re.firstMatch(body);
+                    if (match != null) {
+                      findings.add({
+                        'type': p['name'],
+                        'location': 'request_body',
+                        'request_id': req.requestId,
+                        'url': req.requestUrl,
+                        'detail': match.group(0)!.length > 80 ? match.group(0)!.substring(0, 80) : match.group(0),
+                      });
+                    }
+                  } catch (_) {}
+                }
+              }
+            }
+          }
+
+          return {
+            'count': findings.length,
+            'requests_scanned': requestId != null ? 1 : requests.length,
+            'findings': findings,
+          };
+        } catch (e) {
+          return {'error': 'Failed to find sensitive data: $e'};
+        }
+
+      case 'get_cookie_info':
+        // 分析某个域的 Cookie（名称、值、过期时间、HttpOnly 等）
+        try {
+          final domain = args['domain'] as String?;
+          final requestId = args['request_id'] as String?;
+
+          var requests = McpBridge().source;
+          if (requestId != null) {
+            requests = requests.where((r) => r.requestId == requestId).toList();
+          } else if (domain != null) {
+            requests = requests.where((r) {
+              try {
+                return Uri.parse(r.requestUrl).host.contains(domain);
+              } catch (_) {
+                return false;
+              }
+            }).toList();
+          }
+
+          final cookieMap = <String, Map<String, dynamic>>{};
+          for (var req in requests.take(500)) {
+            var cookieHeader = req.headers.get('cookie');
+            if (cookieHeader != null && cookieHeader.isNotEmpty) {
+              for (var c in _parseCookies(cookieHeader)) {
+                var name = c['name'] ?? '';
+                var value = c['value'] ?? '';
+                if (!cookieMap.containsKey(name)) {
+                  cookieMap[name] = {
+                    'name': name,
+                    'value_preview': value.length > 30 ? '${value.substring(0, 30)}...' : value,
+                    'domains': <String>[],
+                    'request_count': 0,
+                    'http_only': false,
+                    'secure': false,
+                  };
+                }
+                try {
+                  var host = Uri.parse(req.requestUrl).host;
+                  if (!(cookieMap[name]!['domains'] as List).contains(host)) {
+                    (cookieMap[name]!['domains'] as List).add(host);
+                  }
+                } catch (_) {}
+                cookieMap[name]!['request_count'] = (cookieMap[name]!['request_count'] as int) + 1;
+              }
+            }
+
+            // Set-Cookie 响应头
+            var setCookieHeaders = <String>[];
+            req.response?.headers.forEach((key, values) {
+              if (key.toLowerCase() == 'set-cookie') {
+                setCookieHeaders.addAll(values);
+              }
+            });
+            for (var sc in setCookieHeaders) {
+              var parts = sc.split(';');
+              var kv = parts.first.split('=');
+              if (kv.length == 2) {
+                var name = kv[0].trim();
+                var value = kv[1].trim();
+                if (!cookieMap.containsKey(name)) {
+                  cookieMap[name] = {
+                    'name': name,
+                    'value_preview': value.length > 30 ? '${value.substring(0, 30)}...' : value,
+                    'domains': <String>[],
+                    'request_count': 0,
+                    'http_only': false,
+                    'secure': false,
+                  };
+                }
+                cookieMap[name]!['http_only'] = parts.any((p) => p.trim().toLowerCase() == 'httponly');
+                cookieMap[name]!['secure'] = parts.any((p) => p.trim().toLowerCase() == 'secure');
+                var expires = parts.firstWhere((p) => p.trim().toLowerCase().startsWith('expires='), orElse: () => '');
+                if (expires.isNotEmpty) {
+                  cookieMap[name]!['expires'] = expires.trim().substring('expires='.length);
+                }
+              }
+            }
+          }
+
+          return {
+            'domain': domain ?? (requestId != null ? 'request_$requestId' : 'all'),
+            'total_cookies': cookieMap.length,
+            'cookies': cookieMap.values.toList(),
+          };
+        } catch (e) {
+          return {'error': 'Failed to get cookie info: $e'};
+        }
+
+      case 'get_domain_summary':
+        // 汇总某个域名的请求统计（方法分布、状态码、平均耗时、数据量）
+        try {
+          final domain = args['domain'] as String?;
+          if (domain == null || domain.isEmpty) {
+            return {'error': 'domain parameter is required'};
+          }
+
+          final requests = McpBridge().source.where((r) {
+            try {
+              return Uri.parse(r.requestUrl).host.contains(domain);
+            } catch (_) {
+              return false;
+            }
+          }).toList();
+
+          final methods = <String, int>{};
+          final statusCodes = <int, int>{};
+          var totalDuration = 0;
+          var totalSize = 0;
+          var errorCount = 0;
+
+          for (var req in requests) {
+            methods[req.method.name] = (methods[req.method.name] ?? 0) + 1;
+            totalSize += req.packageSize ?? 0;
+            var res = req.response;
+            if (res != null) {
+              var code = res.status.code;
+              statusCodes[code] = (statusCodes[code] ?? 0) + 1;
+              totalDuration += res.responseTime.difference(req.requestTime).inMilliseconds;
+              if (code >= 400) errorCount++;
+            }
+          }
+
+          return {
+            'domain': domain,
+            'total_requests': requests.length,
+            'methods': methods,
+            'status_codes': statusCodes,
+            'avg_duration_ms': requests.isEmpty ? 0 : (totalDuration / requests.length).round(),
+            'error_count': errorCount,
+            'total_size_bytes': totalSize,
+          };
+        } catch (e) {
+          return {'error': 'Failed to get domain summary: $e'};
+        }
+
+      case 'calculate_entropy':
+        // 计算字符串的香农熵（用于评估随机性/密钥强度）
+        try {
+          final text = args['text'] as String? ?? args['value'] as String?;
+          if (text == null || text.isEmpty) {
+            return {'error': 'text parameter is required'};
+          }
+
+          var freq = <int, int>{};
+          for (var code in text.codeUnits) {
+            freq[code] = (freq[code] ?? 0) + 1;
+          }
+          var length = text.length;
+          var entropy = 0.0;
+          freq.forEach((_, count) {
+            var p = count / length;
+            entropy -= p * (p == 0 ? 0 : _log2(p));
+          });
+
+          // 参考 https://github.com/danielmiessler/SecLists 常见弱密钥模式
+          var isWeak = text.length < 16 || entropy < 3.0;
+          var hints = <String>[];
+          if (text.length < 16) hints.add('长度过短（<16），可能是弱密钥');
+          if (entropy < 3.0) hints.add('熵值低（<3.0），字符分布过于单一');
+
+          return {
+            'entropy': double.parse(entropy.toStringAsFixed(4)),
+            'length': text.length,
+            'unique_chars': freq.length,
+            'is_weak': isWeak,
+            'hints': hints,
+          };
+        } catch (e) {
+          return {'error': 'Failed to calculate entropy: $e'};
+        }
+
       // ==================== Device Control Tools (Android only) ====================
       case 'get_device_info':
         if (!McpScreen.isSupported) {
@@ -1736,6 +2409,98 @@ Body Encoding Rules:
           };
         } catch (e) {
           return {'error': 'Failed to toggle breakpoint: $e'};
+        }
+
+      // ==================== MCP 拦截队列工具（2.x 增强） ====================
+      case 'get_pending_intercepts':
+        try {
+          final items = RequestBreakpointInterceptor.instance.pendingIntercepts();
+          return {
+            'count': items.length,
+            'intercepts': items,
+          };
+        } catch (e) {
+          return {'error': 'Failed to get pending intercepts: $e'};
+        }
+
+      case 'approve_intercept':
+        try {
+          final requestId = args['request_id'] as String;
+          final modifier = args['modifier'] as Map<String, dynamic>?;
+          final interceptor = RequestBreakpointInterceptor.instance;
+
+          if (interceptor.isRequestPaused(requestId)) {
+            // 请求拦截：可携带 modifier 修改请求后放行
+            if (modifier != null && modifier.isNotEmpty) {
+              // 通过 toJson/fromJson 重建并应用修改
+              final original = interceptor.pendingIntercepts()
+                  .firstWhere((e) => e['id'] == requestId, orElse: () => {});
+              if (original.isNotEmpty) {
+                final req = interceptor.getPausedRequest(requestId);
+                if (req != null) {
+                  final json = req.toJson();
+                  if (modifier['method'] is String) {
+                    json['method'] = modifier['method'];
+                  }
+                  if (modifier['url'] is String) {
+                    json['uri'] = modifier['url'];
+                  }
+                  if (modifier['headers'] is Map) {
+                    // 规范化 headers：支持 Map<String, String> 或 Map<String, List<String>>
+                    final rawHeaders = modifier['headers'] as Map;
+                    final normalized = <String, List<String>>{};
+                    rawHeaders.forEach((k, v) {
+                      if (v is List) {
+                        normalized[k.toString()] = v.map((e) => e.toString()).toList();
+                      } else {
+                        normalized[k.toString()] = [v.toString()];
+                      }
+                    });
+                    json['headers'] = normalized;
+                  }
+                  if (modifier['body'] is String) {
+                    json['body'] = modifier['body'];
+                  }
+                  final modified = HttpRequest.fromJson(json);
+                  interceptor.resumeRequest(requestId, modified);
+                  return {'status': 'approved', 'id': requestId, 'type': 'request', 'modified': true};
+                }
+              }
+            }
+            // 无修改：放行原请求
+            interceptor.resumeRequest(requestId, null);
+            return {'status': 'approved', 'id': requestId, 'type': 'request'};
+          }
+
+          if (interceptor.isResponsePaused(requestId)) {
+            // 响应拦截：放行原响应（响应修改请使用响应重写规则）
+            interceptor.resumeResponse(requestId, null);
+            return {'status': 'approved', 'id': requestId, 'type': 'response'};
+          }
+
+          return {'error': 'No pending intercept with id: $requestId'};
+        } catch (e) {
+          return {'error': 'Failed to approve intercept: $e'};
+        }
+
+      case 'reject_intercept':
+        try {
+          final requestId = args['request_id'] as String;
+          final reason = args['reason'] as String? ?? 'Rejected by user';
+          final interceptor = RequestBreakpointInterceptor.instance;
+
+          if (interceptor.isResponsePaused(requestId)) {
+            // 响应拦截：拒绝即丢弃响应
+            interceptor.resumeResponse(requestId, null);
+            return {'status': 'rejected', 'id': requestId, 'type': 'response', 'reason': reason};
+          } else if (interceptor.isRequestPaused(requestId)) {
+            // 请求拦截：拒绝即中止请求（resume null 会 abort）
+            interceptor.resumeRequest(requestId, null);
+            return {'status': 'rejected', 'id': requestId, 'type': 'request', 'reason': reason};
+          }
+          return {'error': 'No pending intercept with id: $requestId'};
+        } catch (e) {
+          return {'error': 'Failed to reject intercept: $e'};
         }
 
       // ==================== Weak Network Simulation Tools (1.3.1+) ====================
@@ -2106,6 +2871,90 @@ Body Encoding Rules:
     return sb.toString();
   }
 
+  /// 生成 Go 语言请求代码（net/http）
+  String _generateGoCode(HttpRequest req) {
+    var sb = StringBuffer();
+    sb.writeln("package main");
+    sb.writeln();
+    sb.writeln("import (");
+    sb.writeln("    \"fmt\"");
+    sb.writeln("    \"io\"");
+    sb.writeln("    \"net/http\"");
+    sb.writeln("    \"strings\"");
+    sb.writeln(")");
+    sb.writeln();
+    sb.writeln("func main() {");
+    sb.writeln("    url := \"${req.requestUrl}\"");
+    sb.writeln("    method := \"${req.method.name}\"");
+
+    var body = req.bodyAsString;
+    if (body.isNotEmpty) {
+        var escapedBody = body.replaceAll('"', '\\"').replaceAll('\n', '\\n');
+        sb.writeln("    payload := strings.NewReader(\"$escapedBody\")");
+    } else {
+        sb.writeln("    var payload io.Reader");
+    }
+    sb.writeln();
+    sb.writeln("    req, err := http.NewRequest(method, url, payload)");
+    sb.writeln("    if err != nil {");
+    sb.writeln("        fmt.Println(err)");
+    sb.writeln("        return");
+    sb.writeln("    }");
+    req.headers.forEach((key, values) {
+        for (var v in values) {
+            var val = v.replaceAll('"', '\\"');
+            sb.writeln("    req.Header.Add(\"$key\", \"$val\")");
+        }
+    });
+    sb.writeln();
+    sb.writeln("    res, err := http.DefaultClient.Do(req)");
+    sb.writeln("    if err != nil {");
+    sb.writeln("        fmt.Println(err)");
+    sb.writeln("        return");
+    sb.writeln("    }");
+    sb.writeln("    defer res.Body.Close()");
+    sb.writeln("    bodyBytes, _ := io.ReadAll(res.Body)");
+    sb.writeln("    fmt.Println(string(bodyBytes))");
+    sb.writeln("}");
+    return sb.toString();
+  }
+
+  /// 生成 Node.js 原生 http/https 请求代码（fetch 之外的选择）
+  String _generateNodeJsCode(HttpRequest req) {
+    var sb = StringBuffer();
+    sb.writeln("const http = require('http');");
+    sb.writeln("const https = require('https');");
+    sb.writeln();
+    sb.writeln("const url = new URL(\"${req.requestUrl}\");");
+    sb.writeln("const options = {");
+    sb.writeln("  method: \"${req.method.name}\",");
+    sb.writeln("  hostname: url.hostname,");
+    sb.writeln("  port: url.port || (url.protocol === 'https:' ? 443 : 80),");
+    sb.writeln("  path: url.pathname + url.search,");
+    sb.writeln("  headers: {");
+    req.headers.forEach((key, values) {
+        var val = values.join(',');
+        val = val.replaceAll('"', '\\"');
+        sb.writeln("    \"$key\": \"$val\",");
+    });
+    sb.writeln("  }");
+    sb.writeln("};");
+    sb.writeln();
+    sb.writeln("const client = url.protocol === 'https:' ? https : http;");
+    sb.writeln("const req = client.request(options, (res) => {");
+    sb.writeln("  let data = '';");
+    sb.writeln("  res.on('data', (chunk) => { data += chunk; });");
+    sb.writeln("  res.on('end', () => { console.log(data); });");
+    sb.writeln("});");
+    var body = req.bodyAsString;
+    if (body.isNotEmpty) {
+        var escapedBody = body.replaceAll('`', '\\`').replaceAll('\$', '\\\$');
+        sb.writeln("req.write(`$escapedBody`);");
+    }
+    sb.writeln("req.end();");
+    return sb.toString();
+  }
+
   Map<String, dynamic> _generateHar(Iterable<HttpRequest> requests) {
     var entries = [];
     for (var req in requests) {
@@ -2335,6 +3184,9 @@ Body Encoding Rules:
   }
 
   /// 解析 Cookie 字符串为 HAR 格式
+  /// 计算以 2 为底的对数
+  double _log2(double x) => x <= 0 ? 0 : math.log(x) / math.ln2;
+
   List<Map<String, String>> _parseCookies(String? cookieHeader) {
     if (cookieHeader == null || cookieHeader.isEmpty) return [];
     
@@ -2395,4 +3247,9 @@ class ApiEndpoint {
       'status_codes': statusCodes.toList()..sort(),
     };
   }
+}
+
+/// Streamable HTTP 会话（保存该会话的 SSE 输出流，用于服务端推送）
+class _StreamableSession {
+  io.HttpResponse? stream;
 }

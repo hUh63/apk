@@ -6,6 +6,7 @@ import 'package:proxypin/network/channel/channel_context.dart';
 import 'package:proxypin/network/http/http.dart';
 import 'package:proxypin/network/http/websocket.dart';
 import 'package:proxypin/network/util/logger.dart';
+import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/utils/listenable_list.dart';
 
 /// MCP 数据桥接，负责从 ProxyPin 收集流量并提供给 MCP Server
@@ -37,6 +38,14 @@ class McpBridge implements EventListener {
   
   // UI清除回调（由主程序设置，对应垃圾桶图标的清除功能）
   Function()? onClearUI;
+
+  /// 查询工具是否启用（读取用户配置，默认启用）
+  bool isToolEnabled(String name) {
+    // 配置尚未加载时视为全部启用
+    var config = Configuration.loaded;
+    if (config == null) return true;
+    return config.mcpToolsEnabled[name] ?? true;
+  }
 
   /// 获取最近的请求列表（增强版过滤）
   List<HttpRequest> getRecentRequests({
