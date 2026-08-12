@@ -296,3 +296,37 @@ class ConfigImportExport {
     }
   }
 }
+
+/// 配置自动保存（MCP 自动化第一阶段）
+/// 配置变更时自动保存，防止配置丢失
+class ConfigAutoSave {
+  static Timer? _saveTimer;
+  static bool _enabled = true;
+  
+  /// 启用自动保存
+  static void enable() {
+    _enabled = true;
+  }
+  
+  /// 禁用自动保存
+  static void disable() {
+    _enabled = false;
+    _saveTimer?.cancel();
+  }
+  
+  /// 配置变更时调用（防抖 2 秒）
+  static void markChanged() {
+    if (!_enabled) return;
+    
+    _saveTimer?.cancel();
+    _saveTimer = Timer(Duration(seconds: 2), () async {
+      try {
+        final config = await Configuration.instance;
+        await config.save();
+        logger.d('配置自动保存成功');
+      } catch (e) {
+        logger.e('配置自动保存失败', error: e);
+      }
+    });
+  }
+}
