@@ -134,20 +134,36 @@ class HttpClients {
     return request(HostAndPort.of(url), msg, timeout: timeout);
   }
 
-  /// 发送请求
+  /// 发送请求 - 带重试机制 (#892)
   static Future<HttpResponse> request(HostAndPort hostAndPort, HttpRequest request,
-      {Duration timeout = const Duration(seconds: 3)}) async {
-    var httpResponseHandler = HttpResponseHandler();
+      {Duration timeout = const Duration(seconds: 3), int retryCount = 2}) async {
+    int attempts = 0;
+    Exception? lastError;
 
-    var client = Client()
-      ..initChannel(
-          (channel) => channel.dispatcher.handle(HttpResponseCodec(), HttpRequestCodec(), httpResponseHandler));
+    while (attempts <= retryCount) {
+      try {
+        var httpResponseHandler = HttpResponseHandler();
 
-    ChannelContext channelContext = ChannelContext();
-    Channel channel = await client.connect(hostAndPort, channelContext);
-    await channel.write(channelContext, request);
+        var client = Client()
+          ..initChannel(
+              (channel) => channel.dispatcher.handle(HttpResponseCodec(), HttpRequestCodec(), httpResponseHandler));
 
-    return httpResponseHandler.getResponse(timeout).whenComplete(() => channel.close());
+        ChannelContext channelContext = ChannelContext();
+        Channel channel = await client.connect(hostAndPort, channelContext);
+        await channel.write(channelContext, request);
+
+        return await httpResponseHandler.getResponse(timeout).whenComplete(() => channel.close());
+      } catch (e) {
+        lastError = e is Exception ? e : Exception(e.toString());
+        attempts++;
+        if (attempts <= retryCount) {
+          // 指数退避：100ms, 200ms, 400ms...
+          await Future.delayed(Duration(milliseconds: 100 * attempts));
+        }
+      }
+    }
+
+    throw lastError ?? Exception('Request failed after ${retryCount + 1} attempts');
   }
 
   /// 发送代理请求
