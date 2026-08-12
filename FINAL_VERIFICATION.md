@@ -312,3 +312,54 @@ class ConfigAutoSave {
 
 **构建链接**: https://github.com/hUh63/apk/actions
 **Release**: v1.3.1-36 (待自动创建)
+
+---
+
+## 🐛 构建失败修复记录
+
+### 第一次构建失败 (2026-08-12)
+
+**失败原因**: `ConfigAutoSave` 类中使用了错误的方法名
+
+**错误日志**:
+```
+lib/network/bin/configuration.dart:326:22: Error: The method 'save' isn't defined for the type 'Configuration'.
+        await config.save();
+                     ^^^^
+```
+
+**修复方案**: 将 `config.save()` 改为 `config.flushConfig()`
+
+**修复提交**: `08e75e1`
+
+**修复内容**:
+```diff
+- await config.save();
++ await config.flushConfig();
+```
+
+**状态**: ✅ 已修复并推送，将触发重新构建
+
+---
+
+## 最终提交历史（13 次提交）
+
+```
+08e75e1 fix: 修复配置自动保存方法名 (save -> flushConfig)
+7c52a68 docs: 添加最终功能验证报告
+5ddd6ed fix: 添加缺失的 dart:async 导入
+c4b74fc feat: 添加 MCP 自动化方案文档和配置自动保存
+5c04aa2 feat: 添加配置自动备份和导出进度功能
+117ed21 docs: 添加优化总结报告
+7da0494 docs: 添加 HTTP/2 兼容性优化方案 (#871)
+ddcfb20 feat: 添加 HTTP 请求重试机制 (#892)
+4db2aad feat: 添加搜索排序功能 (#843)
+cc587e8 feat: 完善重放时间单位选择器 UI (#887)
+88867ea feat: 重放时间精度优化 - 支持毫秒/秒/分钟 (#887)
+e5e7018 fix: 修复 FilePicker v12 saveFile API
+d56e120 fix: 修复批量导出 iOS 'Is a directory' 错误 (#893)
+```
+
+**总提交数**: 44
+**本轮提交数**: 13
+
