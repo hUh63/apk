@@ -95,6 +95,21 @@ class McpScreen {
     return await _channel.invokeMethod('openShizukuSettings');
   }
 
+  /// 请求 Shizuku 授权（弹出授权弹窗）
+  static Future<bool> requestShizukuAuthorization() async {
+    return await _channel.invokeMethod('requestShizukuAuthorization');
+  }
+
+  /// 请求 Dhizuku 授权
+  static Future<bool> requestDhizukuAuthorization() async {
+    return await _channel.invokeMethod('requestDhizukuAuthorization');
+  }
+
+  /// 请求 Root 授权（触发 Superuser 弹窗）
+  static Future<bool> requestRootAuthorization() async {
+    return await _channel.invokeMethod('requestRootAuthorization');
+  }
+
   /// 执行 Shell 命令
   /// [mode] 权限模式: root / shizuku / dhizuku / auto（默认 auto）
   /// [useSu] 是否使用 root 权限（mode 未指定时的兼容参数）

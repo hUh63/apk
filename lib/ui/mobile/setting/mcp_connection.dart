@@ -473,9 +473,41 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       icon: const Icon(Icons.security),
-                      label: const Text('打开 Shizuku 授权'),
+                      label: const Text('请求 Shizuku 授权'),
                       onPressed: () async {
-                        await McpScreen.openShizukuSettings();
+                        await McpScreen.requestShizukuAuthorization();
+                        // 授权后重新检测状态
+                        await _loadDeviceInfo();
+                        if (mounted) setState(() {});
+                      },
+                    ),
+                  ),
+                ],
+                if (McpScreen.isSupported && !hasDhizuku) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.verified_user),
+                      label: const Text('请求 Dhizuku 授权'),
+                      onPressed: () async {
+                        await McpScreen.requestDhizukuAuthorization();
+                        // 授权后重新检测状态
+                        await _loadDeviceInfo();
+                        if (mounted) setState(() {});
+                      },
+                    ),
+                  ),
+                ],
+                if (McpScreen.isSupported && !hasRoot) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.admin_panel_settings),
+                      label: const Text('请求 Root 授权'),
+                      onPressed: () async {
+                        await McpScreen.requestRootAuthorization();
                         // 授权后重新检测状态
                         await _loadDeviceInfo();
                         if (mounted) setState(() {});

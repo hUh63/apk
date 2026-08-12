@@ -108,6 +108,9 @@ class McpPlugin : FlutterPlugin {
             "screenshot" -> screenshot()
             "openAccessibilitySettings" -> openAccessibilitySettings()
             "openShizukuSettings" -> openShizukuSettings()
+            "requestShizukuAuthorization" -> requestShizukuAuthorization()
+            "requestDhizukuAuthorization" -> requestDhizukuAuthorization()
+            "requestRootAuthorization" -> requestRootAuthorization()
             "shell" -> {
                 val command = args["command"] as? String ?: ""
                 val useSu = args["useSu"] as? Boolean ?: false
@@ -446,6 +449,76 @@ class McpPlugin : FlutterPlugin {
             } catch (e2: Exception) {
                 false
             }
+        }
+    }
+
+    /**
+     * 请求 Shizuku 授权（弹出授权弹窗）
+     * 使用 Shizuku 的 requestBinder 接口，会触发系统弹窗请求用户授权
+     */
+    private fun requestShizukuAuthorization(): Boolean {
+        return try {
+            // 使用 Shizuku 的授权请求 Intent
+            val activity = Class.forName("moe.shizuku.privileged.api.constant.Intent")
+            val action = activity.getField("ACTIVITY_PERMISSION").get(null) as String
+            val intent = Intent(action).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context?.startActivity(intent)
+            true
+        } catch (e: Exception) {
+            // 回退到打开 Shizuku 应用
+            try {
+                val pm = context?.packageManager ?: return false
+                val launch = pm.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+                if (launch != null) {
+                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context?.startActivity(launch)
+                    true
+                } else false
+            } catch (e2: Exception) {
+                false
+            }
+        }
+    }
+
+    /**
+     * 请求 Dhizuku 授权
+     * Dhizuku 包名：com.rosan.dhizuku.api
+     */
+    private fun requestDhizukuAuthorization(): Boolean {
+        return try {
+            val pm = context?.packageManager ?: return false
+            // 尝试打开 Dhizuku 授权页面
+            val intent = pm.getLaunchIntentForPackage("com.rosan.dhizuku.api")
+            if (intent != null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context?.startActivity(intent)
+                true
+            } else {
+                // 尝试打开 Dhizuku 管理页面
+                val dhizukuIntent = Intent("com.rosan.dhizuku.action.OPEN")
+                dhizukuIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context?.startActivity(dhizukuIntent)
+                true
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * 请求 Root 授权
+     * 通过执行 su 命令触发 Superuser 授权弹窗
+     */
+    private fun requestRootAuthorization(): Boolean {
+        return try {
+            // 执行 su 命令会触发 Magisk/KernelSU 等授权弹窗
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
+            process.waitFor(3, TimeUnit.SECONDS)
+            true
+        } catch (e: Exception) {
+            false
         }
     }
 
