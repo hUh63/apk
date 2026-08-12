@@ -110,6 +110,39 @@ class SearchConditionsState extends State<SearchConditions> {
                   )),
             ),
           ),
+          // 排序选项 (#843)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('排序:', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+              Row(
+                children: [
+                  // 排序字段
+                  DropdownMenu<SortBy>(
+                    initialValue: searchModel.sortBy.name,
+                    items: ['time', 'duration', 'statusCode'],
+                    onSelected: (val) {
+                      setState(() {
+                        searchModel.sortBy = SortBy.values.firstWhere((e) => e.name == val);
+                      });
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  // 排序方向
+                  DropdownMenu<SortOrder>(
+                    initialValue: searchModel.sortOrder.name,
+                    items: ['desc', 'asc'],
+                    onSelected: (val) {
+                      setState(() {
+                        searchModel.sortOrder = SortOrder.values.firstWhere((e) => e.name == val);
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
           const SizedBox(height: 10),
           // protocol quick selectors placed under the keyword input (very compact)
           protocolsWidget(),

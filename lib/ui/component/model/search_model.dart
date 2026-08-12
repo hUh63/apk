@@ -51,6 +51,11 @@ class SearchModel {
   // 协议过滤，可选：HTTP (any), WS, SSE, HTTP1, H2. 如果为空则不过滤
   Set<Protocol> protocols = {};
 
+  // 排序字段：time(时间), duration(耗时), statusCode(状态码)
+  SortBy sortBy = SortBy.time;
+  // 排序方向：asc(升序), desc(降序)
+  SortOrder sortOrder = SortOrder.desc;
+
   SearchModel([this.keyword]);
 
   bool get isNotEmpty {
@@ -83,6 +88,8 @@ class SearchModel {
     searchModel.protocols = Set.from(protocols);
     searchModel.caseSensitive = RxBool(caseSensitive.value);
     searchModel.isRegExp = RxBool(isRegExp.value);
+    searchModel.sortBy = sortBy;
+    searchModel.sortOrder = sortOrder;
     return searchModel;
   }
 
@@ -287,3 +294,9 @@ enum Option {
 
 /// 协议快速筛选
 enum Protocol { http, https, ws, sse, http1, h2 }
+
+/// 排序字段 (#843)
+enum SortBy { time, duration, statusCode }
+
+/// 排序方向 (#843)
+enum SortOrder { asc, desc }
