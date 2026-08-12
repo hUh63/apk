@@ -27,6 +27,9 @@ class ExpiringCache<K, V> {
 
   ExpiringCache(this.duration);
 
+  /// 当前缓存条目数
+  int get length => _cache.length;
+
   void set(K key, V value) {
     _expirationTimes[key]?.cancel();
     _cache[key] = value;
