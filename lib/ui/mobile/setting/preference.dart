@@ -189,7 +189,7 @@ class _PreferenceState extends State<Preference> {
               ),
               trailing: memoryCleanup(context, localizations),
             ),
-            const Divider(height: 0, thickness: 0.3, color: dividerColor),
+            Divider(height: 0, thickness: 0.3, color: dividerColor),
             ListTile(
               title: Text(localizations.maxRequestCount),
               subtitle: Text(
