@@ -28,7 +28,10 @@ class McpScreen {
   /// 导出当前 UI 层级
   /// [clickableOnly] 仅返回可点击元素
   /// [packageFilter] 按包名过滤
-  static Future<String> dumpUi({bool clickableOnly = false, String? packageFilter}) async {
+  static Future<String> dumpUi({
+    bool clickableOnly = false,
+    String? packageFilter,
+  }) async {
     return await _channel.invokeMethod('dumpUi', {
       'clickableOnly': clickableOnly,
       if (packageFilter != null) 'packageFilter': packageFilter,
@@ -42,13 +45,27 @@ class McpScreen {
 
   /// 长按坐标（指定持续时长）
   static Future<bool> click(int x, int y, {int duration = 50}) async {
-    return await _channel.invokeMethod('click', {'x': x, 'y': y, 'duration': duration});
+    return await _channel.invokeMethod('click', {
+      'x': x,
+      'y': y,
+      'duration': duration,
+    });
   }
 
   /// 滑动手势
-  static Future<bool> swipe(int x1, int y1, int x2, int y2, {int duration = 300}) async {
+  static Future<bool> swipe(
+    int x1,
+    int y1,
+    int x2,
+    int y2, {
+    int duration = 300,
+  }) async {
     return await _channel.invokeMethod('swipe', {
-      'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'duration': duration,
+      'x1': x1,
+      'y1': y1,
+      'x2': x2,
+      'y2': y2,
+      'duration': duration,
     });
   }
 
@@ -73,13 +90,25 @@ class McpScreen {
     return await _channel.invokeMethod('openAccessibilitySettings');
   }
 
+  /// 打开 Shizuku 授权页面（需已安装 Shizuku）
+  static Future<bool> openShizukuSettings() async {
+    return await _channel.invokeMethod('openShizukuSettings');
+  }
+
   /// 执行 Shell 命令
-  /// [useSu] 是否使用 root 权限
+  /// [mode] 权限模式: root / shizuku / dhizuku / auto（默认 auto）
+  /// [useSu] 是否使用 root 权限（mode 未指定时的兼容参数）
   /// [timeoutMs] 超时时间（毫秒）
-  static Future<Map<String, dynamic>> shell(String command, {bool useSu = false, int timeoutMs = 10000}) async {
+  static Future<Map<String, dynamic>> shell(
+    String command, {
+    bool useSu = false,
+    String? mode,
+    int timeoutMs = 10000,
+  }) async {
     final result = await _channel.invokeMethod('shell', {
       'command': command,
       'useSu': useSu,
+      if (mode != null) 'mode': mode,
       'timeoutMs': timeoutMs,
     });
     return Map<String, dynamic>.from(result);

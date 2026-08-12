@@ -58,6 +58,12 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
     }
   }
 
+  /// 重新加载设备信息（授权返回后刷新状态）
+  Future<void> _loadDeviceInfo() async {
+    if (!McpScreen.isSupported) return;
+    _deviceInfo = await McpScreen.getDeviceInfo();
+  }
+
   Future<void> _loadInfo() async {
     setState(() => _loading = true);
     try {
@@ -161,24 +167,21 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
 
     final mode = _deviceInfo?['mode'] as String? ?? 'none';
     final hasRoot = _deviceInfo?['hasRoot'] as bool? ?? false;
+    final hasShizuku = _deviceInfo?['hasShizuku'] as bool? ?? false;
+    final hasDhizuku = _deviceInfo?['hasDhizuku'] as bool? ?? false;
     final accessibilityEnabled =
         _deviceInfo?['accessibilityEnabled'] as bool? ?? false;
 
     final configJson = const JsonEncoder.withIndent('  ').convert({
       'mcpServers': {
-        'proxypin': {
-          'url': apiUrl,
-        }
-      }
+        'proxypin': {'url': apiUrl},
+      },
     });
 
     final tools = mcpServer.getTools();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('MCP 设置'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('MCP 设置'), centerTitle: true),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -193,18 +196,18 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
                         subtitle: Text(
                           _mcpEnabled
                               ? (isRunning
-                                  ? '运行中，端口 $port'
-                                  : (lastError != null
-                                      ? '出错：$lastError'
-                                      : '已启用（未运行）'))
+                                    ? '运行中，端口 $port'
+                                    : (lastError != null
+                                          ? '出错：$lastError'
+                                          : '已启用（未运行）'))
                               : '已停用',
                           style: const TextStyle(fontSize: 12),
                         ),
                         secondary: Icon(
                           _mcpEnabled
                               ? (isRunning
-                                  ? Icons.cloud_done
-                                  : Icons.cloud_queue)
+                                    ? Icons.cloud_done
+                                    : Icons.cloud_queue)
                               : Icons.cloud_off,
                           color: _mcpEnabled
                               ? (isRunning ? Colors.green : Colors.orange)
@@ -217,7 +220,7 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
                       SwitchListTile(
                         title: const Text('自动启动'),
                         subtitle: const Text(
-                          '应用启动时自动运行 MCP 服务',
+                          '应用启动时自动运行 MCP 服务（默认开启）',
                           style: TextStyle(fontSize: 12),
                         ),
                         secondary: const Icon(
@@ -231,7 +234,9 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
                       // 端口配置
                       Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         child: Row(
                           children: [
                             const Text('服务端口'),
@@ -248,7 +253,9 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
                                   ],
                                   decoration: const InputDecoration(
                                     contentPadding: EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 8),
+                                      horizontal: 10,
+                                      vertical: 8,
+                                    ),
                                     border: OutlineInputBorder(),
                                     hintText: '9010',
                                   ),
@@ -271,15 +278,11 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
                 const SizedBox(height: 16),
 
                 // 连接信息
-                Text('连接信息',
-                    style: Theme.of(context).textTheme.titleMedium),
+                Text('连接信息', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 4),
                 Text(
                   'MCP 协议版本：${McpServer.protocolVersion}（无状态核心，兼容旧版握手）',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 8),
                 Card(
@@ -317,8 +320,7 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
                 const SizedBox(height: 16),
 
                 // AI 配置指南
-                Text('AI 配置指南',
-                    style: Theme.of(context).textTheme.titleMedium),
+                Text('AI 配置指南', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 Card(
                   child: Column(
@@ -345,7 +347,12 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
                         child: Stack(
                           children: [
                             Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                16,
+                                16,
+                                16,
+                              ),
                               child: SelectableText(
                                 configJson,
                                 style: const TextStyle(
@@ -373,8 +380,7 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
                 const SizedBox(height: 16),
 
                 // 控制模式
-                Text('控制模式',
-                    style: Theme.of(context).textTheme.titleMedium),
+                Text('控制模式', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 Card(
                   child: Column(
@@ -383,16 +389,18 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
                         leading: const Icon(Icons.settings_applications),
                         title: const Text('当前模式'),
                         trailing: Text(
-                          mode == 'none'
-                              ? 'none'
-                              : (mode == 'root'
-                                  ? 'Root'
-                                  : (mode == 'accessibility'
-                                      ? '无障碍'
-                                      : mode)),
+                          switch (mode) {
+                            'none' => 'none',
+                            'root' => 'Root',
+                            'shizuku' => 'Shizuku',
+                            'dhizuku' => 'Dhizuku',
+                            'accessibility' => '无障碍',
+                            _ => mode,
+                          },
                           style: TextStyle(
-                            color:
-                                mode == 'none' ? Colors.orange : Colors.green,
+                            color: mode == 'none'
+                                ? Colors.orange
+                                : Colors.green,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -405,6 +413,28 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
                           hasRoot ? '可用' : '不可用',
                           style: TextStyle(
                             color: hasRoot ? Colors.green : Colors.grey,
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 0),
+                      ListTile(
+                        leading: const Icon(Icons.security),
+                        title: const Text('Shizuku'),
+                        trailing: Text(
+                          hasShizuku ? '可用' : '不可用',
+                          style: TextStyle(
+                            color: hasShizuku ? Colors.green : Colors.grey,
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 0),
+                      ListTile(
+                        leading: const Icon(Icons.verified_user),
+                        title: const Text('Dhizuku'),
+                        trailing: Text(
+                          hasDhizuku ? '可用' : '不可用',
+                          style: TextStyle(
+                            color: hasDhizuku ? Colors.green : Colors.grey,
                           ),
                         ),
                       ),
@@ -437,13 +467,31 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
                     ),
                   ),
                 ],
+                if (McpScreen.isSupported && !hasShizuku) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.security),
+                      label: const Text('打开 Shizuku 授权'),
+                      onPressed: () async {
+                        await McpScreen.openShizukuSettings();
+                        // 授权后重新检测状态
+                        await _loadDeviceInfo();
+                        if (mounted) setState(() {});
+                      },
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 24),
 
                 // 可用工具列表
                 Row(
                   children: [
-                    Text('可用工具',
-                        style: Theme.of(context).textTheme.titleMedium),
+                    Text(
+                      '可用工具',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       '共 ${tools.length} 个',
@@ -457,10 +505,7 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
                 const SizedBox(height: 4),
                 Text(
                   '关闭的工具将从工具列表中隐藏，AI 无法调用。',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 8),
                 Card(
@@ -562,7 +607,7 @@ class _ToolTile extends StatelessWidget {
     'input_text': '向当前输入框输入文本',
     'screenshot': '截取当前屏幕',
     'open_accessibility_settings': '打开系统无障碍设置页',
-    'shell': '执行 Shell 命令（可选 Root 权限）',
+    'shell': '执行 Shell 命令（支持 Root/Shizuku/Dhizuku 模式）',
   };
 
   @override
@@ -588,10 +633,7 @@ class _ToolTile extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
       ),
-      trailing: Switch(
-        value: enabled,
-        onChanged: onChanged,
-      ),
+      trailing: Switch(value: enabled, onChanged: onChanged),
     );
   }
 }

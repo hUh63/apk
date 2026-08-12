@@ -19,13 +19,17 @@ String? ip;
 Future<String> localIp({bool readCache = true}) async {
   if (!readCache) {
     ip = null;
+    ipList = null;
+    _ipListTime = null;
   }
   ip ??= await localAddress().then((value) => value.address);
   return ip!;
 }
 
 Future<InternetAddress> localAddress() async {
-  return await NetworkInterface.list(type: InternetAddressType.IPv4).then((interfaces) {
+  return await NetworkInterface.list(type: InternetAddressType.IPv4).then((
+    interfaces,
+  ) {
     interfaces.sort((a, b) {
       return weight(a) - weight(b);
     });
@@ -34,10 +38,15 @@ Future<InternetAddress> localAddress() async {
 }
 
 List<String>? ipList;
+DateTime? _ipListTime;
 
 /// 获取本机所有ip
+/// 带 30 秒 TTL 缓存：网络切换（WiFi/VPN）后自动刷新，避免误判本机请求
 Future<List<String>> localIps({bool readCache = true}) async {
-  if (readCache && ipList != null) {
+  if (readCache &&
+      ipList != null &&
+      _ipListTime != null &&
+      DateTime.now().difference(_ipListTime!) < const Duration(seconds: 30)) {
     return ipList!;
   }
 
@@ -52,11 +61,14 @@ Future<List<String>> localIps({bool readCache = true}) async {
       ipList?.add(element.addresses.first.address);
     }
   }
+  _ipListTime = DateTime.now();
   return ipList!;
 }
 
 Future<String> networkName() {
-  return NetworkInterface.list(type: InternetAddressType.IPv4).then((interfaces) {
+  return NetworkInterface.list(type: InternetAddressType.IPv4).then((
+    interfaces,
+  ) {
     interfaces.sort((a, b) {
       return weight(a) - weight(b);
     });

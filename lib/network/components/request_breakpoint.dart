@@ -12,22 +12,36 @@ import 'package:proxypin/ui/component/multi_window.dart';
 import '../http/http_headers.dart';
 
 class RequestBreakpointInterceptor extends Interceptor {
-  static RequestBreakpointInterceptor instance = RequestBreakpointInterceptor._();
+  static RequestBreakpointInterceptor instance =
+      RequestBreakpointInterceptor._();
 
   final manager = RequestBreakpointManager.instance;
-
-  final ExpiringCache<String, Completer<HttpRequest?>> _pausedRequests = ExpiringCache(Duration(minutes: 10));
-  final ExpiringCache<String, Completer<HttpResponse?>> _pausedResponses = ExpiringCache(Duration(minutes: 10));
 
   // 被暂停请求/响应的详情（供 MCP 拦截队列查询）
   final Map<String, HttpRequest> _pausedRequestDetails = {};
   final Map<String, HttpResponse> _pausedResponseDetails = {};
 
+  // 10 分钟超时，超时后自动清理详情，避免大请求/响应体长期驻留内存
+  late final ExpiringCache<String, Completer<HttpRequest?>> _pausedRequests;
+  late final ExpiringCache<String, Completer<HttpResponse?>> _pausedResponses;
+
+  RequestBreakpointInterceptor._() {
+    _pausedRequests = ExpiringCache(
+      Duration(minutes: 10),
+      onExpire: (id, _) => _pausedRequestDetails.remove(id),
+    );
+    _pausedResponses = ExpiringCache(
+      Duration(minutes: 10),
+      onExpire: (id, _) => _pausedResponseDetails.remove(id),
+    );
+  }
+
   /// 待处理拦截数量（请求 + 响应）
   int get pendingCount => _pausedRequests.length + _pausedResponses.length;
 
   /// 是否有指定 ID 的暂停项
-  bool isPaused(String id) => _pausedRequests.containsKey(id) || _pausedResponses.containsKey(id);
+  bool isPaused(String id) =>
+      _pausedRequests.containsKey(id) || _pausedResponses.containsKey(id);
 
   /// 指定 ID 是否为暂停的请求
   bool isRequestPaused(String id) => _pausedRequests.containsKey(id);
@@ -38,10 +52,9 @@ class RequestBreakpointInterceptor extends Interceptor {
   /// 获取被暂停的请求对象（供 MCP approve 修改使用），不存在返回 null
   HttpRequest? getPausedRequest(String id) => _pausedRequestDetails[id];
 
-  RequestBreakpointInterceptor._();
-
   /// 用环境变量渲染 {{name}}。若 EnvironmentManager 未加载或未启用,返回原字符串。
-  static String? _renderEnv(String? input) => EnvironmentManager.tryRender(input);
+  static String? _renderEnv(String? input) =>
+      EnvironmentManager.tryRender(input);
 
   /// 渲染 headers 里所有值中的 {{var}}。多值 header(如 Set-Cookie)每个值独立渲染,不丢值。
   static void _renderHeadersInPlace(HttpHeaders headers) {
@@ -84,7 +97,11 @@ class RequestBreakpointInterceptor extends Interceptor {
     return _binaryContentTypes.any(ct.startsWith);
   }
 
-  static List<int>? _renderBody(List<int>? body, String? charset, {String? contentType}) {
+  static List<int>? _renderBody(
+    List<int>? body,
+    String? charset, {
+    String? contentType,
+  }) {
     if (body == null || body.isEmpty) return body;
     if (EnvironmentManager.instanceOrNull?.enabled != true) return body;
     if (body.length > _renderBodyMaxSize) return body;
@@ -116,12 +133,21 @@ class RequestBreakpointInterceptor extends Interceptor {
         _pausedRequestDetails[request.requestId] = request;
 
         // Open Breakpoint Executor Window
-        MultiWindow.openWindow("Breakpoint - Request", 'BreakpointExecutor',
-            args: {'type': 'request', 'request': request.toJson(), 'requestId': request.requestId});
+        MultiWindow.openWindow(
+          "Breakpoint - Request",
+          'BreakpointExecutor',
+          args: {
+            'type': 'request',
+            'request': request.toJson(),
+            'requestId': request.requestId,
+          },
+        );
 
         return completer.future.then((req) {
           if (req == null) {
-            logger.d('Request ${request.requestId} was resumed null, aborting request');
+            logger.d(
+              'Request ${request.requestId} was resumed null, aborting request',
+            );
             return null;
           }
 
@@ -140,8 +166,14 @@ class RequestBreakpointInterceptor extends Interceptor {
           _renderHeadersInPlace(request.headers);
           request.headers.remove(HttpHeaders.CONTENT_ENCODING);
 
-          request.body = _renderBody(req.body, request.charset, contentType: request.headers.contentType);
-          logger.d('Resuming request ${request.requestId} with modified request');
+          request.body = _renderBody(
+            req.body,
+            request.charset,
+            contentType: request.headers.contentType,
+          );
+          logger.d(
+            'Resuming request ${request.requestId} with modified request',
+          );
           return request;
         });
       }
@@ -150,7 +182,10 @@ class RequestBreakpointInterceptor extends Interceptor {
   }
 
   @override
-  Future<HttpResponse?> onResponse(HttpRequest request, HttpResponse response) async {
+  Future<HttpResponse?> onResponse(
+    HttpRequest request,
+    HttpResponse response,
+  ) async {
     RequestBreakpointManager requestBreakpointManager = await manager;
     if (!requestBreakpointManager.enabled) return response;
 
@@ -162,12 +197,16 @@ class RequestBreakpointInterceptor extends Interceptor {
         _pausedResponseDetails[request.requestId] = response;
 
         // Open Breakpoint Executor Window
-        MultiWindow.openWindow("Breakpoint - Response", 'BreakpointExecutor', args: {
-          'type': 'response',
-          'request': request.toJson(),
-          'response': response.toJson(),
-          'requestId': request.requestId
-        });
+        MultiWindow.openWindow(
+          "Breakpoint - Response",
+          'BreakpointExecutor',
+          args: {
+            'type': 'response',
+            'request': request.toJson(),
+            'response': response.toJson(),
+            'requestId': request.requestId,
+          },
+        );
 
         return completer.future.then((res) {
           if (res == null) {
@@ -180,9 +219,15 @@ class RequestBreakpointInterceptor extends Interceptor {
           _renderHeadersInPlace(response.headers);
           response.headers.remove(HttpHeaders.CONTENT_ENCODING);
 
-          response.body = _renderBody(res.body, response.charset, contentType: response.headers.contentType);
+          response.body = _renderBody(
+            res.body,
+            response.charset,
+            contentType: response.headers.contentType,
+          );
 
-          logger.d('Resuming response for request ${request.requestId} with modified response');
+          logger.d(
+            'Resuming response for request ${request.requestId} with modified response',
+          );
           return response;
         });
       }
@@ -215,7 +260,9 @@ class RequestBreakpointInterceptor extends Interceptor {
         'method': req.method,
         'url': req.requestUrl,
         'headers': req.headers.toJson(),
-        'body': req.body != null ? utf8.decode(req.body!, allowMalformed: true) : null,
+        'body': req.body != null
+            ? utf8.decode(req.body!, allowMalformed: true)
+            : null,
       });
     });
 
@@ -225,7 +272,9 @@ class RequestBreakpointInterceptor extends Interceptor {
         'type': 'response',
         'status': res.status.code,
         'headers': res.headers.toJson(),
-        'body': res.body != null ? utf8.decode(res.body!, allowMalformed: true) : null,
+        'body': res.body != null
+            ? utf8.decode(res.body!, allowMalformed: true)
+            : null,
       });
     });
 

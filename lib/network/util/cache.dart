@@ -24,8 +24,9 @@ class ExpiringCache<K, V> {
   final Duration duration;
   final _cache = <K, V>{};
   final _expirationTimes = <K, Timer>{};
+  final void Function(K key, V value)? onExpire;
 
-  ExpiringCache(this.duration);
+  ExpiringCache(this.duration, {this.onExpire});
 
   /// 当前缓存条目数
   int get length => _cache.length;
@@ -33,7 +34,11 @@ class ExpiringCache<K, V> {
   void set(K key, V value) {
     _expirationTimes[key]?.cancel();
     _cache[key] = value;
-    _expirationTimes[key] = Timer(duration, () => remove(key));
+    _expirationTimes[key] = Timer(duration, () {
+      _cache.remove(key);
+      _expirationTimes.remove(key);
+      onExpire?.call(key, value);
+    });
   }
 
   void operator []=(K key, V value) => set(key, value);

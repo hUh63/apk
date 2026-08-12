@@ -100,21 +100,32 @@ class SearchModel {
       return (_) => true;
     }
 
+    // 缓存已编译的匹配器：filter 会对每条记录调用本方法，
+    // 正则场景下每次重新编译 RegExp 在大数据量搜索时会明显卡顿。
+    final cacheKey = '${isRegExp.value}|${caseSensitive.value}|$pattern';
+    if (_matcherCacheKey == cacheKey) {
+      return _cachedMatcher!;
+    }
+    _matcherCacheKey = cacheKey;
+
     if (isRegExp.value) {
       try {
         final regex = RegExp(pattern, caseSensitive: caseSensitive.value);
-        return regex.hasMatch;
+        _cachedMatcher = regex.hasMatch;
       } catch (_) {
-        return (_) => false;
+        _cachedMatcher = (_) => false;
       }
+    } else if (caseSensitive.value) {
+      _cachedMatcher = (text) => text.contains(pattern);
+    } else {
+      final lowered = pattern.toLowerCase();
+      _cachedMatcher = (text) => text.toLowerCase().contains(lowered);
     }
-
-    if (caseSensitive.value) {
-      return (text) => text.contains(pattern);
-    }
-    final lowered = pattern.toLowerCase();
-    return (text) => text.toLowerCase().contains(lowered);
+    return _cachedMatcher!;
   }
+
+  String? _matcherCacheKey;
+  bool Function(String)? _cachedMatcher;
 
   ///是否匹配
   bool filter(HttpRequest request, HttpResponse? response) {
@@ -125,11 +136,13 @@ class SearchModel {
     if (requestMethod != null && requestMethod != request.method) {
       return false;
     }
-    if (requestContentType != null && request.contentType != requestContentType) {
+    if (requestContentType != null &&
+        request.contentType != requestContentType) {
       return false;
     }
 
-    if (responseContentType != null && response?.contentType != responseContentType) {
+    if (responseContentType != null &&
+        response?.contentType != responseContentType) {
       return false;
     }
 
@@ -146,7 +159,9 @@ class SearchModel {
 
     // duration range
     if ((durationFromMs != null || durationToMs != null) && response != null) {
-      var cost = response.responseTime.difference(request.requestTime).inMilliseconds;
+      var cost = response.responseTime
+          .difference(request.requestTime)
+          .inMilliseconds;
       if (durationFromMs != null && cost < durationFromMs!) {
         return false;
       }
@@ -190,19 +205,25 @@ class SearchModel {
       case Protocol.http:
         return request.requestUrl.startsWith('http://');
       case Protocol.ws:
-        return request.isWebSocket || (response != null && response.isWebSocket == true);
+        return request.isWebSocket ||
+            (response != null && response.isWebSocket == true);
       case Protocol.sse:
         return response?.contentType == ContentType.sse;
       case Protocol.http1:
         return request.protocolVersion == 'HTTP/1.1';
       case Protocol.h2:
-        return request.protocolVersion == 'HTTP/2' || request.protocolVersion == 'h2';
+        return request.protocolVersion == 'HTTP/2' ||
+            request.protocolVersion == 'h2';
     }
   }
 
   ///关键字过滤
   bool keywordFilter(
-      bool Function(String) matches, Option option, HttpRequest request, HttpResponse? response) {
+    bool Function(String) matches,
+    Option option,
+    HttpRequest request,
+    HttpResponse? response,
+  ) {
     if (option == Option.url) {
       return matches(request.requestUrl);
     }
@@ -210,7 +231,9 @@ class SearchModel {
     if (option == Option.method) {
       return matches(request.method.name);
     }
-    if (option == Option.responseContentType && response != null && matches(response.headers.contentType)) {
+    if (option == Option.responseContentType &&
+        response != null &&
+        matches(response.headers.contentType)) {
       return true;
     }
 
@@ -238,7 +261,9 @@ class SearchModel {
     }
 
     if (option == Option.requestHeader || option == Option.responseHeader) {
-      var entries = option == Option.requestHeader ? request.headers.entries : response?.headers.entries ?? [];
+      var entries = option == Option.requestHeader
+          ? request.headers.entries
+          : response?.headers.entries ?? [];
 
       for (var entry in entries) {
         if (matches(entry.key) || entry.value.any(matches)) {

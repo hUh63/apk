@@ -66,7 +66,8 @@ import 'app_localizations_zh.dart' deferred as app_localizations_zh;
 /// be consistent with the languages listed in the AppLocalizations.supportedLocales
 /// property.
 abstract class AppLocalizations {
-  AppLocalizations(String locale) : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+  AppLocalizations(String locale)
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -74,7 +75,8 @@ abstract class AppLocalizations {
     return Localizations.of<AppLocalizations>(context, AppLocalizations);
   }
 
-  static const LocalizationsDelegate<AppLocalizations> delegate = _AppLocalizationsDelegate();
+  static const LocalizationsDelegate<AppLocalizations> delegate =
+      _AppLocalizationsDelegate();
 
   /// A list of this localizations delegate along with the default localizations
   /// delegates.
@@ -86,12 +88,13 @@ abstract class AppLocalizations {
   /// Additional delegates can be added by appending to this list in
   /// MaterialApp. This list does not have to be used at all if a custom list
   /// of delegates is preferred or required.
-  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates = <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
+      <LocalizationsDelegate<dynamic>>[
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -103,7 +106,7 @@ abstract class AppLocalizations {
     Locale('th'),
     Locale('vi'),
     Locale('zh'),
-    Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant')
+    Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
   ];
 
   /// No description provided for @breakpoint.
@@ -1738,6 +1741,18 @@ abstract class AppLocalizations {
   /// **'Automatically clean up requests on memory limit reached and keep 32 most recent after cleaning'**
   String get memoryCleanupSubtitle;
 
+  /// No description provided for @maxRequestCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Request Record Limit'**
+  String get maxRequestCount;
+
+  /// No description provided for @maxRequestCountSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Max number of requests kept in the list; oldest requests are dropped automatically when exceeded'**
+  String get maxRequestCountSubtitle;
+
   /// No description provided for @clearConfirm.
   ///
   /// In en, this message translates to:
@@ -2471,7 +2486,8 @@ abstract class AppLocalizations {
   String get weakNetworkRules;
 }
 
-class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
+class _AppLocalizationsDelegate
+    extends LocalizationsDelegate<AppLocalizations> {
   const _AppLocalizationsDelegate();
 
   @override
@@ -2480,7 +2496,15 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
   }
 
   @override
-  bool isSupported(Locale locale) => <String>['en', 'es', 'id', 'pt', 'th', 'vi', 'zh'].contains(locale.languageCode);
+  bool isSupported(Locale locale) => <String>[
+    'en',
+    'es',
+    'id',
+    'pt',
+    'th',
+    'vi',
+    'zh',
+  ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -2493,9 +2517,9 @@ Future<AppLocalizations> lookupAppLocalizations(Locale locale) {
       {
         switch (locale.scriptCode) {
           case 'Hant':
-            return app_localizations_zh
-                .loadLibrary()
-                .then((dynamic _) => app_localizations_zh.AppLocalizationsZhHant());
+            return app_localizations_zh.loadLibrary().then(
+              (dynamic _) => app_localizations_zh.AppLocalizationsZhHant(),
+            );
         }
         break;
       }
@@ -2507,7 +2531,9 @@ Future<AppLocalizations> lookupAppLocalizations(Locale locale) {
       {
         switch (locale.countryCode) {
           case 'BR':
-            return app_localizations_pt.loadLibrary().then((dynamic _) => app_localizations_pt.AppLocalizationsPtBr());
+            return app_localizations_pt.loadLibrary().then(
+              (dynamic _) => app_localizations_pt.AppLocalizationsPtBr(),
+            );
         }
         break;
       }
@@ -2516,23 +2542,39 @@ Future<AppLocalizations> lookupAppLocalizations(Locale locale) {
   // Lookup logic when only language code is specified.
   switch (locale.languageCode) {
     case 'en':
-      return app_localizations_en.loadLibrary().then((dynamic _) => app_localizations_en.AppLocalizationsEn());
+      return app_localizations_en.loadLibrary().then(
+        (dynamic _) => app_localizations_en.AppLocalizationsEn(),
+      );
     case 'es':
-      return app_localizations_es.loadLibrary().then((dynamic _) => app_localizations_es.AppLocalizationsEs());
+      return app_localizations_es.loadLibrary().then(
+        (dynamic _) => app_localizations_es.AppLocalizationsEs(),
+      );
     case 'id':
-      return app_localizations_id.loadLibrary().then((dynamic _) => app_localizations_id.AppLocalizationsId());
+      return app_localizations_id.loadLibrary().then(
+        (dynamic _) => app_localizations_id.AppLocalizationsId(),
+      );
     case 'pt':
-      return app_localizations_pt.loadLibrary().then((dynamic _) => app_localizations_pt.AppLocalizationsPt());
+      return app_localizations_pt.loadLibrary().then(
+        (dynamic _) => app_localizations_pt.AppLocalizationsPt(),
+      );
     case 'th':
-      return app_localizations_th.loadLibrary().then((dynamic _) => app_localizations_th.AppLocalizationsTh());
+      return app_localizations_th.loadLibrary().then(
+        (dynamic _) => app_localizations_th.AppLocalizationsTh(),
+      );
     case 'vi':
-      return app_localizations_vi.loadLibrary().then((dynamic _) => app_localizations_vi.AppLocalizationsVi());
+      return app_localizations_vi.loadLibrary().then(
+        (dynamic _) => app_localizations_vi.AppLocalizationsVi(),
+      );
     case 'zh':
-      return app_localizations_zh.loadLibrary().then((dynamic _) => app_localizations_zh.AppLocalizationsZh());
+      return app_localizations_zh.loadLibrary().then(
+        (dynamic _) => app_localizations_zh.AppLocalizationsZh(),
+      );
   }
 
-  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }

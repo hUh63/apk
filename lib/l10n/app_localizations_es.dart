@@ -144,7 +144,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get minimizeToTrayTitle => 'Minimizar a la bandeja al cerrar';
 
   @override
-  String get minimizeToTraySubtitle => 'Closing the window will keep ProxyPin running and hide it to the system tray.';
+  String get minimizeToTraySubtitle =>
+      'Closing the window will keep ProxyPin running and hide it to the system tray.';
 
   @override
   String get trayClosePromptContent =>
@@ -640,13 +641,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get generateCA => 'Generar nuevo certificado raíz';
 
   @override
-  String get generateCADescribe => '¿Seguro que deseas generar un nuevo certificado raíz?';
+  String get generateCADescribe =>
+      '¿Seguro que deseas generar un nuevo certificado raíz?';
 
   @override
   String get resetDefaultCA => 'Restablecer certificado raíz predeterminado';
 
   @override
-  String get resetDefaultCADescribe => '¿Seguro que deseas restablecer el certificado raíz predeterminado?';
+  String get resetDefaultCADescribe =>
+      '¿Seguro que deseas restablecer el certificado raíz predeterminado?';
 
   @override
   String get exportCaP12 => 'Exportar certificado raíz (.p12)';
@@ -673,7 +676,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get installCaDescribe => 'Instalar certificado';
 
   @override
-  String get trustCaDescribe => 'Confiar en el certificado en la configuración del sistema';
+  String get trustCaDescribe =>
+      'Confiar en el certificado en la configuración del sistema';
 
   @override
   String get androidRoot => 'System Certificate (ROOT Device)';
@@ -694,7 +698,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get androidUserCA => 'User Certificate';
 
   @override
-  String get androidUserCATips => 'Tips: Android7+ many apps will not trust user certificates';
+  String get androidUserCATips =>
+      'Tips: Android7+ many apps will not trust user certificates';
 
   @override
   String get androidUserCAInstall =>
@@ -750,19 +755,22 @@ class AppLocalizationsEs extends AppLocalizations {
   String get captureDetail => 'Capture Detail';
 
   @override
-  String get proxyPinSoftware => 'Software de captura de tráfico de código abierto ProxyPin';
+  String get proxyPinSoftware =>
+      'Software de captura de tráfico de código abierto ProxyPin';
 
   @override
   String get prompt => 'Prompt';
 
   @override
-  String get curlSchemeRequest => 'If the curl format is recognized, should it be converted into an HTTP request?';
+  String get curlSchemeRequest =>
+      'If the curl format is recognized, should it be converted into an HTTP request?';
 
   @override
   String get appExitTips => 'Pulsa otra vez para salir';
 
   @override
-  String get remoteConnectDisconnect => 'Error al comprobar la conexión remota, desconectado';
+  String get remoteConnectDisconnect =>
+      'Error al comprobar la conexión remota, desconectado';
 
   @override
   String get connect => 'Connect';
@@ -776,7 +784,8 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get remoteConnectForward => 'Conexión remota, reenviando solicitudes a otro dispositivo';
+  String get remoteConnectForward =>
+      'Conexión remota, reenviando solicitudes a otro dispositivo';
 
   @override
   String get connectSuccess => 'Conexión exitosa';
@@ -797,7 +806,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get ipLayerProxy => 'Proxy de capa IP (Beta)';
 
   @override
-  String get ipLayerProxyDesc => 'Puede capturar solicitudes de Flutter; la estabilidad es limitada.';
+  String get ipLayerProxyDesc =>
+      'Puede capturar solicitudes de Flutter; la estabilidad es limitada.';
 
   @override
   String get inputAddress => 'Input Address';
@@ -806,7 +816,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get syncConfig => 'Sincronizar configuración';
 
   @override
-  String get pullConfigFail => 'No se pudo obtener la configuración, revisa la conexión';
+  String get pullConfigFail =>
+      'No se pudo obtener la configuración, revisa la conexión';
 
   @override
   String get sync => 'Sincronizar';
@@ -818,37 +829,50 @@ class AppLocalizationsEs extends AppLocalizations {
   String get remoteConnectFail => 'Conexión fallida';
 
   @override
-  String get remoteConnectSuccessTips => 'El móvil debe tener la captura activada para capturar solicitudes';
+  String get remoteConnectSuccessTips =>
+      'El móvil debe tener la captura activada para capturar solicitudes';
 
   @override
   String get windowMode => 'Modo ventana';
 
   @override
-  String get windowModeSubTitle => 'Enabled Packet Capture, Enter the background, Display a small window';
+  String get windowModeSubTitle =>
+      'Enabled Packet Capture, Enter the background, Display a small window';
 
   @override
   String get pipIcon => 'Icono de ventana';
 
   @override
-  String get pipIconDescribe => 'Mostrar icono de acceso rápido a la ventana pequeña';
+  String get pipIconDescribe =>
+      'Mostrar icono de acceso rápido a la ventana pequeña';
 
   @override
   String get bottomNavigation => 'Barra inferior';
 
   @override
-  String get bottomNavigationSubtitle => 'Mostrar la barra inferior; se aplica tras reiniciar';
+  String get bottomNavigationSubtitle =>
+      'Mostrar la barra inferior; se aplica tras reiniciar';
 
   @override
   String get memoryCleanup => 'Limpieza de memoria';
 
   @override
-  String get memoryCleanupSubtitle => 'Limpiar solicitudes automáticamente al alcanzar el límite de memoria';
+  String get memoryCleanupSubtitle =>
+      'Limpiar solicitudes automáticamente al alcanzar el límite de memoria';
+
+  @override
+  String get maxRequestCount => 'Límite de registros de solicitudes';
+
+  @override
+  String get maxRequestCountSubtitle =>
+      'Número máximo de solicitudes conservadas en la lista; las más antiguas se eliminan automáticamente al superarse';
 
   @override
   String get clearConfirm => 'Confirmar antes de borrar';
 
   @override
-  String get clearConfirmSubtitle => 'Mostrar confirmación antes de borrar capturas';
+  String get clearConfirmSubtitle =>
+      'Mostrar confirmación antes de borrar capturas';
 
   @override
   String get unlimited => 'Ilimitado';
@@ -863,7 +887,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get externalProxyServer => 'Servidor proxy';
 
   @override
-  String get externalProxyConnectFailure => 'Error al conectar con el proxy externo';
+  String get externalProxyConnectFailure =>
+      'Error al conectar con el proxy externo';
 
   @override
   String get externalProxyFailureConfirm =>
@@ -888,7 +913,8 @@ class AppLocalizationsEs extends AppLocalizations {
       'Solo se proxyan los dominios de la lista blanca. Al activarla, la lista negra queda inactiva.';
 
   @override
-  String get domainBlacklistDescribe => 'Los dominios de la lista negra no se proxyarán';
+  String get domainBlacklistDescribe =>
+      'Los dominios de la lista negra no se proxyarán';
 
   @override
   String get domain => 'Dominio';
@@ -897,7 +923,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get enableScript => 'Habilitar script';
 
   @override
-  String get scriptUseDescribe => 'Usa JavaScript para modificar solicitudes y respuestas';
+  String get scriptUseDescribe =>
+      'Usa JavaScript para modificar solicitudes y respuestas';
 
   @override
   String get scriptEdit => 'Editar script';
@@ -1065,7 +1092,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get appUpdateDialogTitle => 'Update Available';
 
   @override
-  String get appUpdateUpdateMsg => 'A new version of ProxyPin is available. Would you like to update now?';
+  String get appUpdateUpdateMsg =>
+      'A new version of ProxyPin is available. Would you like to update now?';
 
   @override
   String get appUpdateCurrentVersionLbl => 'Current Version';
@@ -1098,7 +1126,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get requestMap => 'Mapeo de solicitudes';
 
   @override
-  String get requestMapDescribe => 'No solicita servicios remotos; usa configuración o script local para responder';
+  String get requestMapDescribe =>
+      'No solicita servicios remotos; usa configuración o script local para responder';
 
   @override
   String get automatic => 'Automatic';
@@ -1119,7 +1148,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get sponsorSupport => 'Apoya el desarrollo continuo';
 
   @override
-  String get sponsorThanks => 'Gracias por apoyar este proyecto de código abierto.';
+  String get sponsorThanks =>
+      'Gracias por apoyar este proyecto de código abierto.';
 
   @override
   String get sponsorAfdian => 'AFDIAN';
@@ -1150,7 +1180,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get cryptoIvPrefixLabel => 'IV Prefix';
 
   @override
-  String get cryptoIvPrefixTooltip => 'Use the first N bytes of the response body as IV';
+  String get cryptoIvPrefixTooltip =>
+      'Use the first N bytes of the response body as IV';
 
   @override
   String get local => 'Local';
@@ -1183,7 +1214,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get envEmptyHint => 'Sin variables. Pulsa + para añadir.';
 
   @override
-  String get envUsageHint => 'Usa %s en reglas o lee/escribe context.env en scripts.';
+  String get envUsageHint =>
+      'Usa %s en reglas o lee/escribe context.env en scripts.';
 
   @override
   String get weakNetwork => 'Limitación de red';

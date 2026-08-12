@@ -23,6 +23,7 @@ import 'package:proxypin/network/components/manager/request_rewrite_manager.dart
 import 'package:proxypin/network/http/constants.dart';
 import 'package:proxypin/network/http/http.dart';
 import 'package:proxypin/network/http/http_headers.dart';
+import 'package:proxypin/network/util/cache.dart';
 import 'package:proxypin/network/util/file_read.dart';
 import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/network/util/uri.dart';
@@ -39,21 +40,32 @@ class RequestRewriteInterceptor extends Interceptor {
 
   RequestRewriteInterceptor._();
 
+  /// 已编译正则缓存：重写规则可能被高频请求命中，避免每条请求都重新编译
+  static final _regexCache = LruCache<String, RegExp>(256);
+
   /// 构造 RegExp；若未启用正则则自动转义为字面量匹配，若 pattern 不合法则回退为字面量匹配
-  static RegExp _toRegExp(String pattern, {bool useRegex = true, bool caseSensitive = true}) {
-    if (!useRegex) {
-      return RegExp(RegExp.escape(pattern), caseSensitive: caseSensitive);
-    }
-    try {
-      return RegExp(pattern, caseSensitive: caseSensitive);
-    } catch (_) {
-      return RegExp(RegExp.escape(pattern), caseSensitive: caseSensitive);
-    }
+  static RegExp _toRegExp(
+    String pattern, {
+    bool useRegex = true,
+    bool caseSensitive = true,
+  }) {
+    final key = '$useRegex|$caseSensitive|$pattern';
+    return _regexCache.pubIfAbsent(key, () {
+      if (!useRegex) {
+        return RegExp(RegExp.escape(pattern), caseSensitive: caseSensitive);
+      }
+      try {
+        return RegExp(pattern, caseSensitive: caseSensitive);
+      } catch (_) {
+        return RegExp(RegExp.escape(pattern), caseSensitive: caseSensitive);
+      }
+    });
   }
 
   /// 用环境变量渲染 {{name}}。若 EnvironmentManager 未加载或未启用,返回原字符串。
   /// 注意:只对写入请求/响应的字段渲染,key(匹配正则)不做变量替换,避免正则元字符与变量语法混淆。
-  static String? _renderEnv(String? input) => EnvironmentManager.tryRender(input);
+  static String? _renderEnv(String? input) =>
+      EnvironmentManager.tryRender(input);
 
   /// 生成一个副本,其中所有会输出到请求/响应的字段(value/redirectUrl/body/headers/path/queryParam)已做变量渲染。
   /// 原始配置不修改。
@@ -67,7 +79,8 @@ class RequestRewriteInterceptor extends Interceptor {
         !hasToken(values['body']) &&
         !hasToken(values['path']) &&
         !hasToken(values['queryParam']) &&
-        !(values['headers'] is Map && (values['headers'] as Map).values.any(hasToken))) {
+        !(values['headers'] is Map &&
+            (values['headers'] as Map).values.any(hasToken))) {
       return item;
     }
     final copy = RewriteItem(item.type, item.enabled, values: Map.of(values));
@@ -92,7 +105,10 @@ class RequestRewriteInterceptor extends Interceptor {
   }
 
   @override
-  Future<HttpResponse?> onResponse(HttpRequest request, HttpResponse response) async {
+  Future<HttpResponse?> onResponse(
+    HttpRequest request,
+    HttpResponse response,
+  ) async {
     //重写响应
     try {
       var url = request.requestUrl;
@@ -113,7 +129,9 @@ class RequestRewriteInterceptor extends Interceptor {
     }
 
     var rewriteItems = await manager.getRewriteItems(rewriteRule);
-    var redirectUrl = rewriteItems?.firstWhereOrNull((element) => element.enabled)?.redirectUrl;
+    var redirectUrl = rewriteItems
+        ?.firstWhereOrNull((element) => element.enabled)
+        ?.redirectUrl;
     // 先做通配符替换(基于模板中的字面 `*`),再做环境变量渲染;
     // 顺序反过来会把变量值中的 `*` 也当成通配符替换,破坏 URL。
     if (rewriteRule.url.contains("*") && redirectUrl?.contains("*") == true) {
@@ -127,7 +145,10 @@ class RequestRewriteInterceptor extends Interceptor {
   /// 重写请求
   Future<void> requestRewrite(String url, HttpRequest request) async {
     var manager = await RequestRewriteManager.instance;
-    var rewriteRule = manager.getRewriteRule(url, [RuleType.requestReplace, RuleType.requestUpdate]);
+    var rewriteRule = manager.getRewriteRule(url, [
+      RuleType.requestReplace,
+      RuleType.requestUpdate,
+    ]);
 
     if (rewriteRule?.type == RuleType.requestReplace) {
       var rewriteItems = await manager.getRewriteItems(rewriteRule!);
@@ -158,7 +179,10 @@ class RequestRewriteInterceptor extends Interceptor {
   Future<bool> responseRewrite(String? url, HttpResponse response) async {
     var manager = await RequestRewriteManager.instance;
 
-    var rewriteRule = manager.getRewriteRule(url, [RuleType.responseReplace, RuleType.responseUpdate]);
+    var rewriteRule = manager.getRewriteRule(url, [
+      RuleType.responseReplace,
+      RuleType.responseUpdate,
+    ]);
     if (rewriteRule == null) {
       return false;
     }
@@ -194,11 +218,17 @@ class RequestRewriteInterceptor extends Interceptor {
   }
 
   Future<void> _updateRequest(HttpRequest request, RewriteItem item) async {
-    var paramTypes = [RewriteType.addQueryParam, RewriteType.removeQueryParam, RewriteType.updateQueryParam];
+    var paramTypes = [
+      RewriteType.addQueryParam,
+      RewriteType.removeQueryParam,
+      RewriteType.updateQueryParam,
+    ];
 
     if (paramTypes.contains(item.type)) {
       var requestUri = request.requestUri;
-      Map<String, dynamic> queryParameters = LinkedHashMap.from(requestUri!.queryParameters);
+      Map<String, dynamic> queryParameters = LinkedHashMap.from(
+        requestUri!.queryParameters,
+      );
 
       switch (item.type) {
         case RewriteType.addQueryParam:
@@ -207,7 +237,11 @@ class RequestRewriteInterceptor extends Interceptor {
         case RewriteType.removeQueryParam:
           if (item.value?.trim().isNotEmpty == true) {
             var val = queryParameters[item.key!];
-            if (val == null || !_toRegExp(item.value!, useRegex: item.useRegex).hasMatch(val)) {
+            if (val == null ||
+                !_toRegExp(
+                  item.value!,
+                  useRegex: item.useRegex,
+                ).hasMatch(val)) {
               break;
             }
           }
@@ -236,9 +270,13 @@ class RequestRewriteInterceptor extends Interceptor {
         default:
           break;
       }
-      requestUri = requestUri.replace(query: UriUtils.mapToQuery(queryParameters));
+      requestUri = requestUri.replace(
+        query: UriUtils.mapToQuery(queryParameters),
+      );
       if (requestUri.isScheme('https')) {
-        request.uri = requestUri.path + (requestUri.hasQuery ? "?${requestUri.query}" : "");
+        request.uri =
+            requestUri.path +
+            (requestUri.hasQuery ? "?${requestUri.query}" : "");
       } else {
         request.uri = requestUri.toString();
       }
@@ -251,14 +289,19 @@ class RequestRewriteInterceptor extends Interceptor {
   //修改消息
   Future<void> _updateMessage(HttpMessage message, RewriteItem item) async {
     if (item.type == RewriteType.updateBody && message.body != null) {
-      String body = (await message.decodeBodyString()).replaceAllMapped(_toRegExp(item.key!, useRegex: item.useRegex), (match) {
-        if (match.groupCount > 0 && item.value?.contains("\$1") == true) {
-          return item.value!.replaceAll("\$1", match.group(1)!);
-        }
-        return item.value ?? '';
-      });
+      String body = (await message.decodeBodyString()).replaceAllMapped(
+        _toRegExp(item.key!, useRegex: item.useRegex),
+        (match) {
+          if (match.groupCount > 0 && item.value?.contains("\$1") == true) {
+            return item.value!.replaceAll("\$1", match.group(1)!);
+          }
+          return item.value ?? '';
+        },
+      );
 
-      message.body = message.charset == 'utf-8' || message.charset == 'utf8' ? utf8.encode(body) : body.codeUnits;
+      message.body = message.charset == 'utf-8' || message.charset == 'utf8'
+          ? utf8.encode(body)
+          : body.codeUnits;
 
       message.headers.remove(HttpHeaders.CONTENT_ENCODING);
       message.headers.contentLength = message.body!.length;
@@ -273,7 +316,8 @@ class RequestRewriteInterceptor extends Interceptor {
     if (item.type == RewriteType.removeHeader) {
       if (item.value?.trim().isNotEmpty == true) {
         var val = message.headers.get(item.key!);
-        if (val == null || !_toRegExp(item.value!, useRegex: item.useRegex).hasMatch(val)) {
+        if (val == null ||
+            !_toRegExp(item.value!, useRegex: item.useRegex).hasMatch(val)) {
           return;
         }
       }
@@ -285,7 +329,11 @@ class RequestRewriteInterceptor extends Interceptor {
       if (item.key == null || item.key?.trim().isEmpty == true) return;
 
       var headers = Map.of(message.headers.getHeaders());
-      var regExp = _toRegExp(item.key!, useRegex: item.useRegex, caseSensitive: false);
+      var regExp = _toRegExp(
+        item.key!,
+        useRegex: item.useRegex,
+        caseSensitive: false,
+      );
 
       headers.forEach((key, values) {
         var line = "$key: ${values.firstOrNull ?? ''}";
@@ -304,7 +352,9 @@ class RequestRewriteInterceptor extends Interceptor {
   Future<void> _replaceRequest(HttpRequest request, RewriteItem item) async {
     if (item.type == RewriteType.replaceRequestLine) {
       request.method = item.method ?? request.method;
-      Uri uri = Uri.parse(request.requestUrl).replace(path: item.path, query: item.queryParam);
+      Uri uri = Uri.parse(
+        request.requestUrl,
+      ).replace(path: item.path, query: item.queryParam);
       if (uri.isScheme('https')) {
         request.uri = uri.path + (uri.hasQuery ? "?${uri.query}" : "");
       } else {
@@ -317,21 +367,27 @@ class RequestRewriteInterceptor extends Interceptor {
 
   //替换相应
   Future<void> _replaceResponse(HttpResponse response, RewriteItem item) async {
-    if (item.type == RewriteType.replaceResponseStatus && item.statusCode != null) {
+    if (item.type == RewriteType.replaceResponseStatus &&
+        item.statusCode != null) {
       response.status = HttpStatus.valueOf(item.statusCode!);
       return;
     }
     await _replaceHttpMessage(response, item);
   }
 
-  Future<void> _replaceHttpMessage(HttpMessage message, RewriteItem item) async {
-    if ((item.type == RewriteType.replaceRequestHeader || item.type == RewriteType.replaceResponseHeader) &&
+  Future<void> _replaceHttpMessage(
+    HttpMessage message,
+    RewriteItem item,
+  ) async {
+    if ((item.type == RewriteType.replaceRequestHeader ||
+            item.type == RewriteType.replaceResponseHeader) &&
         item.headers != null) {
       item.headers?.forEach((key, value) => message.headers.set(key, value));
       return;
     }
 
-    if (item.type == RewriteType.replaceResponseBody || item.type == RewriteType.replaceRequestBody) {
+    if (item.type == RewriteType.replaceResponseBody ||
+        item.type == RewriteType.replaceRequestBody) {
       if (item.bodyType == ReplaceBodyType.file.name) {
         if (item.bodyFile == null) return;
 
@@ -342,8 +398,9 @@ class RequestRewriteInterceptor extends Interceptor {
       }
 
       if (item.body != null) {
-        message.body =
-            message.charset == 'utf-8' || message.charset == 'utf8' ? utf8.encode(item.body!) : item.body?.codeUnits;
+        message.body = message.charset == 'utf-8' || message.charset == 'utf8'
+            ? utf8.encode(item.body!)
+            : item.body?.codeUnits;
         message.headers.contentLength = message.body!.length;
         message.headers.remove(HttpHeaders.CONTENT_ENCODING);
       }

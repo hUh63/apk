@@ -144,7 +144,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get minimizeToTrayTitle => 'Thu nhỏ vào khay khi đóng';
 
   @override
-  String get minimizeToTraySubtitle => 'Closing the window will keep ProxyPin running and hide it to the system tray.';
+  String get minimizeToTraySubtitle =>
+      'Closing the window will keep ProxyPin running and hide it to the system tray.';
 
   @override
   String get trayClosePromptContent =>
@@ -640,13 +641,15 @@ class AppLocalizationsVi extends AppLocalizations {
   String get generateCA => 'Tạo chứng chỉ gốc mới';
 
   @override
-  String get generateCADescribe => 'Bạn có chắc muốn tạo chứng chỉ gốc mới không?';
+  String get generateCADescribe =>
+      'Bạn có chắc muốn tạo chứng chỉ gốc mới không?';
 
   @override
   String get resetDefaultCA => 'Đặt lại chứng chỉ gốc mặc định';
 
   @override
-  String get resetDefaultCADescribe => 'Bạn có chắc muốn đặt lại chứng chỉ gốc mặc định không?';
+  String get resetDefaultCADescribe =>
+      'Bạn có chắc muốn đặt lại chứng chỉ gốc mặc định không?';
 
   @override
   String get exportCaP12 => 'Xuất chứng chỉ gốc (.p12)';
@@ -694,7 +697,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get androidUserCA => 'User Certificate';
 
   @override
-  String get androidUserCATips => 'Tips: Android7+ many apps will not trust user certificates';
+  String get androidUserCATips =>
+      'Tips: Android7+ many apps will not trust user certificates';
 
   @override
   String get androidUserCAInstall =>
@@ -756,13 +760,15 @@ class AppLocalizationsVi extends AppLocalizations {
   String get prompt => 'Prompt';
 
   @override
-  String get curlSchemeRequest => 'If the curl format is recognized, should it be converted into an HTTP request?';
+  String get curlSchemeRequest =>
+      'If the curl format is recognized, should it be converted into an HTTP request?';
 
   @override
   String get appExitTips => 'Nhấn lại để thoát ứng dụng';
 
   @override
-  String get remoteConnectDisconnect => 'Kiểm tra kết nối từ xa thất bại, đã ngắt';
+  String get remoteConnectDisconnect =>
+      'Kiểm tra kết nối từ xa thất bại, đã ngắt';
 
   @override
   String get connect => 'Connect';
@@ -776,7 +782,8 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get remoteConnectForward => 'Kết nối từ xa, chuyển tiếp yêu cầu sang thiết bị khác';
+  String get remoteConnectForward =>
+      'Kết nối từ xa, chuyển tiếp yêu cầu sang thiết bị khác';
 
   @override
   String get connectSuccess => 'Kết nối thành công';
@@ -797,7 +804,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get ipLayerProxy => 'Proxy tầng IP (Beta)';
 
   @override
-  String get ipLayerProxyDesc => 'Proxy tầng IP có thể bắt yêu cầu Flutter, độ ổn định còn hạn chế.';
+  String get ipLayerProxyDesc =>
+      'Proxy tầng IP có thể bắt yêu cầu Flutter, độ ổn định còn hạn chế.';
 
   @override
   String get inputAddress => 'Input Address';
@@ -818,31 +826,43 @@ class AppLocalizationsVi extends AppLocalizations {
   String get remoteConnectFail => 'Kết nối thất bại';
 
   @override
-  String get remoteConnectSuccessTips => 'Điện thoại cần bật bắt gói để bắt được yêu cầu';
+  String get remoteConnectSuccessTips =>
+      'Điện thoại cần bật bắt gói để bắt được yêu cầu';
 
   @override
   String get windowMode => 'Chế độ cửa sổ';
 
   @override
-  String get windowModeSubTitle => 'Enabled Packet Capture, Enter the background, Display a small window';
+  String get windowModeSubTitle =>
+      'Enabled Packet Capture, Enter the background, Display a small window';
 
   @override
   String get pipIcon => 'Biểu tượng cửa sổ';
 
   @override
-  String get pipIconDescribe => 'Hiển thị biểu tượng truy cập nhanh vào cửa sổ nhỏ';
+  String get pipIconDescribe =>
+      'Hiển thị biểu tượng truy cập nhanh vào cửa sổ nhỏ';
 
   @override
   String get bottomNavigation => 'Thanh điều hướng dưới';
 
   @override
-  String get bottomNavigationSubtitle => 'Hiển thị thanh dưới, có hiệu lực sau khi khởi động lại';
+  String get bottomNavigationSubtitle =>
+      'Hiển thị thanh dưới, có hiệu lực sau khi khởi động lại';
 
   @override
   String get memoryCleanup => 'Dọn bộ nhớ';
 
   @override
-  String get memoryCleanupSubtitle => 'Tự động dọn yêu cầu khi chạm giới hạn bộ nhớ';
+  String get memoryCleanupSubtitle =>
+      'Tự động dọn yêu cầu khi chạm giới hạn bộ nhớ';
+
+  @override
+  String get maxRequestCount => 'Giới hạn bản ghi yêu cầu';
+
+  @override
+  String get maxRequestCountSubtitle =>
+      'Số lượng yêu cầu tối đa được giữ trong danh sách; các yêu cầu cũ nhất tự động bị loại bỏ khi vượt quá';
 
   @override
   String get clearConfirm => 'Xác nhận trước khi xóa';
@@ -884,10 +904,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get proxyIgnoreDomain => 'Proxy bỏ qua miền';
 
   @override
-  String get domainWhitelistDescribe => 'Chỉ proxy miền trong danh sách trắng. Bật lên sẽ vô hiệu danh sách đen.';
+  String get domainWhitelistDescribe =>
+      'Chỉ proxy miền trong danh sách trắng. Bật lên sẽ vô hiệu danh sách đen.';
 
   @override
-  String get domainBlacklistDescribe => 'Miền trong danh sách đen sẽ không được proxy';
+  String get domainBlacklistDescribe =>
+      'Miền trong danh sách đen sẽ không được proxy';
 
   @override
   String get domain => 'Miền';
@@ -1064,7 +1086,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get appUpdateDialogTitle => 'Update Available';
 
   @override
-  String get appUpdateUpdateMsg => 'A new version of ProxyPin is available. Would you like to update now?';
+  String get appUpdateUpdateMsg =>
+      'A new version of ProxyPin is available. Would you like to update now?';
 
   @override
   String get appUpdateCurrentVersionLbl => 'Current Version';
@@ -1097,7 +1120,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get requestMap => 'Ánh xạ yêu cầu';
 
   @override
-  String get requestMapDescribe => 'Không gọi dịch vụ từ xa, dùng cấu hình hoặc script cục bộ để trả lời';
+  String get requestMapDescribe =>
+      'Không gọi dịch vụ từ xa, dùng cấu hình hoặc script cục bộ để trả lời';
 
   @override
   String get automatic => 'Automatic';
@@ -1149,7 +1173,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get cryptoIvPrefixLabel => 'IV Prefix';
 
   @override
-  String get cryptoIvPrefixTooltip => 'Use the first N bytes of the response body as IV';
+  String get cryptoIvPrefixTooltip =>
+      'Use the first N bytes of the response body as IV';
 
   @override
   String get local => 'Cục bộ';
@@ -1182,7 +1207,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get envEmptyHint => 'Chưa có biến. Nhấn + để thêm.';
 
   @override
-  String get envUsageHint => 'Dùng %s trong quy tắc hoặc đọc/ghi context.env trong script.';
+  String get envUsageHint =>
+      'Dùng %s trong quy tắc hoặc đọc/ghi context.env trong script.';
 
   @override
   String get weakNetwork => 'Giới hạn mạng';

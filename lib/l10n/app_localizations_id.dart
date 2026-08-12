@@ -144,7 +144,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get minimizeToTrayTitle => 'Minimalkan ke tray saat menutup';
 
   @override
-  String get minimizeToTraySubtitle => 'Closing the window will keep ProxyPin running and hide it to the system tray.';
+  String get minimizeToTraySubtitle =>
+      'Closing the window will keep ProxyPin running and hide it to the system tray.';
 
   @override
   String get trayClosePromptContent =>
@@ -646,7 +647,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get resetDefaultCA => 'Reset sertifikat root default';
 
   @override
-  String get resetDefaultCADescribe => 'Yakin ingin mereset sertifikat root default?';
+  String get resetDefaultCADescribe =>
+      'Yakin ingin mereset sertifikat root default?';
 
   @override
   String get exportCaP12 => 'Ekspor sertifikat root (.p12)';
@@ -694,7 +696,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get androidUserCA => 'User Certificate';
 
   @override
-  String get androidUserCATips => 'Tips: Android7+ many apps will not trust user certificates';
+  String get androidUserCATips =>
+      'Tips: Android7+ many apps will not trust user certificates';
 
   @override
   String get androidUserCAInstall =>
@@ -720,7 +723,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get localIP => 'IP lokal';
 
   @override
-  String get mobileScan => 'Konfigurasi proxy Wi‑Fi atau pindai dengan aplikasi';
+  String get mobileScan =>
+      'Konfigurasi proxy Wi‑Fi atau pindai dengan aplikasi';
 
   @override
   String get decode => 'Decode';
@@ -750,19 +754,22 @@ class AppLocalizationsId extends AppLocalizations {
   String get captureDetail => 'Capture Detail';
 
   @override
-  String get proxyPinSoftware => 'Perangkat lunak penangkapan lalu lintas open-source ProxyPin';
+  String get proxyPinSoftware =>
+      'Perangkat lunak penangkapan lalu lintas open-source ProxyPin';
 
   @override
   String get prompt => 'Prompt';
 
   @override
-  String get curlSchemeRequest => 'If the curl format is recognized, should it be converted into an HTTP request?';
+  String get curlSchemeRequest =>
+      'If the curl format is recognized, should it be converted into an HTTP request?';
 
   @override
   String get appExitTips => 'Tekan lagi untuk keluar';
 
   @override
-  String get remoteConnectDisconnect => 'Kesalahan memeriksa koneksi jarak jauh, terputus';
+  String get remoteConnectDisconnect =>
+      'Kesalahan memeriksa koneksi jarak jauh, terputus';
 
   @override
   String get connect => 'Connect';
@@ -776,7 +783,8 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get remoteConnectForward => 'Koneksi jarak jauh, meneruskan permintaan ke perangkat lain';
+  String get remoteConnectForward =>
+      'Koneksi jarak jauh, meneruskan permintaan ke perangkat lain';
 
   @override
   String get connectSuccess => 'Koneksi berhasil';
@@ -797,7 +805,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get ipLayerProxy => 'Proxy lapisan IP (Beta)';
 
   @override
-  String get ipLayerProxyDesc => 'Dapat menangkap permintaan aplikasi Flutter; stabilitas terbatas.';
+  String get ipLayerProxyDesc =>
+      'Dapat menangkap permintaan aplikasi Flutter; stabilitas terbatas.';
 
   @override
   String get inputAddress => 'Input Address';
@@ -818,13 +827,15 @@ class AppLocalizationsId extends AppLocalizations {
   String get remoteConnectFail => 'Koneksi gagal';
 
   @override
-  String get remoteConnectSuccessTips => 'Ponsel harus mengaktifkan penangkapan untuk menangkap permintaan';
+  String get remoteConnectSuccessTips =>
+      'Ponsel harus mengaktifkan penangkapan untuk menangkap permintaan';
 
   @override
   String get windowMode => 'Mode jendela';
 
   @override
-  String get windowModeSubTitle => 'Enabled Packet Capture, Enter the background, Display a small window';
+  String get windowModeSubTitle =>
+      'Enabled Packet Capture, Enter the background, Display a small window';
 
   @override
   String get pipIcon => 'Ikon jendela';
@@ -836,19 +847,29 @@ class AppLocalizationsId extends AppLocalizations {
   String get bottomNavigation => 'Navigasi bawah';
 
   @override
-  String get bottomNavigationSubtitle => 'Tampilkan bar bawah; berlaku setelah restart';
+  String get bottomNavigationSubtitle =>
+      'Tampilkan bar bawah; berlaku setelah restart';
 
   @override
   String get memoryCleanup => 'Pembersihan memori';
 
   @override
-  String get memoryCleanupSubtitle => 'Bersihkan permintaan secara otomatis saat batas memori tercapai';
+  String get memoryCleanupSubtitle =>
+      'Bersihkan permintaan secara otomatis saat batas memori tercapai';
+
+  @override
+  String get maxRequestCount => 'Batas Catatan Permintaan';
+
+  @override
+  String get maxRequestCountSubtitle =>
+      'Jumlah maksimum permintaan yang disimpan dalam daftar; permintaan terlama dihapus otomatis saat terlampaui';
 
   @override
   String get clearConfirm => 'Konfirmasi sebelum membersihkan';
 
   @override
-  String get clearConfirmSubtitle => 'Tampilkan konfirmasi sebelum membersihkan tangkapan';
+  String get clearConfirmSubtitle =>
+      'Tampilkan konfirmasi sebelum membersihkan tangkapan';
 
   @override
   String get unlimited => 'Tak terbatas';
@@ -863,7 +884,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get externalProxyServer => 'Server proxy';
 
   @override
-  String get externalProxyConnectFailure => 'Gagal terhubung ke proxy eksternal';
+  String get externalProxyConnectFailure =>
+      'Gagal terhubung ke proxy eksternal';
 
   @override
   String get externalProxyFailureConfirm =>
@@ -888,7 +910,8 @@ class AppLocalizationsId extends AppLocalizations {
       'Hanya domain pada daftar putih yang akan diproksikan. Jika diaktifkan, daftar hitam tidak berlaku.';
 
   @override
-  String get domainBlacklistDescribe => 'Domain pada daftar hitam tidak akan diproksikan';
+  String get domainBlacklistDescribe =>
+      'Domain pada daftar hitam tidak akan diproksikan';
 
   @override
   String get domain => 'Domain';
@@ -897,7 +920,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get enableScript => 'Aktifkan script';
 
   @override
-  String get scriptUseDescribe => 'Gunakan JavaScript untuk mengubah permintaan dan respons';
+  String get scriptUseDescribe =>
+      'Gunakan JavaScript untuk mengubah permintaan dan respons';
 
   @override
   String get scriptEdit => 'Edit script';
@@ -1065,7 +1089,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get appUpdateDialogTitle => 'Update Available';
 
   @override
-  String get appUpdateUpdateMsg => 'A new version of ProxyPin is available. Would you like to update now?';
+  String get appUpdateUpdateMsg =>
+      'A new version of ProxyPin is available. Would you like to update now?';
 
   @override
   String get appUpdateCurrentVersionLbl => 'Current Version';
@@ -1120,7 +1145,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get sponsorSupport => 'Dukung pengembangan berkelanjutan';
 
   @override
-  String get sponsorThanks => 'Terima kasih telah mendukung proyek open-source ini.';
+  String get sponsorThanks =>
+      'Terima kasih telah mendukung proyek open-source ini.';
 
   @override
   String get sponsorAfdian => 'AFDIAN';
@@ -1151,7 +1177,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get cryptoIvPrefixLabel => 'IV Prefix';
 
   @override
-  String get cryptoIvPrefixTooltip => 'Use the first N bytes of the response body as IV';
+  String get cryptoIvPrefixTooltip =>
+      'Use the first N bytes of the response body as IV';
 
   @override
   String get local => 'Lokal';
@@ -1184,7 +1211,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get envEmptyHint => 'Belum ada variabel. Klik + untuk menambahkan.';
 
   @override
-  String get envUsageHint => 'Gunakan %s di aturan atau baca/tulis context.env di skrip.';
+  String get envUsageHint =>
+      'Gunakan %s di aturan atau baca/tulis context.env di skrip.';
 
   @override
   String get weakNetwork => 'Pembatasan Jaringan';

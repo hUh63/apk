@@ -47,7 +47,12 @@ class McpServer {
   static const String protocolVersion = '2026-07-28';
 
   /// 兼容的旧版协议版本列表（仍支持握手路径）
-  static const List<String> legacyProtocolVersions = ['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25'];
+  static const List<String> legacyProtocolVersions = [
+    '2024-11-05',
+    '2025-03-26',
+    '2025-06-18',
+    '2025-11-25',
+  ];
 
   /// 是否启用 Streamable HTTP（新式传输，支持 /mcp 端点与会话）
   static const bool streamableHttpEnabled = true;
@@ -76,10 +81,10 @@ class McpServer {
   /// 获取 SSE 连接列表的快照（避免遍历时被并发修改）
   List<io.HttpResponse> _snapshotSseConnections() =>
       List<io.HttpResponse>.from(_sseConnections);
-  
+
   // SSE 心跳定时器
   Timer? _heartbeatTimer;
-  
+
   // 状态变化回调
   VoidCallback? onStatusChanged;
 
@@ -113,8 +118,8 @@ class McpServer {
       _server!.listen((request) {
         // CORS 处理
         if (request.method == 'OPTIONS') {
-           _handleOptions(request);
-           return;
+          _handleOptions(request);
+          return;
         }
 
         final path = request.uri.path;
@@ -133,7 +138,9 @@ class McpServer {
           final response = request.response;
           response.headers.contentType = io.ContentType.json;
           response.headers.add('Access-Control-Allow-Origin', '*');
-          response.write(jsonEncode({'status': 'ok', 'server': 'ProxyPin MCP'}));
+          response.write(
+            jsonEncode({'status': 'ok', 'server': 'ProxyPin MCP'}),
+          );
           response.close();
         } else {
           final response = request.response;
@@ -141,62 +148,66 @@ class McpServer {
           response.close();
         }
       });
-      
+
       // 监听 Bridge 的请求完成事件，推送到 SSE
       McpBridge().onRequestCompleted = (log) {
-          _broadcastEvent('resource', {
-              'uri': 'proxypin://requests/latest',
-              // 可以在这里推送增量更新
-          });
+        _broadcastEvent('resource', {
+          'uri': 'proxypin://requests/latest',
+          // 可以在这里推送增量更新
+        });
       };
       // 启动 SSE 心跳保活（每 30 秒发送 ping）
       _heartbeatTimer?.cancel();
       _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-          _broadcastEvent('ping', {'timestamp': DateTime.now().toIso8601String()});
+        _broadcastEvent('ping', {
+          'timestamp': DateTime.now().toIso8601String(),
+        });
       });
-      
+
       // 通知状态变化
       onStatusChanged?.call();
-      
     } catch (e) {
       _lastError = e.toString();
       logger.e('Failed to start MCP server', error: e);
     }
   }
-  
+
   Future<void> stop() async {
-      _heartbeatTimer?.cancel();
-      _heartbeatTimer = null;
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
 
-      // 关闭所有 SSE 连接（先取快照再遍历）
-      for (var conn in _snapshotSseConnections()) {
-          try {
-              await conn.close();
-          } catch (e) {
-              // ignore
-          }
+    // 关闭所有 SSE 连接（先取快照再遍历）
+    for (var conn in _snapshotSseConnections()) {
+      try {
+        await conn.close();
+      } catch (e) {
+        // ignore
       }
-      _sseConnections.clear();
+    }
+    _sseConnections.clear();
 
-      // 清除回调
-      McpBridge().onRequestCompleted = null;
+    // 清除回调
+    McpBridge().onRequestCompleted = null;
 
-      await _server?.close();
-      _server = null;
+    await _server?.close();
+    _server = null;
 
-      // 清理 Streamable HTTP 会话
-      _streamSessions.clear();
-      // 手动停止时清除错误状态
-      _lastError = null;
-      // 通知状态变化
-      onStatusChanged?.call();
+    // 清理 Streamable HTTP 会话
+    _streamSessions.clear();
+    // 手动停止时清除错误状态
+    _lastError = null;
+    // 通知状态变化
+    onStatusChanged?.call();
   }
 
   void _handleOptions(io.HttpRequest request) {
     final response = request.response;
     response.headers.add('Access-Control-Allow-Origin', '*');
     response.headers.add('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept');
+    response.headers.add(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Accept',
+    );
     response.close();
   }
 
@@ -213,15 +224,17 @@ class McpServer {
     response.flush();
 
     _addSseConnection(response);
-    
+
     logger.i('New MCP SSE connection');
 
-    response.done.then((_) {
-      _removeSseConnection(response);
-      logger.i('MCP SSE connection closed');
-    }).catchError((e) {
-      _removeSseConnection(response);
-    });
+    response.done
+        .then((_) {
+          _removeSseConnection(response);
+          logger.i('MCP SSE connection closed');
+        })
+        .catchError((e) {
+          _removeSseConnection(response);
+        });
   }
 
   Future<void> _handleMessages(io.HttpRequest request) async {
@@ -236,11 +249,11 @@ class McpServer {
     try {
       final content = await utf8.decoder.bind(request).join();
       if (content.isEmpty) {
-          final response = request.response;
-          response.headers.add('Access-Control-Allow-Origin', '*');
-          response.statusCode = io.HttpStatus.badRequest;
-          response.close();
-          return;
+        final response = request.response;
+        response.headers.add('Access-Control-Allow-Origin', '*');
+        response.statusCode = io.HttpStatus.badRequest;
+        response.close();
+        return;
       }
 
       // 先设置 CORS 和 Content-Type，确保异常时响应也包含 CORS 头
@@ -288,12 +301,14 @@ class McpServer {
 
       logger.i('New MCP streamable HTTP connection');
 
-      response.done.then((_) {
-        _removeSseConnection(response);
-        logger.i('MCP streamable HTTP connection closed');
-      }).catchError((e) {
-        _removeSseConnection(response);
-      });
+      response.done
+          .then((_) {
+            _removeSseConnection(response);
+            logger.i('MCP streamable HTTP connection closed');
+          })
+          .catchError((e) {
+            _removeSseConnection(response);
+          });
       return;
     }
 
@@ -308,11 +323,11 @@ class McpServer {
     try {
       final content = await utf8.decoder.bind(request).join();
       if (content.isEmpty) {
-          final response = request.response;
-          response.headers.add('Access-Control-Allow-Origin', '*');
-          response.statusCode = io.HttpStatus.badRequest;
-          response.close();
-          return;
+        final response = request.response;
+        response.headers.add('Access-Control-Allow-Origin', '*');
+        response.statusCode = io.HttpStatus.badRequest;
+        response.close();
+        return;
       }
 
       // 先设置 CORS 和 Content-Type，确保异常时响应也包含 CORS 头
@@ -389,7 +404,9 @@ class McpServer {
       }
 
       final decoded = jsonDecode(content);
-      final requests = decoded is List ? decoded.cast<dynamic>().toList() : [decoded];
+      final requests = decoded is List
+          ? decoded.cast<dynamic>().toList()
+          : [decoded];
       final responses = <Map<String, dynamic>>[];
 
       // 2026-07-28 无状态模式：客户端通过 MCP-Protocol-Version 头声明协议版本
@@ -401,7 +418,9 @@ class McpServer {
         final jsonRpc = Map<String, dynamic>.from(item);
 
         // 无状态模式：校验请求头与 body 一致性（-32020），并解析 _meta 中的协议版本
-        if (statelessEnabled && clientProtocol != null && clientProtocol != '2024-11-05') {
+        if (statelessEnabled &&
+            clientProtocol != null &&
+            clientProtocol != '2024-11-05') {
           final metaResult = _applyStatelessHeaders(request, jsonRpc);
           if (metaResult != null) {
             responses.add(metaResult);
@@ -445,34 +464,45 @@ class McpServer {
   /// 2026-07-28 无状态模式：校验 MCP-Protocol-Version / Mcp-Method / Mcp-Name 头
   /// 与 JSON-RPC body 一致性。不一致时返回 -32020 错误。
   /// 返回 null 表示校验通过，可继续正常处理。
-  Map<String, dynamic>? _applyStatelessHeaders(io.HttpRequest request, Map<String, dynamic> jsonRpc) {
+  Map<String, dynamic>? _applyStatelessHeaders(
+    io.HttpRequest request,
+    Map<String, dynamic> jsonRpc,
+  ) {
     final headerVersion = request.headers.value('MCP-Protocol-Version');
     final headerMethod = request.headers.value('Mcp-Method');
     final headerName = request.headers.value('Mcp-Name');
 
     // body 中的协议版本（_meta 字段）与头不一致时拒绝
-    final metaVersion = (jsonRpc['_meta'] is Map) ? (jsonRpc['_meta'] as Map)['protocolVersion'] : null;
-    if (headerVersion != null && metaVersion != null && headerVersion != metaVersion) {
+    final metaVersion = (jsonRpc['_meta'] is Map)
+        ? (jsonRpc['_meta'] as Map)['protocolVersion']
+        : null;
+    if (headerVersion != null &&
+        metaVersion != null &&
+        headerVersion != metaVersion) {
       return {
         'jsonrpc': '2.0',
         'id': jsonRpc['id'],
         'error': {
           'code': -32020,
-          'message': 'MCP-Protocol-Version header ($headerVersion) does not match _meta.protocolVersion ($metaVersion)'
-        }
+          'message':
+              'MCP-Protocol-Version header ($headerVersion) does not match _meta.protocolVersion ($metaVersion)',
+        },
       };
     }
 
     // 头部 method 与 body method 不一致时拒绝
     final bodyMethod = jsonRpc['method'];
-    if (headerMethod != null && bodyMethod != null && headerMethod != bodyMethod) {
+    if (headerMethod != null &&
+        bodyMethod != null &&
+        headerMethod != bodyMethod) {
       return {
         'jsonrpc': '2.0',
         'id': jsonRpc['id'],
         'error': {
           'code': -32020,
-          'message': 'Mcp-Method header ($headerMethod) does not match body method ($bodyMethod)'
-        }
+          'message':
+              'Mcp-Method header ($headerMethod) does not match body method ($bodyMethod)',
+        },
       };
     }
 
@@ -519,25 +549,31 @@ class McpServer {
     response.flush();
 
     _addSseConnection(response);
-    response.done.then((_) {
-      _removeSseConnection(response);
-      if (sessionId != null && _streamSessions[sessionId]?.stream == response) {
-        _streamSessions[sessionId]!.stream = null;
-      }
-    }).catchError((_) {
-      _removeSseConnection(response);
-      if (sessionId != null && _streamSessions[sessionId]?.stream == response) {
-        _streamSessions[sessionId]!.stream = null;
-      }
-    });
+    response.done
+        .then((_) {
+          _removeSseConnection(response);
+          if (sessionId != null &&
+              _streamSessions[sessionId]?.stream == response) {
+            _streamSessions[sessionId]!.stream = null;
+          }
+        })
+        .catchError((_) {
+          _removeSseConnection(response);
+          if (sessionId != null &&
+              _streamSessions[sessionId]?.stream == response) {
+            _streamSessions[sessionId]!.stream = null;
+          }
+        });
   }
 
   /// 设置统一的 CORS 头
   void _setCorsHeaders(io.HttpResponse response) {
     response.headers.add('Access-Control-Allow-Origin', '*');
     response.headers.add('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-    response.headers.add('Access-Control-Allow-Headers',
-        'Content-Type, Accept, Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Last-Event-ID');
+    response.headers.add(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Accept, Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Last-Event-ID',
+    );
     response.headers.add('Access-Control-Expose-Headers', 'Mcp-Session-Id');
   }
 
@@ -547,26 +583,27 @@ class McpServer {
   }
 
   /// 广播 SSE 事件
-  void _broadcastEvent(String event, Object data) {      var deadConnections = <io.HttpResponse>[];
-      // 使用快照遍历，避免遍历期间被并发修改
-      for (var conn in _snapshotSseConnections()) {
-          try {
-              conn.write('event: $event\n');
-              conn.write('data: ${jsonEncode(data)}\n');
-              conn.write('\n');
-              // 立即刷新确保数据及时发送，避免缓冲延迟
-              conn.flush();
-          } catch (e) {
-              // 标记死连接以便移除
-              deadConnections.add(conn);
-          }
+  void _broadcastEvent(String event, Object data) {
+    var deadConnections = <io.HttpResponse>[];
+    // 使用快照遍历，避免遍历期间被并发修改
+    for (var conn in _snapshotSseConnections()) {
+      try {
+        conn.write('event: $event\n');
+        conn.write('data: ${jsonEncode(data)}\n');
+        conn.write('\n');
+        // 立即刷新确保数据及时发送，避免缓冲延迟
+        conn.flush();
+      } catch (e) {
+        // 标记死连接以便移除
+        deadConnections.add(conn);
       }
-      // 清理失败的连接
-      if (deadConnections.isNotEmpty) {
-          for (var conn in deadConnections) {
-              _removeSseConnection(conn);
-          }
+    }
+    // 清理失败的连接
+    if (deadConnections.isNotEmpty) {
+      for (var conn in deadConnections) {
+        _removeSseConnection(conn);
       }
+    }
   }
 
   /// 配置变更时通知所有 SSE 客户端刷新
@@ -578,17 +615,23 @@ class McpServer {
     });
   }
 
-  Future<Map<String, dynamic>?> _processJsonRpc(Map<String, dynamic> request) async {
+  Future<Map<String, dynamic>?> _processJsonRpc(
+    Map<String, dynamic> request,
+  ) async {
     final method = request['method'];
     final id = request['id'];
-    
+
     // JSON-RPC Response 结构
     Map<String, dynamic> response(dynamic result) {
-        return {'jsonrpc': '2.0', 'id': id, 'result': result};
+      return {'jsonrpc': '2.0', 'id': id, 'result': result};
     }
-    
+
     Map<String, dynamic> error(int code, String message) {
-        return {'jsonrpc': '2.0', 'id': id, 'error': {'code': code, 'message': message}};
+      return {
+        'jsonrpc': '2.0',
+        'id': id,
+        'error': {'code': code, 'message': message},
+      };
     }
 
     try {
@@ -610,25 +653,27 @@ class McpServer {
             'protocolVersion': negotiated,
             'capabilities': {
               'tools': {'listChanged': false},
-              'resources': {}
+              'resources': {},
             },
-            'serverInfo': {'name': 'ProxyPin MCP', 'version': '1.3.1'}
+            'serverInfo': {'name': 'ProxyPin MCP', 'version': '1.3.1'},
           });
-          
+
         case 'notifications/initialized':
           // 通知类消息不需要返回响应
           return null;
-          
+
         case 'notifications/cancelled':
           // 客户端取消请求通知，不需要返回响应
           logger.i('Received cancellation notification: ${request['params']}');
           return null;
-          
+
         case 'tools/list':
           return response({
-            'tools': _getToolsList().where((t) => _isToolEnabled(t['name'] as String)).toList()
+            'tools': _getToolsList()
+                .where((t) => _isToolEnabled(t['name'] as String))
+                .toList(),
           });
-          
+
         case 'tools/call':
           final params = request['params'] as Map<String, dynamic>?;
           if (params == null) {
@@ -639,51 +684,54 @@ class McpServer {
           try {
             final result = await _executeTool(name, args);
             return response({
-                'content': [
-                    {'type': 'text', 'text': jsonEncode(result)}
-                ]
+              'content': [
+                {'type': 'text', 'text': jsonEncode(result)},
+              ],
             });
           } catch (e) {
             // MCP 规范：工具执行错误应作为结果返回（isError: true），而非 JSON-RPC 错误
             return response({
-                'content': [
-                    {'type': 'text', 'text': jsonEncode({'error': e.toString()})}
-                ],
-                'isError': true
+              'content': [
+                {
+                  'type': 'text',
+                  'text': jsonEncode({'error': e.toString()}),
+                },
+              ],
+              'isError': true,
             });
           }
-          
+
         case 'resources/list':
           return response({
-              'resources': [
-                  {
-                      'uri': 'proxypin://requests/latest',
-                      'name': 'Latest Requests',
-                      'mimeType': 'application/json'
-                  },
-                  {
-                      'uri': 'proxypin://config/current',
-                      'name': 'Current Configuration',
-                      'mimeType': 'application/json'
-                  },
-                  {
-                      'uri': 'proxypin://breakpoints/rules',
-                      'name': 'Breakpoint Rules',
-                      'mimeType': 'application/json'
-                  },
-                  {
-                      'uri': 'proxypin://network/conditions',
-                      'name': 'Weak Network Configuration',
-                      'mimeType': 'application/json'
-                  },
-                  {
-                      'uri': 'proxypin://environments/list',
-                      'name': 'Environment Variables',
-                      'mimeType': 'application/json'
-                  }
-              ]
+            'resources': [
+              {
+                'uri': 'proxypin://requests/latest',
+                'name': 'Latest Requests',
+                'mimeType': 'application/json',
+              },
+              {
+                'uri': 'proxypin://config/current',
+                'name': 'Current Configuration',
+                'mimeType': 'application/json',
+              },
+              {
+                'uri': 'proxypin://breakpoints/rules',
+                'name': 'Breakpoint Rules',
+                'mimeType': 'application/json',
+              },
+              {
+                'uri': 'proxypin://network/conditions',
+                'name': 'Weak Network Configuration',
+                'mimeType': 'application/json',
+              },
+              {
+                'uri': 'proxypin://environments/list',
+                'name': 'Environment Variables',
+                'mimeType': 'application/json',
+              },
+            ],
           });
-          
+
         case 'resources/read':
           final params = request['params'] as Map<String, dynamic>?;
           if (params == null) {
@@ -692,18 +740,18 @@ class McpServer {
           final uri = params['uri'];
           final content = await _readResource(uri);
           return response({
-              'contents': [
-                  {
-                      'uri': uri,
-                      'mimeType': 'application/json',
-                      'text': jsonEncode(content)
-                  }
-              ]
+            'contents': [
+              {
+                'uri': uri,
+                'mimeType': 'application/json',
+                'text': jsonEncode(content),
+              },
+            ],
           });
 
         case 'ping':
           return response({});
-          
+
         default:
           return error(-32601, 'Method not found: $method');
       }
@@ -720,14 +768,21 @@ class McpServer {
     return [
       {
         'name': 'set_config',
-        'description': 'Update ProxyPin configuration (System Proxy, SSL Capture).',
+        'description':
+            'Update ProxyPin configuration (System Proxy, SSL Capture).',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'system_proxy': {'type': 'boolean', 'description': 'Enable/Disable system proxy'},
-            'ssl_capture': {'type': 'boolean', 'description': 'Enable/Disable SSL capture (MITM)'}
-          }
-        }
+            'system_proxy': {
+              'type': 'boolean',
+              'description': 'Enable/Disable system proxy',
+            },
+            'ssl_capture': {
+              'type': 'boolean',
+              'description': 'Enable/Disable SSL capture (MITM)',
+            },
+          },
+        },
       },
       {
         'name': 'add_host_mapping',
@@ -735,25 +790,47 @@ class McpServer {
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'domain': {'type': 'string', 'description': 'Domain name (e.g. example.com)'},
-            'ip': {'type': 'string', 'description': 'Target IP or domain (e.g. 127.0.0.1)'}
+            'domain': {
+              'type': 'string',
+              'description': 'Domain name (e.g. example.com)',
+            },
+            'ip': {
+              'type': 'string',
+              'description': 'Target IP or domain (e.g. 127.0.0.1)',
+            },
           },
-          'required': ['domain', 'ip']
-        }
+          'required': ['domain', 'ip'],
+        },
       },
       {
         'name': 'add_response_rewrite',
-        'description': 'Mock/Rewrite response (headers, status code, or body) for a specific URL.',
+        'description':
+            'Mock/Rewrite response (headers, status code, or body) for a specific URL.',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'url_pattern': {'type': 'string', 'description': 'URL pattern to match (e.g. "api.com/users")'},
-            'rewrite_type': {'type': 'string', 'description': 'Type: updateHeader, updateStatusCode, updateBody', 'enum': ['updateHeader', 'updateStatusCode', 'updateBody']},
-            'key': {'type': 'string', 'description': 'Header name (for updateHeader) or "body" for body replacement'},
-            'value': {'type': 'string', 'description': 'New value (header value, status code, or body content)'}
+            'url_pattern': {
+              'type': 'string',
+              'description': 'URL pattern to match (e.g. "api.com/users")',
+            },
+            'rewrite_type': {
+              'type': 'string',
+              'description': 'Type: updateHeader, updateStatusCode, updateBody',
+              'enum': ['updateHeader', 'updateStatusCode', 'updateBody'],
+            },
+            'key': {
+              'type': 'string',
+              'description':
+                  'Header name (for updateHeader) or "body" for body replacement',
+            },
+            'value': {
+              'type': 'string',
+              'description':
+                  'New value (header value, status code, or body content)',
+            },
           },
-          'required': ['url_pattern', 'rewrite_type', 'value']
-        }
+          'required': ['url_pattern', 'rewrite_type', 'value'],
+        },
       },
       {
         'name': 'export_har',
@@ -761,10 +838,17 @@ class McpServer {
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'limit': {'type': 'integer', 'description': 'Max requests to export (default 100)'},
-             'request_ids': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Specific request IDs to export'}
-          }
-        }
+            'limit': {
+              'type': 'integer',
+              'description': 'Max requests to export (default 100)',
+            },
+            'request_ids': {
+              'type': 'array',
+              'items': {'type': 'string'},
+              'description': 'Specific request IDs to export',
+            },
+          },
+        },
       },
       {
         'name': 'import_har',
@@ -772,41 +856,78 @@ class McpServer {
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'har_content': {'type': 'string', 'description': 'HAR JSON content string'}
+            'har_content': {
+              'type': 'string',
+              'description': 'HAR JSON content string',
+            },
           },
-          'required': ['har_content']
-        }
+          'required': ['har_content'],
+        },
       },
       {
         'name': 'search_requests',
-        'description': 'Search and filter captured HTTP requests with powerful filters.',
+        'description':
+            'Search and filter captured HTTP requests with powerful filters.',
         'inputSchema': {
           'type': 'object',
           'properties': {
             'query': {'type': 'string', 'description': 'Keyword in URL'},
-            'method': {'type': 'string', 'description': 'HTTP Method (GET, POST...)'},
-            'status_code': {'type': 'string', 'description': 'Status code pattern (e.g. "200", "4xx", "5xx")'},
+            'method': {
+              'type': 'string',
+              'description': 'HTTP Method (GET, POST...)',
+            },
+            'status_code': {
+              'type': 'string',
+              'description': 'Status code pattern (e.g. "200", "4xx", "5xx")',
+            },
             'domain': {'type': 'string', 'description': 'Domain name filter'},
-            'header_search': {'type': 'string', 'description': 'Search in request/response headers (key or value)'},
-            'request_body_search': {'type': 'string', 'description': 'Search in request body'},
-            'response_body_search': {'type': 'string', 'description': 'Search in response body'},
-            'min_duration': {'type': 'integer', 'description': 'Minimum duration in ms'},
-            'max_duration': {'type': 'integer', 'description': 'Maximum duration in ms'},
-            'limit': {'type': 'integer', 'description': 'Max results (default 20)'}
-          }
-        }
+            'header_search': {
+              'type': 'string',
+              'description':
+                  'Search in request/response headers (key or value)',
+            },
+            'request_body_search': {
+              'type': 'string',
+              'description': 'Search in request body',
+            },
+            'response_body_search': {
+              'type': 'string',
+              'description': 'Search in response body',
+            },
+            'min_duration': {
+              'type': 'integer',
+              'description': 'Minimum duration in ms',
+            },
+            'max_duration': {
+              'type': 'integer',
+              'description': 'Maximum duration in ms',
+            },
+            'limit': {
+              'type': 'integer',
+              'description': 'Max results (default 20)',
+            },
+          },
+        },
       },
       {
         'name': 'generate_code',
-        'description': 'Generate code for a specific request in Python, JavaScript, Go, Node.js, or cURL.',
+        'description':
+            'Generate code for a specific request in Python, JavaScript, Go, Node.js, or cURL.',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'request_id': {'type': 'string', 'description': 'The ID of the request'},
-            'language': {'type': 'string', 'description': 'Target language: python, js, go, nodejs, curl', 'enum': ['python', 'js', 'go', 'nodejs', 'curl']}
+            'request_id': {
+              'type': 'string',
+              'description': 'The ID of the request',
+            },
+            'language': {
+              'type': 'string',
+              'description': 'Target language: python, js, go, nodejs, curl',
+              'enum': ['python', 'js', 'go', 'nodejs', 'curl'],
+            },
           },
-          'required': ['request_id', 'language']
-        }
+          'required': ['request_id', 'language'],
+        },
       },
       {
         'name': 'get_curl',
@@ -814,26 +935,40 @@ class McpServer {
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'request_id': {'type': 'string', 'description': 'The ID of the request'}
+            'request_id': {
+              'type': 'string',
+              'description': 'The ID of the request',
+            },
           },
-          'required': ['request_id']
-        }
+          'required': ['request_id'],
+        },
       },
       {
         'name': 'get_recent_requests',
-        'description': 'Get a list of recent HTTP requests (Legacy, use search_requests instead).',
+        'description':
+            'Get a list of recent HTTP requests (Legacy, use search_requests instead).',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'limit': {'type': 'integer', 'description': 'Max number of requests (default 20)'},
-            'url_filter': {'type': 'string', 'description': 'Filter by URL keyword'},
-            'method': {'type': 'string', 'description': 'Filter by HTTP Method (GET, POST...)'}
-          }
-        }
+            'limit': {
+              'type': 'integer',
+              'description': 'Max number of requests (default 20)',
+            },
+            'url_filter': {
+              'type': 'string',
+              'description': 'Filter by URL keyword',
+            },
+            'method': {
+              'type': 'string',
+              'description': 'Filter by HTTP Method (GET, POST...)',
+            },
+          },
+        },
       },
       {
         'name': 'get_request_details',
-        'description': '''Get full details (headers, body) of a specific request.
+        'description':
+            '''Get full details (headers, body) of a specific request.
 
 Response includes:
 - request.body: Request body content
@@ -850,10 +985,13 @@ Body Encoding Rules:
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'request_id': {'type': 'string', 'description': 'The ID of the request'}
+            'request_id': {
+              'type': 'string',
+              'description': 'The ID of the request',
+            },
           },
-          'required': ['request_id']
-        }
+          'required': ['request_id'],
+        },
       },
       {
         'name': 'start_proxy',
@@ -861,33 +999,28 @@ Body Encoding Rules:
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'port': {'type': 'integer', 'description': 'Port number (default 9099)'}
-          }
-        }
+            'port': {
+              'type': 'integer',
+              'description': 'Port number (default 9099)',
+            },
+          },
+        },
       },
       {
         'name': 'stop_proxy',
         'description': 'Stop the ProxyPin server.',
-        'inputSchema': {
-          'type': 'object',
-          'properties': {}
-        }
+        'inputSchema': {'type': 'object', 'properties': {}},
       },
       {
         'name': 'get_proxy_status',
         'description': 'Get current status of the proxy server.',
-        'inputSchema': {
-          'type': 'object',
-          'properties': {}
-        }
+        'inputSchema': {'type': 'object', 'properties': {}},
       },
       {
         'name': 'clear_requests',
-        'description': 'Clear all captured requests (session history and UI list).',
-        'inputSchema': {
-           'type': 'object',
-           'properties': {}
-        }
+        'description':
+            'Clear all captured requests (session history and UI list).',
+        'inputSchema': {'type': 'object', 'properties': {}},
       },
       {
         'name': 'replay_request',
@@ -895,10 +1028,13 @@ Body Encoding Rules:
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'request_id': {'type': 'string', 'description': 'The ID of the request to replay'}
+            'request_id': {
+              'type': 'string',
+              'description': 'The ID of the request to replay',
+            },
           },
-          'required': ['request_id']
-        }
+          'required': ['request_id'],
+        },
       },
       {
         'name': 'block_url',
@@ -906,160 +1042,254 @@ Body Encoding Rules:
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'url_pattern': {'type': 'string', 'description': 'URL pattern to block (supports wildcard *)'},
-            'block_type': {'type': 'string', 'description': 'Type: blockRequest or blockResponse', 'enum': ['blockRequest', 'blockResponse']}
+            'url_pattern': {
+              'type': 'string',
+              'description': 'URL pattern to block (supports wildcard *)',
+            },
+            'block_type': {
+              'type': 'string',
+              'description': 'Type: blockRequest or blockResponse',
+              'enum': ['blockRequest', 'blockResponse'],
+            },
           },
-          'required': ['url_pattern', 'block_type']
-        }
+          'required': ['url_pattern', 'block_type'],
+        },
       },
       {
         'name': 'add_request_rewrite',
-        'description': 'Add a request rewrite rule (modify headers, query params, or body).',
+        'description':
+            'Add a request rewrite rule (modify headers, query params, or body).',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'url_pattern': {'type': 'string', 'description': 'URL pattern to match'},
-            'rewrite_type': {'type': 'string', 'description': 'Type: updateHeader, updateQueryParam, updateBody', 'enum': ['updateHeader', 'updateQueryParam', 'updateBody']},
-            'key': {'type': 'string', 'description': 'Header name, query param name, or "body" for body replacement'},
-            'value': {'type': 'string', 'description': 'New value'}
+            'url_pattern': {
+              'type': 'string',
+              'description': 'URL pattern to match',
+            },
+            'rewrite_type': {
+              'type': 'string',
+              'description': 'Type: updateHeader, updateQueryParam, updateBody',
+              'enum': ['updateHeader', 'updateQueryParam', 'updateBody'],
+            },
+            'key': {
+              'type': 'string',
+              'description':
+                  'Header name, query param name, or "body" for body replacement',
+            },
+            'value': {'type': 'string', 'description': 'New value'},
           },
-          'required': ['url_pattern', 'rewrite_type', 'key', 'value']
-        }
+          'required': ['url_pattern', 'rewrite_type', 'key', 'value'],
+        },
       },
       {
         'name': 'update_script',
-        'description': 'Update or create a JavaScript script for request/response modification.',
+        'description':
+            'Update or create a JavaScript script for request/response modification.',
         'inputSchema': {
           'type': 'object',
           'properties': {
             'name': {'type': 'string', 'description': 'Script name'},
-            'url_pattern': {'type': 'string', 'description': 'URL pattern to match (supports wildcard *)'},
-            'script_content': {'type': 'string', 'description': 'JavaScript code (onRequest/onResponse functions)'}
+            'url_pattern': {
+              'type': 'string',
+              'description': 'URL pattern to match (supports wildcard *)',
+            },
+            'script_content': {
+              'type': 'string',
+              'description': 'JavaScript code (onRequest/onResponse functions)',
+            },
           },
-          'required': ['name', 'url_pattern', 'script_content']
-        }
+          'required': ['name', 'url_pattern', 'script_content'],
+        },
       },
       {
         'name': 'get_scripts',
         'description': 'Get all configured scripts.',
-        'inputSchema': {
-          'type': 'object',
-          'properties': {}
-        }
+        'inputSchema': {'type': 'object', 'properties': {}},
       },
       {
         'name': 'get_statistics',
-        'description': 'Get statistics of captured requests (methods, status codes, domains, etc.).',
-        'inputSchema': {
-          'type': 'object',
-          'properties': {}
-        }
+        'description':
+            'Get statistics of captured requests (methods, status codes, domains, etc.).',
+        'inputSchema': {'type': 'object', 'properties': {}},
       },
       {
         'name': 'compare_requests',
-        'description': 'Compare two requests side by side (useful for debugging API changes).',
+        'description':
+            'Compare two requests side by side (useful for debugging API changes).',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'request_id_1': {'type': 'string', 'description': 'First request ID'},
-            'request_id_2': {'type': 'string', 'description': 'Second request ID'}
+            'request_id_1': {
+              'type': 'string',
+              'description': 'First request ID',
+            },
+            'request_id_2': {
+              'type': 'string',
+              'description': 'Second request ID',
+            },
           },
-          'required': ['request_id_1', 'request_id_2']
-        }
+          'required': ['request_id_1', 'request_id_2'],
+        },
       },
       {
         'name': 'find_similar_requests',
-        'description': 'Find requests similar to a given request (same URL pattern, method, etc.).',
+        'description':
+            'Find requests similar to a given request (same URL pattern, method, etc.).',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'request_id': {'type': 'string', 'description': 'Reference request ID'},
-            'limit': {'type': 'integer', 'description': 'Max results (default 10)'}
+            'request_id': {
+              'type': 'string',
+              'description': 'Reference request ID',
+            },
+            'limit': {
+              'type': 'integer',
+              'description': 'Max results (default 10)',
+            },
           },
-          'required': ['request_id']
-        }
+          'required': ['request_id'],
+        },
       },
       {
         'name': 'extract_api_endpoints',
-        'description': 'Extract and group unique API endpoints from captured requests.',
+        'description':
+            'Extract and group unique API endpoints from captured requests.',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'domain_filter': {'type': 'string', 'description': 'Filter by domain (optional)'}
-          }
-        }
+            'domain_filter': {
+              'type': 'string',
+              'description': 'Filter by domain (optional)',
+            },
+          },
+        },
       },
       // ==================== 安全分析工具（2.x 增强） ====================
       {
         'name': 'analyze_auth',
-        'description': 'Analyze authentication information in requests (Authorization headers, tokens, cookies, API keys).',
+        'description':
+            'Analyze authentication information in requests (Authorization headers, tokens, cookies, API keys).',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'request_id': {'type': 'string', 'description': 'Specific request ID (optional, defaults to recent 100)'}
-          }
-        }
+            'request_id': {
+              'type': 'string',
+              'description':
+                  'Specific request ID (optional, defaults to recent 100)',
+            },
+          },
+        },
       },
       {
         'name': 'find_sensitive_data',
-        'description': 'Search requests for sensitive data: passwords, API keys, secrets, tokens, private keys, phone numbers, ID cards.',
+        'description':
+            'Search requests for sensitive data: passwords, API keys, secrets, tokens, private keys, phone numbers, ID cards.',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'request_id': {'type': 'string', 'description': 'Specific request ID (optional, defaults to recent 100)'},
-            'search_body': {'type': 'boolean', 'description': 'Search request bodies (default true)'}
-          }
-        }
+            'request_id': {
+              'type': 'string',
+              'description':
+                  'Specific request ID (optional, defaults to recent 100)',
+            },
+            'search_body': {
+              'type': 'boolean',
+              'description': 'Search request bodies (default true)',
+            },
+          },
+        },
       },
       {
         'name': 'get_cookie_info',
-        'description': 'Get cookie analysis for a domain or request (names, values, HttpOnly, Secure, domains).',
+        'description':
+            'Get cookie analysis for a domain or request (names, values, HttpOnly, Secure, domains).',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'domain': {'type': 'string', 'description': 'Domain to filter (e.g. example.com)'},
-            'request_id': {'type': 'string', 'description': 'Specific request ID (overrides domain)'}
-          }
-        }
+            'domain': {
+              'type': 'string',
+              'description': 'Domain to filter (e.g. example.com)',
+            },
+            'request_id': {
+              'type': 'string',
+              'description': 'Specific request ID (overrides domain)',
+            },
+          },
+        },
       },
       {
         'name': 'get_domain_summary',
-        'description': 'Get traffic statistics summary for a domain (methods, status codes, avg duration, error count).',
+        'description':
+            'Get traffic statistics summary for a domain (methods, status codes, avg duration, error count).',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'domain': {'type': 'string', 'description': 'Domain to analyze (required)'}
+            'domain': {
+              'type': 'string',
+              'description': 'Domain to analyze (required)',
+            },
           },
-          'required': ['domain']
-        }
+          'required': ['domain'],
+        },
       },
       {
         'name': 'calculate_entropy',
-        'description': 'Calculate Shannon entropy of a string (for evaluating randomness / key strength).',
+        'description':
+            'Calculate Shannon entropy of a string (for evaluating randomness / key strength).',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'text': {'type': 'string', 'description': 'Text to analyze (required)'}
+            'text': {
+              'type': 'string',
+              'description': 'Text to analyze (required)',
+            },
           },
-          'required': ['text']
-        }
+          'required': ['text'],
+        },
       },
       // ==================== Breakpoint Debugging Tools (1.3.1+) ====================
       {
         'name': 'add_breakpoint_rule',
-        'description': 'Add a breakpoint rule to intercept requests or responses for debugging. The request will be paused until manually resumed via UI.',
+        'description':
+            'Add a breakpoint rule to intercept requests or responses for debugging. The request will be paused until manually resumed via UI.',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'url_pattern': {'type': 'string', 'description': 'URL regex pattern to match (e.g. "api.example.com/v1/.*")'},
+            'url_pattern': {
+              'type': 'string',
+              'description':
+                  'URL regex pattern to match (e.g. "api.example.com/v1/.*")',
+            },
             'name': {'type': 'string', 'description': 'Rule name (optional)'},
-            'intercept_request': {'type': 'boolean', 'description': 'Intercept request (default true)'},
-            'intercept_response': {'type': 'boolean', 'description': 'Intercept response (default true)'},
-            'method': {'type': 'string', 'description': 'HTTP method filter (GET, POST, etc.). Empty = all methods', 'enum': ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']},
-            'enabled': {'type': 'boolean', 'description': 'Enable the rule (default true)'}
+            'intercept_request': {
+              'type': 'boolean',
+              'description': 'Intercept request (default true)',
+            },
+            'intercept_response': {
+              'type': 'boolean',
+              'description': 'Intercept response (default true)',
+            },
+            'method': {
+              'type': 'string',
+              'description':
+                  'HTTP method filter (GET, POST, etc.). Empty = all methods',
+              'enum': [
+                'GET',
+                'POST',
+                'PUT',
+                'DELETE',
+                'PATCH',
+                'HEAD',
+                'OPTIONS',
+              ],
+            },
+            'enabled': {
+              'type': 'boolean',
+              'description': 'Enable the rule (default true)',
+            },
           },
-          'required': ['url_pattern']
-        }
+          'required': ['url_pattern'],
+        },
       },
       {
         'name': 'remove_breakpoint_rule',
@@ -1067,69 +1297,105 @@ Body Encoding Rules:
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'url_pattern': {'type': 'string', 'description': 'URL pattern of the rule to remove'}
+            'url_pattern': {
+              'type': 'string',
+              'description': 'URL pattern of the rule to remove',
+            },
           },
-          'required': ['url_pattern']
-        }
+          'required': ['url_pattern'],
+        },
       },
       {
         'name': 'list_breakpoint_rules',
         'description': 'List all breakpoint rules and their status.',
-        'inputSchema': {
-          'type': 'object',
-          'properties': {}
-        }
+        'inputSchema': {'type': 'object', 'properties': {}},
       },
       {
         'name': 'toggle_breakpoint',
-        'description': 'Enable or disable the breakpoint debugging feature globally.',
+        'description':
+            'Enable or disable the breakpoint debugging feature globally.',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'enabled': {'type': 'boolean', 'description': 'true to enable, false to disable'}
+            'enabled': {
+              'type': 'boolean',
+              'description': 'true to enable, false to disable',
+            },
           },
-          'required': ['enabled']
-        }
+          'required': ['enabled'],
+        },
       },
       // ==================== Weak Network Simulation Tools (1.3.1+) ====================
       {
         'name': 'add_weak_network_rule',
-        'description': 'Add a weak network simulation rule for a URL pattern. Simulates bandwidth limiting, latency, jitter, packet loss, or offline mode.',
+        'description':
+            'Add a weak network simulation rule for a URL pattern. Simulates bandwidth limiting, latency, jitter, packet loss, or offline mode.',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'url_pattern': {'type': 'string', 'description': 'URL pattern to match (supports wildcard *)'},
-            'profile_id': {'type': 'string', 'description': 'Preset profile ID. Built-in: weak, slow, g2, g3, g4, g5, wifi. Or use a custom profile ID.'},
-            'enabled': {'type': 'boolean', 'description': 'Enable this rule (default true)'}
+            'url_pattern': {
+              'type': 'string',
+              'description': 'URL pattern to match (supports wildcard *)',
+            },
+            'profile_id': {
+              'type': 'string',
+              'description':
+                  'Preset profile ID. Built-in: weak, slow, g2, g3, g4, g5, wifi. Or use a custom profile ID.',
+            },
+            'enabled': {
+              'type': 'boolean',
+              'description': 'Enable this rule (default true)',
+            },
           },
-          'required': ['url_pattern', 'profile_id']
-        }
+          'required': ['url_pattern', 'profile_id'],
+        },
       },
       {
         'name': 'add_custom_network_profile',
-        'description': 'Create a custom weak network profile with specific parameters.',
+        'description':
+            'Create a custom weak network profile with specific parameters.',
         'inputSchema': {
           'type': 'object',
           'properties': {
             'name': {'type': 'string', 'description': 'Profile name'},
-            'upload_kbps': {'type': 'integer', 'description': 'Upload bandwidth limit in kbps (null = unlimited)'},
-            'download_kbps': {'type': 'integer', 'description': 'Download bandwidth limit in kbps (null = unlimited)'},
-            'request_latency_ms': {'type': 'integer', 'description': 'Request latency in milliseconds (default 0)'},
-            'response_latency_ms': {'type': 'integer', 'description': 'Response latency in milliseconds (default 0)'},
-            'jitter_ms': {'type': 'integer', 'description': 'Jitter in milliseconds (default 0)'},
-            'loss_rate': {'type': 'number', 'description': 'Packet loss rate 0.0-1.0 (default 0)'},
-            'offline': {'type': 'boolean', 'description': 'Simulate offline mode (default false)'}
+            'upload_kbps': {
+              'type': 'integer',
+              'description':
+                  'Upload bandwidth limit in kbps (null = unlimited)',
+            },
+            'download_kbps': {
+              'type': 'integer',
+              'description':
+                  'Download bandwidth limit in kbps (null = unlimited)',
+            },
+            'request_latency_ms': {
+              'type': 'integer',
+              'description': 'Request latency in milliseconds (default 0)',
+            },
+            'response_latency_ms': {
+              'type': 'integer',
+              'description': 'Response latency in milliseconds (default 0)',
+            },
+            'jitter_ms': {
+              'type': 'integer',
+              'description': 'Jitter in milliseconds (default 0)',
+            },
+            'loss_rate': {
+              'type': 'number',
+              'description': 'Packet loss rate 0.0-1.0 (default 0)',
+            },
+            'offline': {
+              'type': 'boolean',
+              'description': 'Simulate offline mode (default false)',
+            },
           },
-          'required': ['name']
-        }
+          'required': ['name'],
+        },
       },
       {
         'name': 'list_weak_network_rules',
         'description': 'List all weak network simulation rules and profiles.',
-        'inputSchema': {
-          'type': 'object',
-          'properties': {}
-        }
+        'inputSchema': {'type': 'object', 'properties': {}},
       },
       {
         'name': 'remove_weak_network_rule',
@@ -1137,115 +1403,147 @@ Body Encoding Rules:
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'url_pattern': {'type': 'string', 'description': 'URL pattern of the rule to remove'}
+            'url_pattern': {
+              'type': 'string',
+              'description': 'URL pattern of the rule to remove',
+            },
           },
-          'required': ['url_pattern']
-        }
+          'required': ['url_pattern'],
+        },
       },
       {
         'name': 'toggle_weak_network',
-        'description': 'Enable or disable the weak network simulation feature globally.',
+        'description':
+            'Enable or disable the weak network simulation feature globally.',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'enabled': {'type': 'boolean', 'description': 'true to enable, false to disable'}
+            'enabled': {
+              'type': 'boolean',
+              'description': 'true to enable, false to disable',
+            },
           },
-          'required': ['enabled']
-        }
+          'required': ['enabled'],
+        },
       },
       // ==================== Environment Variable Tools (1.3.1+) ====================
       {
         'name': 'list_environments',
-        'description': 'List all environments and their variables. Shows which environment is currently active.',
-        'inputSchema': {
-          'type': 'object',
-          'properties': {}
-        }
+        'description':
+            'List all environments and their variables. Shows which environment is currently active.',
+        'inputSchema': {'type': 'object', 'properties': {}},
       },
       {
         'name': 'set_environment_variable',
-        'description': 'Set or update an environment variable. Variables can be referenced in requests using {{variable_name}} syntax.',
+        'description':
+            'Set or update an environment variable. Variables can be referenced in requests using {{variable_name}} syntax.',
         'inputSchema': {
           'type': 'object',
           'properties': {
             'key': {'type': 'string', 'description': 'Variable name'},
-            'value': {'type': 'string', 'description': 'Variable value (null to delete)'},
-            'environment_id': {'type': 'string', 'description': 'Target environment ID (default: global or active environment)'},
-            'enabled': {'type': 'boolean', 'description': 'Enable the variable (default true)'}
+            'value': {
+              'type': 'string',
+              'description': 'Variable value (null to delete)',
+            },
+            'environment_id': {
+              'type': 'string',
+              'description':
+                  'Target environment ID (default: global or active environment)',
+            },
+            'enabled': {
+              'type': 'boolean',
+              'description': 'Enable the variable (default true)',
+            },
           },
-          'required': ['key']
-        }
+          'required': ['key'],
+        },
       },
       {
         'name': 'create_environment',
-        'description': 'Create a new named environment (e.g. Dev, Staging, Prod).',
+        'description':
+            'Create a new named environment (e.g. Dev, Staging, Prod).',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'name': {'type': 'string', 'description': 'Environment name'}
+            'name': {'type': 'string', 'description': 'Environment name'},
           },
-          'required': ['name']
-        }
+          'required': ['name'],
+        },
       },
       {
         'name': 'set_active_environment',
-        'description': 'Set the active environment by ID, or pass null to deactivate (only Global remains).',
+        'description':
+            'Set the active environment by ID, or pass null to deactivate (only Global remains).',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'environment_id': {'type': 'string', 'description': 'Environment ID to activate, or empty string to deactivate'}
-          }
-        }
+            'environment_id': {
+              'type': 'string',
+              'description':
+                  'Environment ID to activate, or empty string to deactivate',
+            },
+          },
+        },
       },
       {
         'name': 'remove_environment',
-        'description': 'Remove a named environment by ID. Cannot remove the Global environment.',
+        'description':
+            'Remove a named environment by ID. Cannot remove the Global environment.',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'environment_id': {'type': 'string', 'description': 'Environment ID to remove'}
+            'environment_id': {
+              'type': 'string',
+              'description': 'Environment ID to remove',
+            },
           },
-          'required': ['environment_id']
-        }
+          'required': ['environment_id'],
+        },
       },
       {
         'name': 'toggle_environment_variables',
-        'description': 'Enable or disable the environment variable feature globally.',
+        'description':
+            'Enable or disable the environment variable feature globally.',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'enabled': {'type': 'boolean', 'description': 'true to enable, false to disable'}
+            'enabled': {
+              'type': 'boolean',
+              'description': 'true to enable, false to disable',
+            },
           },
-          'required': ['enabled']
-        }
+          'required': ['enabled'],
+        },
       },
       // ==================== Device Control Tools (Android only) ====================
       {
         'name': 'get_device_info',
-        'description': 'Get Android device info (model, brand, Android version, WiFi IP, root/accessibility status).',
-        'inputSchema': {
-          'type': 'object',
-          'properties': {}
-        }
+        'description':
+            'Get Android device info (model, brand, Android version, WiFi IP, root/accessibility status).',
+        'inputSchema': {'type': 'object', 'properties': {}},
       },
       {
         'name': 'get_current_activity',
         'description': 'Get the current foreground activity/package name.',
-        'inputSchema': {
-          'type': 'object',
-          'properties': {}
-        }
+        'inputSchema': {'type': 'object', 'properties': {}},
       },
       {
         'name': 'dump_ui',
-        'description': 'Dump the current Android UI hierarchy as JSON array of elements.',
+        'description':
+            'Dump the current Android UI hierarchy as JSON array of elements.',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'clickable_only': {'type': 'boolean', 'description': 'Only include clickable elements (default false)'},
-            'package_filter': {'type': 'string', 'description': 'Filter by package name'}
-          }
-        }
+            'clickable_only': {
+              'type': 'boolean',
+              'description': 'Only include clickable elements (default false)',
+            },
+            'package_filter': {
+              'type': 'string',
+              'description': 'Filter by package name',
+            },
+          },
+        },
       },
       {
         'name': 'tap_screen',
@@ -1254,23 +1552,27 @@ Body Encoding Rules:
           'type': 'object',
           'properties': {
             'x': {'type': 'integer', 'description': 'X coordinate'},
-            'y': {'type': 'integer', 'description': 'Y coordinate'}
+            'y': {'type': 'integer', 'description': 'Y coordinate'},
           },
-          'required': ['x', 'y']
-        }
+          'required': ['x', 'y'],
+        },
       },
       {
         'name': 'long_press',
-        'description': 'Perform a long press at the given coordinates for a duration.',
+        'description':
+            'Perform a long press at the given coordinates for a duration.',
         'inputSchema': {
           'type': 'object',
           'properties': {
             'x': {'type': 'integer', 'description': 'X coordinate'},
             'y': {'type': 'integer', 'description': 'Y coordinate'},
-            'duration': {'type': 'integer', 'description': 'Press duration in ms (default 50)'}
+            'duration': {
+              'type': 'integer',
+              'description': 'Press duration in ms (default 50)',
+            },
           },
-          'required': ['x', 'y']
-        }
+          'required': ['x', 'y'],
+        },
       },
       {
         'name': 'swipe_screen',
@@ -1282,21 +1584,29 @@ Body Encoding Rules:
             'y1': {'type': 'integer', 'description': 'Start Y'},
             'x2': {'type': 'integer', 'description': 'End X'},
             'y2': {'type': 'integer', 'description': 'End Y'},
-            'duration': {'type': 'integer', 'description': 'Swipe duration in ms (default 300)'}
+            'duration': {
+              'type': 'integer',
+              'description': 'Swipe duration in ms (default 300)',
+            },
           },
-          'required': ['x1', 'y1', 'x2', 'y2']
-        }
+          'required': ['x1', 'y1', 'x2', 'y2'],
+        },
       },
       {
         'name': 'key_event',
-        'description': 'Send a key event. Keycodes: 3=HOME, 4=BACK, 26=POWER, 82=MENU, 187=RECENTS.',
+        'description':
+            'Send a key event. Keycodes: 3=HOME, 4=BACK, 26=POWER, 82=MENU, 187=RECENTS.',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'keycode': {'type': 'integer', 'description': 'Android keycode (3=HOME, 4=BACK, 26=POWER, 82=MENU, 187=RECENTS)'}
+            'keycode': {
+              'type': 'integer',
+              'description':
+                  'Android keycode (3=HOME, 4=BACK, 26=POWER, 82=MENU, 187=RECENTS)',
+            },
           },
-          'required': ['keycode']
-        }
+          'required': ['keycode'],
+        },
       },
       {
         'name': 'input_text',
@@ -1304,81 +1614,102 @@ Body Encoding Rules:
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'text': {'type': 'string', 'description': 'Text to input'}
+            'text': {'type': 'string', 'description': 'Text to input'},
           },
-          'required': ['text']
-        }
+          'required': ['text'],
+        },
       },
       {
         'name': 'screenshot',
-        'description': 'Take a screenshot and return as Base64 PNG (requires root).',
-        'inputSchema': {
-          'type': 'object',
-          'properties': {}
-        }
+        'description':
+            'Take a screenshot and return as Base64 PNG (requires root).',
+        'inputSchema': {'type': 'object', 'properties': {}},
       },
       {
         'name': 'open_accessibility_settings',
         'description': 'Open the Android accessibility settings page.',
-        'inputSchema': {
-          'type': 'object',
-          'properties': {}
-        }
+        'inputSchema': {'type': 'object', 'properties': {}},
       },
       {
         'name': 'shell',
-        'description': 'Execute a shell command on the device (optionally with root).',
+        'description':
+            'Execute a shell command on the device (optionally with root, Shizuku or Dhizuku).',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'command': {'type': 'string', 'description': 'Shell command to execute'},
-            'use_su': {'type': 'boolean', 'description': 'Use root (su) for execution (default false)'},
-            'timeout_ms': {'type': 'integer', 'description': 'Timeout in milliseconds (default 10000)'}
+            'command': {
+              'type': 'string',
+              'description': 'Shell command to execute',
+            },
+            'use_su': {
+              'type': 'boolean',
+              'description': 'Use root (su) for execution (default false)',
+            },
+            'mode': {
+              'type': 'string',
+              'enum': ['auto', 'root', 'shizuku', 'dhizuku'],
+              'description':
+                  'Permission mode: root=su, shizuku=Shizuku service, dhizuku=Dhizuku device owner, auto=pick best available (default auto)',
+            },
+            'timeout_ms': {
+              'type': 'integer',
+              'description': 'Timeout in milliseconds (default 10000)',
+            },
           },
-          'required': ['command']
-        }
+          'required': ['command'],
+        },
       },
       {
         'name': 'get_pending_intercepts',
-        'description': 'Get all requests/responses currently paused by breakpoint interception.',
-        'inputSchema': {
-          'type': 'object',
-          'properties': {}
-        }
+        'description':
+            'Get all requests/responses currently paused by breakpoint interception.',
+        'inputSchema': {'type': 'object', 'properties': {}},
       },
       {
         'name': 'approve_intercept',
-        'description': 'Approve (release) a paused intercept. Optionally modify the request before releasing.',
+        'description':
+            'Approve (release) a paused intercept. Optionally modify the request before releasing.',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'request_id': {'type': 'string', 'description': 'ID of the paused intercept'},
+            'request_id': {
+              'type': 'string',
+              'description': 'ID of the paused intercept',
+            },
             'modifier': {
               'type': 'object',
-              'description': 'Optional request modifications: method, url, headers, body',
+              'description':
+                  'Optional request modifications: method, url, headers, body',
               'properties': {
                 'method': {'type': 'string'},
                 'url': {'type': 'string'},
                 'headers': {'type': 'object'},
-                'body': {'type': 'string'}
-              }
-            }
+                'body': {'type': 'string'},
+              },
+            },
           },
-          'required': ['request_id']
-        }
+          'required': ['request_id'],
+        },
       },
       {
         'name': 'reject_intercept',
-        'description': 'Reject a paused intercept. Request is aborted, response is dropped.',
+        'description':
+            'Reject a paused intercept. Request is aborted, response is dropped.',
         'inputSchema': {
           'type': 'object',
           'properties': {
-            'request_id': {'type': 'string', 'description': 'ID of the paused intercept'},
-            'reason': {'type': 'string', 'description': 'Rejection reason (optional)'}
+            'request_id': {
+              'type': 'string',
+              'description': 'ID of the paused intercept',
+            },
+            'reason': {
+              'type': 'string',
+              'description': 'Rejection reason (optional)',
+            },
           },
-          'required': ['request_id']
-        }
-      }
+          'required': ['request_id'],
+        },
+      },
     ];
   }
 
@@ -1386,46 +1717,56 @@ Body Encoding Rules:
     // 工具启用检查：被禁用的工具返回错误，不执行
     if (!_isToolEnabled(name)) {
       return {
-        'error': 'Tool is disabled: $name. Enable it in the MCP settings page first.'
+        'error':
+            'Tool is disabled: $name. Enable it in the MCP settings page first.',
       };
     }
     switch (name) {
       case 'set_config':
         var config = await Configuration.instance;
         var changed = false;
-        
+
         if (args.containsKey('system_proxy')) {
-            bool enable = args['system_proxy'];
-            config.enableSystemProxy = enable;
-            if (ProxyServer.current?.isRunning == true) {
-                if (Platforms.isDesktop()) {
-                    // 桌面端：直接调用 setSystemProxyEnable
-                    await ProxyServer.current?.setSystemProxyEnable(enable);
-                } else if (Vpn.isVpnStarted) {
-                    // 移动端：VPN 运行时需要重启 VPN 以应用新的 system_proxy 设置
-                    Vpn.restartVpn("127.0.0.1", ProxyServer.current!.port, config);
-                }
+          bool enable = args['system_proxy'];
+          config.enableSystemProxy = enable;
+          if (ProxyServer.current?.isRunning == true) {
+            if (Platforms.isDesktop()) {
+              // 桌面端：直接调用 setSystemProxyEnable
+              await ProxyServer.current?.setSystemProxyEnable(enable);
+            } else if (Vpn.isVpnStarted) {
+              // 移动端：VPN 运行时需要重启 VPN 以应用新的 system_proxy 设置
+              Vpn.restartVpn("127.0.0.1", ProxyServer.current!.port, config);
             }
-            changed = true;
+          }
+          changed = true;
         }
-        
+
         if (args.containsKey('ssl_capture')) {
-            bool enable = args['ssl_capture'];
-            config.enableSsl = enable;
-            ProxyServer.current?.enableSsl = enable;
-            changed = true;
+          bool enable = args['ssl_capture'];
+          config.enableSsl = enable;
+          ProxyServer.current?.enableSsl = enable;
+          changed = true;
         }
-        
+
         if (changed) await config.flushConfig();
-        return {'status': 'success', 'system_proxy': config.enableSystemProxy, 'ssl_capture': config.enableSsl};
+        return {
+          'status': 'success',
+          'system_proxy': config.enableSystemProxy,
+          'ssl_capture': config.enableSsl,
+        };
 
       case 'add_host_mapping':
         final domain = args['domain'];
         final ip = args['ip'];
         var hostsManager = await HostsManager.instance;
-        await hostsManager.addHosts(HostsItem(host: domain, toAddress: ip, enabled: true));
+        await hostsManager.addHosts(
+          HostsItem(host: domain, toAddress: ip, enabled: true),
+        );
         await hostsManager.flushConfig();
-        return {'status': 'success', 'message': 'Added host mapping: $domain -> $ip'};
+        return {
+          'status': 'success',
+          'message': 'Added host mapping: $domain -> $ip',
+        };
 
       case 'add_response_rewrite':
         final urlPattern = args['url_pattern'];
@@ -1460,12 +1801,15 @@ Body Encoding Rules:
           var rule = RequestRewriteRule(
             type: ruleType,
             url: urlPattern,
-            name: 'MCP: Response $rewriteTypeStr for $urlPattern'
+            name: 'MCP: Response $rewriteTypeStr for $urlPattern',
           );
-          
+
           await manager.addRule(rule, [item]);
           await manager.flushRequestRewriteConfig();
-          return {'status': 'success', 'message': 'Added response rewrite rule for $urlPattern'};
+          return {
+            'status': 'success',
+            'message': 'Added response rewrite rule for $urlPattern',
+          };
         } catch (e) {
           return {'error': 'Failed to add response rewrite rule: $e'};
         }
@@ -1473,35 +1817,35 @@ Body Encoding Rules:
       case 'export_har':
         final limit = (args['limit'] as num?)?.toInt() ?? 100;
         final requestIds = args['request_ids'];
-        
+
         var list = McpBridge().source;
         if (requestIds != null) {
-            list = list.where((r) => requestIds.contains(r.requestId)).toList();
+          list = list.where((r) => requestIds.contains(r.requestId)).toList();
         } else {
-            // 默认导出最近的
-            list = list.reversed.take(limit).toList(); 
+          // 默认导出最近的
+          list = list.reversed.take(limit).toList();
         }
-        
+
         return _generateHar(list);
 
       case 'import_har':
         final content = args['har_content'];
         try {
-            var json = jsonDecode(content);
-            var entries = json['log']['entries'] as List;
-            int count = 0;
-            for (var entry in entries) {
-                var req = _parseHarEntry(entry);
-                if (req != null) {
-                    McpBridge().addRequest(req);
-                    count++;
-                }
+          var json = jsonDecode(content);
+          var entries = json['log']['entries'] as List;
+          int count = 0;
+          for (var entry in entries) {
+            var req = _parseHarEntry(entry);
+            if (req != null) {
+              McpBridge().addRequest(req);
+              count++;
             }
-            return {'status': 'success', 'imported_count': count};
+          }
+          return {'status': 'success', 'imported_count': count};
         } catch (e) {
-            return {'error': 'Failed to import HAR: $e'};
+          return {'error': 'Failed to import HAR: $e'};
         }
-        
+
       case 'search_requests':
         final limit = (args['limit'] as num?)?.toInt() ?? 20;
         final query = args['query'] as String?;
@@ -1515,115 +1859,131 @@ Body Encoding Rules:
         final maxDuration = (args['max_duration'] as num?)?.toInt();
 
         try {
-           // 委托给 McpBridge 的增强过滤方法
-           var list = McpBridge().getRecentRequests(
-             limit: limit,
-             urlFilter: query,
-             method: method,
-             statusCode: statusCode,
-             domain: domain,
-             headerSearch: headerSearch,
-             requestBodySearch: requestBodySearch,
-             responseBodySearch: responseBodySearch,
-             minDuration: minDuration,
-             maxDuration: maxDuration,
-           );
-           
-           return list.map((r) => {
-             'id': r.requestId,
-             'url': r.requestUrl,
-             'method': r.method.name,
-             'statusCode': r.response?.status.code,
-             'contentType': r.response?.headers.contentType,
-             'timestamp': r.requestTime.toIso8601String(),
-             'duration': r.response != null ? r.response!.responseTime.difference(r.requestTime).inMilliseconds : 0
-           }).toList();
-           
+          // 委托给 McpBridge 的增强过滤方法
+          var list = McpBridge().getRecentRequests(
+            limit: limit,
+            urlFilter: query,
+            method: method,
+            statusCode: statusCode,
+            domain: domain,
+            headerSearch: headerSearch,
+            requestBodySearch: requestBodySearch,
+            responseBodySearch: responseBodySearch,
+            minDuration: minDuration,
+            maxDuration: maxDuration,
+          );
+
+          return list
+              .map(
+                (r) => {
+                  'id': r.requestId,
+                  'url': r.requestUrl,
+                  'method': r.method.name,
+                  'statusCode': r.response?.status.code,
+                  'contentType': r.response?.headers.contentType,
+                  'timestamp': r.requestTime.toIso8601String(),
+                  'duration': r.response != null
+                      ? r.response!.responseTime
+                            .difference(r.requestTime)
+                            .inMilliseconds
+                      : 0,
+                },
+              )
+              .toList();
         } catch (e) {
-           return {'error': 'Failed to search requests: $e'};
+          return {'error': 'Failed to search requests: $e'};
         }
 
       case 'generate_code':
         final id = args['request_id'];
         final lang = args['language'];
-        
+
         try {
-            var req = McpBridge().source.firstWhere((r) => r.requestId == id);
-            String code;
-            if (lang == 'python') {
-                code = _generatePythonCode(req);
-            } else if (lang == 'js' || lang == 'javascript') {
-                code = _generateJsCode(req);
-            } else if (lang == 'go' || lang == 'golang') {
-                code = _generateGoCode(req);
-            } else if (lang == 'node' || lang == 'nodejs') {
-                code = _generateNodeJsCode(req);
-            } else {
-                code = _generateCurl(req);
-            }
-            return {'code': code, 'language': lang};
+          var req = McpBridge().source.firstWhere((r) => r.requestId == id);
+          String code;
+          if (lang == 'python') {
+            code = _generatePythonCode(req);
+          } else if (lang == 'js' || lang == 'javascript') {
+            code = _generateJsCode(req);
+          } else if (lang == 'go' || lang == 'golang') {
+            code = _generateGoCode(req);
+          } else if (lang == 'node' || lang == 'nodejs') {
+            code = _generateNodeJsCode(req);
+          } else {
+            code = _generateCurl(req);
+          }
+          return {'code': code, 'language': lang};
         } catch (e) {
-            return {'error': 'Request not found or generation failed: $e'};
+          return {'error': 'Request not found or generation failed: $e'};
         }
 
       case 'get_curl':
         final id = args['request_id'];
         try {
-            var req = McpBridge().source.firstWhere((r) => r.requestId == id);
-            return {'curl': _generateCurl(req)};
+          var req = McpBridge().source.firstWhere((r) => r.requestId == id);
+          return {'curl': _generateCurl(req)};
         } catch (e) {
-            return {'error': 'Request not found'};
+          return {'error': 'Request not found'};
         }
 
       case 'get_request_details':
         final id = args['request_id'];
-        
+
         final req = McpBridge().getRequestById(id);
         if (req == null) return {'error': 'Request not found'};
-        
+
         return McpBridge.requestToJson(req, includeBody: true);
-        
+
       case 'start_proxy':
         int port = (args['port'] as num?)?.toInt() ?? 9099;
         var config = await Configuration.instance;
         config.port = port;
         if (ProxyServer.current?.isRunning == true) {
-             await ProxyServer.current?.stop();
+          await ProxyServer.current?.stop();
         }
         var server = ProxyServer(config);
         // 重新注册 McpBridge 监听器，确保代理重启后仍能接收流量事件
         server.addListener(McpBridge());
         await server.start();
         return {'status': 'started', 'port': port};
-        
+
       case 'stop_proxy':
         await ProxyServer.current?.stop();
         return {'status': 'stopped'};
-        
+
       case 'get_proxy_status':
         final isRunning = ProxyServer.current?.isRunning ?? false;
         final port = ProxyServer.current?.port;
         return {'isRunning': isRunning, 'port': port};
-        
+
       case 'clear_requests':
         // 调用真正的清除方法（对应UI垃圾桶图标）
         final success = McpBridge().clearWithUI();
         if (success) {
-          return {'status': 'cleared', 'message': 'All requests cleared (UI and storage)'};
+          return {
+            'status': 'cleared',
+            'message': 'All requests cleared (UI and storage)',
+          };
         } else {
           // 降级方案：只清空内存容器
           McpBridge().clear();
-          return {'status': 'cleared', 'message': 'Requests cleared from memory only'};
+          return {
+            'status': 'cleared',
+            'message': 'Requests cleared from memory only',
+          };
         }
 
       case 'replay_request':
         final id = args['request_id'];
         try {
           var req = McpBridge().source.firstWhere((r) => r.requestId == id);
-          
+
           var startTime = DateTime.now();
-          var response = await HttpClients.proxyRequest(req, timeout: const Duration(seconds: 30));
-          
+          var response = await HttpClients.proxyRequest(
+            req,
+            timeout: const Duration(seconds: 30),
+          );
+
           return {
             'status': 'success',
             'response': {
@@ -1631,8 +1991,10 @@ Body Encoding Rules:
               'statusText': response.status.reasonPhrase,
               'headers': response.headers.toMap(),
               'body': response.bodyAsString,
-              'duration': response.responseTime.difference(startTime).inMilliseconds
-            }
+              'duration': response.responseTime
+                  .difference(startTime)
+                  .inMilliseconds,
+            },
           };
         } catch (e) {
           return {'error': 'Failed to replay request: $e'};
@@ -1641,13 +2003,16 @@ Body Encoding Rules:
       case 'block_url':
         final urlPattern = args['url_pattern'];
         final blockTypeStr = args['block_type'];
-        
+
         try {
           var manager = await RequestBlockManager.instance;
           var blockType = BlockType.nameOf(blockTypeStr);
           var item = RequestBlockItem(true, urlPattern, blockType);
           manager.addBlockRequest(item);
-          return {'status': 'success', 'message': 'Added block rule for $urlPattern'};
+          return {
+            'status': 'success',
+            'message': 'Added block rule for $urlPattern',
+          };
         } catch (e) {
           return {'error': 'Failed to add block rule: $e'};
         }
@@ -1657,7 +2022,7 @@ Body Encoding Rules:
         final rewriteTypeStr = args['rewrite_type'];
         final key = args['key'];
         final value = args['value'];
-        
+
         try {
           var manager = await RequestRewriteManager.instance;
 
@@ -1686,12 +2051,15 @@ Body Encoding Rules:
           var rule = RequestRewriteRule(
             type: ruleType,
             url: urlPattern,
-            name: 'MCP: $rewriteTypeStr $key'
+            name: 'MCP: $rewriteTypeStr $key',
           );
-          
+
           await manager.addRule(rule, [item]);
           await manager.flushRequestRewriteConfig();
-          return {'status': 'success', 'message': 'Added request rewrite rule for $urlPattern'};
+          return {
+            'status': 'success',
+            'message': 'Added request rewrite rule for $urlPattern',
+          };
         } catch (e) {
           return {'error': 'Failed to add request rewrite rule: $e'};
         }
@@ -1700,12 +2068,12 @@ Body Encoding Rules:
         final name = args['name'];
         final urlPattern = args['url_pattern'];
         final scriptContent = args['script_content'];
-        
+
         try {
           var manager = await ScriptManager.instance;
-          
+
           var existingIndex = manager.list.indexWhere((s) => s.name == name);
-          
+
           if (existingIndex >= 0) {
             var item = manager.list[existingIndex];
             item.urls = [urlPattern];
@@ -1726,12 +2094,16 @@ Body Encoding Rules:
       case 'get_scripts':
         try {
           var manager = await ScriptManager.instance;
-          var scripts = manager.list.map((s) => {
-            'name': s.name,
-            'enabled': s.enabled,
-            'urls': s.urls,
-            'scriptPath': s.scriptPath
-          }).toList();
+          var scripts = manager.list
+              .map(
+                (s) => {
+                  'name': s.name,
+                  'enabled': s.enabled,
+                  'urls': s.urls,
+                  'scriptPath': s.scriptPath,
+                },
+              )
+              .toList();
           return {'scripts': scripts, 'enabled': manager.enabled};
         } catch (e) {
           return {'error': 'Failed to get scripts: $e'};
@@ -1741,13 +2113,13 @@ Body Encoding Rules:
         final limit = (args['limit'] as num?)?.toInt() ?? 20;
         final urlFilter = args['url_filter'] as String?;
         final method = args['method'] as String?;
-        
+
         final requests = McpBridge().getRecentRequests(
           limit: limit,
           urlFilter: urlFilter,
           method: method,
         );
-        
+
         return requests.map((r) => McpBridge.requestToJson(r)).toList();
 
       case 'get_statistics':
@@ -1756,73 +2128,86 @@ Body Encoding Rules:
       case 'compare_requests':
         final id1 = args['request_id_1'];
         final id2 = args['request_id_2'];
-        
+
         final req1 = McpBridge().getRequestById(id1);
         final req2 = McpBridge().getRequestById(id2);
-        
+
         if (req1 == null) return {'error': 'Request 1 not found'};
         if (req2 == null) return {'error': 'Request 2 not found'};
-        
+
         // Header 差异对比
         var reqHeaders1 = req1.headers.toMap();
         var reqHeaders2 = req2.headers.toMap();
         var respHeaders1 = req1.response?.headers.toMap() ?? {};
         var respHeaders2 = req2.response?.headers.toMap() ?? {};
-        
+
         var headerDiff = _compareHeaders(reqHeaders1, reqHeaders2);
         var respHeaderDiff = _compareHeaders(respHeaders1, respHeaders2);
-        
+
         // Body 差异对比（如果是 JSON）
         var bodyDiff = _compareBody(req1.bodyAsString, req2.bodyAsString);
         var respBodyDiff = _compareBody(
           req1.response?.bodyAsString ?? '',
-          req2.response?.bodyAsString ?? ''
+          req2.response?.bodyAsString ?? '',
         );
-        
+
         return {
           'request_1': McpBridge.requestToJson(req1, includeBody: true),
           'request_2': McpBridge.requestToJson(req2, includeBody: true),
           'comparison': {
             'same_url': req1.requestUrl == req2.requestUrl,
             'same_method': req1.method == req2.method,
-            'same_status': req1.response?.status.code == req2.response?.status.code,
-            'duration_diff': (req1.response?.responseTime.difference(req1.requestTime).inMilliseconds ?? 0) - 
-                            (req2.response?.responseTime.difference(req2.requestTime).inMilliseconds ?? 0),
+            'same_status':
+                req1.response?.status.code == req2.response?.status.code,
+            'duration_diff':
+                (req1.response?.responseTime
+                        .difference(req1.requestTime)
+                        .inMilliseconds ??
+                    0) -
+                (req2.response?.responseTime
+                        .difference(req2.requestTime)
+                        .inMilliseconds ??
+                    0),
             'request_header_diff': headerDiff,
             'response_header_diff': respHeaderDiff,
             'request_body_diff': bodyDiff,
             'response_body_diff': respBodyDiff,
-          }
+          },
         };
 
       case 'find_similar_requests':
         final refId = args['request_id'] as String;
         final limit = (args['limit'] as num?)?.toInt() ?? 10;
-        
+
         final refReq = McpBridge().getRequestById(refId);
         if (refReq == null) return {'error': 'Reference request not found'};
-        
+
         try {
           var refUri = Uri.parse(refReq.requestUrl);
           var refPath = refUri.path;
-          
+
           // 查找相似的请求（相同路径模式和方法）
-          var similar = McpBridge().source.where((req) {
-            if (req.requestId == refId) return false; // 排除自己
-            if (req.method != refReq.method) return false; // 方法必须相同
-            
-            try {
-              var uri = Uri.parse(req.requestUrl);
-              // 相同域名和路径
-              return uri.host == refUri.host && uri.path == refPath;
-            } catch (e) {
-              return false;
-            }
-          }).take(limit).toList();
-          
+          var similar = McpBridge().source
+              .where((req) {
+                if (req.requestId == refId) return false; // 排除自己
+                if (req.method != refReq.method) return false; // 方法必须相同
+
+                try {
+                  var uri = Uri.parse(req.requestUrl);
+                  // 相同域名和路径
+                  return uri.host == refUri.host && uri.path == refPath;
+                } catch (e) {
+                  return false;
+                }
+              })
+              .take(limit)
+              .toList();
+
           return {
             'reference': McpBridge.requestToJson(refReq),
-            'similar_requests': similar.map((r) => McpBridge.requestToJson(r)).toList(),
+            'similar_requests': similar
+                .map((r) => McpBridge.requestToJson(r))
+                .toList(),
             'count': similar.length,
           };
         } catch (e) {
@@ -1831,36 +2216,40 @@ Body Encoding Rules:
 
       case 'extract_api_endpoints':
         final domainFilter = args['domain_filter'];
-        
+
         try {
           var requests = McpBridge().source;
           var endpoints = <String, ApiEndpoint>{};
-          
+
           for (var req in requests) {
             try {
               var uri = Uri.parse(req.requestUrl);
-              
+
               // 域名过滤
               if (domainFilter != null && !uri.host.contains(domainFilter)) {
                 continue;
               }
-              
+
               var key = '${req.method.name} ${uri.host}${uri.path}';
-              
+
               if (!endpoints.containsKey(key)) {
-                endpoints[key] = ApiEndpoint(req.method.name, uri.host, uri.path);
+                endpoints[key] = ApiEndpoint(
+                  req.method.name,
+                  uri.host,
+                  uri.path,
+                );
               }
-              
+
               endpoints[key]!.addRequest(req);
             } catch (e) {
               // 忽略解析失败的 URL
             }
           }
-          
+
           // 转换为列表并按请求数量排序
           var result = endpoints.values.toList();
           result.sort((a, b) => b.count.compareTo(a.count));
-          
+
           return {
             'endpoints': result.map((e) => e.toJson()).toList(),
             'total_unique': result.length,
@@ -1875,7 +2264,9 @@ Body Encoding Rules:
         try {
           final requestId = args['request_id'] as String?;
           final requests = requestId != null
-              ? McpBridge().source.where((r) => r.requestId == requestId).toList()
+              ? McpBridge().source
+                    .where((r) => r.requestId == requestId)
+                    .toList()
               : McpBridge().source.take(100).toList();
 
           final findings = <Map<String, dynamic>>[];
@@ -1887,12 +2278,21 @@ Body Encoding Rules:
                 'request_id': req.requestId,
                 'url': req.requestUrl,
                 'scheme': authHeader.split(' ').first,
-                'preview': authHeader.length > 40 ? '${authHeader.substring(0, 40)}...' : authHeader,
+                'preview': authHeader.length > 40
+                    ? '${authHeader.substring(0, 40)}...'
+                    : authHeader,
               });
             }
 
             // 常见 Token 头
-            for (var header in ['x-api-key', 'api-key', 'x-token', 'token', 'x-access-token', 'x-auth-token']) {
+            for (var header in [
+              'x-api-key',
+              'api-key',
+              'x-token',
+              'token',
+              'x-access-token',
+              'x-auth-token',
+            ]) {
               var val = req.headers.get(header);
               if (val != null && val.isNotEmpty) {
                 findings.add({
@@ -1900,7 +2300,9 @@ Body Encoding Rules:
                   'request_id': req.requestId,
                   'url': req.requestUrl,
                   'header': header,
-                  'preview': val.length > 40 ? '${val.substring(0, 40)}...' : val,
+                  'preview': val.length > 40
+                      ? '${val.substring(0, 40)}...'
+                      : val,
                 });
               }
             }
@@ -1908,7 +2310,14 @@ Body Encoding Rules:
             // URL 中的 token 参数
             try {
               var uri = Uri.parse(req.requestUrl);
-              for (var param in ['token', 'access_token', 'api_key', 'apikey', 'sign', 'sig']) {
+              for (var param in [
+                'token',
+                'access_token',
+                'api_key',
+                'apikey',
+                'sign',
+                'sig',
+              ]) {
                 if (uri.queryParameters.containsKey(param)) {
                   var val = uri.queryParameters[param]!;
                   findings.add({
@@ -1916,7 +2325,9 @@ Body Encoding Rules:
                     'request_id': req.requestId,
                     'url': req.requestUrl,
                     'param': param,
-                    'preview': val.length > 40 ? '${val.substring(0, 40)}...' : val,
+                    'preview': val.length > 40
+                        ? '${val.substring(0, 40)}...'
+                        : val,
                   });
                 }
               }
@@ -1928,13 +2339,18 @@ Body Encoding Rules:
               var cookies = _parseCookies(cookieHeader);
               for (var c in cookies) {
                 var name = (c['name'] ?? '').toLowerCase();
-                if (name.contains('session') || name.contains('token') || name.contains('auth') || name.contains('jwt')) {
+                if (name.contains('session') ||
+                    name.contains('token') ||
+                    name.contains('auth') ||
+                    name.contains('jwt')) {
                   findings.add({
                     'type': 'cookie',
                     'request_id': req.requestId,
                     'url': req.requestUrl,
                     'cookie_name': c['name'],
-                    'preview': (c['value'] ?? '').length > 40 ? '${c['value']!.substring(0, 40)}...' : c['value'],
+                    'preview': (c['value'] ?? '').length > 40
+                        ? '${c['value']!.substring(0, 40)}...'
+                        : c['value'],
                   });
                 }
               }
@@ -1957,19 +2373,47 @@ Body Encoding Rules:
           final requestId = args['request_id'] as String?;
           final searchBody = args['search_body'] as bool? ?? true;
           final requests = requestId != null
-              ? McpBridge().source.where((r) => r.requestId == requestId).toList()
+              ? McpBridge().source
+                    .where((r) => r.requestId == requestId)
+                    .toList()
               : McpBridge().source.take(100).toList();
 
           // 敏感模式列表（非 raw 字符串，正则中 \\ 表示 \）
           final patterns = <Map<String, String>>[
-            {'name': 'password', 'regex': "(?i)(password|passwd|pwd)\\s*[=:]\\s*[\"']?([^\"'&\\s,;]{4,})"},
-            {'name': 'api_key', 'regex': "(?i)(api[_-]?key|apikey)\\s*[=:]\\s*[\"']?([^\"'&\\s,;]{8,})"},
-            {'name': 'secret', 'regex': "(?i)(secret|client[_-]?secret)\\s*[=:]\\s*[\"']?([^\"'&\\s,;]{8,})"},
-            {'name': 'token', 'regex': "(?i)(access[_-]?token|auth[_-]?token|bearer)\\s*[=:]\\s*[\"']?([^\"'&\\s,;]{8,})"},
-            {'name': 'private_key', 'regex': '-----BEGIN [A-Z ]*PRIVATE KEY-----'},
+            {
+              'name': 'password',
+              'regex':
+                  "(?i)(password|passwd|pwd)\\s*[=:]\\s*[\"']?([^\"'&\\s,;]{4,})",
+            },
+            {
+              'name': 'api_key',
+              'regex':
+                  "(?i)(api[_-]?key|apikey)\\s*[=:]\\s*[\"']?([^\"'&\\s,;]{8,})",
+            },
+            {
+              'name': 'secret',
+              'regex':
+                  "(?i)(secret|client[_-]?secret)\\s*[=:]\\s*[\"']?([^\"'&\\s,;]{8,})",
+            },
+            {
+              'name': 'token',
+              'regex':
+                  "(?i)(access[_-]?token|auth[_-]?token|bearer)\\s*[=:]\\s*[\"']?([^\"'&\\s,;]{8,})",
+            },
+            {
+              'name': 'private_key',
+              'regex': '-----BEGIN [A-Z ]*PRIVATE KEY-----',
+            },
             {'name': 'phone', 'regex': r'(?<!\d)1[3-9]\d{9}(?!\d)'},
-            {'name': 'id_card', 'regex': r'(?<!\d)[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?!\d)'},
-            {'name': 'email', 'regex': r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'},
+            {
+              'name': 'id_card',
+              'regex':
+                  r'(?<!\d)[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?!\d)',
+            },
+            {
+              'name': 'email',
+              'regex': r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
+            },
           ];
 
           final findings = <Map<String, dynamic>>[];
@@ -1986,7 +2430,8 @@ Body Encoding Rules:
                         'location': 'request_header',
                         'request_id': req.requestId,
                         'url': req.requestUrl,
-                        'detail': '$key: ${v.length > 60 ? v.substring(0, 60) : v}',
+                        'detail':
+                            '$key: ${v.length > 60 ? v.substring(0, 60) : v}',
                       });
                     }
                   } catch (_) {}
@@ -2008,7 +2453,9 @@ Body Encoding Rules:
                         'location': 'request_body',
                         'request_id': req.requestId,
                         'url': req.requestUrl,
-                        'detail': match.group(0)!.length > 80 ? match.group(0)!.substring(0, 80) : match.group(0),
+                        'detail': match.group(0)!.length > 80
+                            ? match.group(0)!.substring(0, 80)
+                            : match.group(0),
                       });
                     }
                   } catch (_) {}
@@ -2055,7 +2502,9 @@ Body Encoding Rules:
                 if (!cookieMap.containsKey(name)) {
                   cookieMap[name] = {
                     'name': name,
-                    'value_preview': value.length > 30 ? '${value.substring(0, 30)}...' : value,
+                    'value_preview': value.length > 30
+                        ? '${value.substring(0, 30)}...'
+                        : value,
                     'domains': <String>[],
                     'request_count': 0,
                     'http_only': false,
@@ -2068,7 +2517,8 @@ Body Encoding Rules:
                     (cookieMap[name]!['domains'] as List).add(host);
                   }
                 } catch (_) {}
-                cookieMap[name]!['request_count'] = (cookieMap[name]!['request_count'] as int) + 1;
+                cookieMap[name]!['request_count'] =
+                    (cookieMap[name]!['request_count'] as int) + 1;
               }
             }
 
@@ -2088,25 +2538,37 @@ Body Encoding Rules:
                 if (!cookieMap.containsKey(name)) {
                   cookieMap[name] = {
                     'name': name,
-                    'value_preview': value.length > 30 ? '${value.substring(0, 30)}...' : value,
+                    'value_preview': value.length > 30
+                        ? '${value.substring(0, 30)}...'
+                        : value,
                     'domains': <String>[],
                     'request_count': 0,
                     'http_only': false,
                     'secure': false,
                   };
                 }
-                cookieMap[name]!['http_only'] = parts.any((p) => p.trim().toLowerCase() == 'httponly');
-                cookieMap[name]!['secure'] = parts.any((p) => p.trim().toLowerCase() == 'secure');
-                var expires = parts.firstWhere((p) => p.trim().toLowerCase().startsWith('expires='), orElse: () => '');
+                cookieMap[name]!['http_only'] = parts.any(
+                  (p) => p.trim().toLowerCase() == 'httponly',
+                );
+                cookieMap[name]!['secure'] = parts.any(
+                  (p) => p.trim().toLowerCase() == 'secure',
+                );
+                var expires = parts.firstWhere(
+                  (p) => p.trim().toLowerCase().startsWith('expires='),
+                  orElse: () => '',
+                );
                 if (expires.isNotEmpty) {
-                  cookieMap[name]!['expires'] = expires.trim().substring('expires='.length);
+                  cookieMap[name]!['expires'] = expires.trim().substring(
+                    'expires='.length,
+                  );
                 }
               }
             }
           }
 
           return {
-            'domain': domain ?? (requestId != null ? 'request_$requestId' : 'all'),
+            'domain':
+                domain ?? (requestId != null ? 'request_$requestId' : 'all'),
             'total_cookies': cookieMap.length,
             'cookies': cookieMap.values.toList(),
           };
@@ -2143,7 +2605,9 @@ Body Encoding Rules:
             if (res != null) {
               var code = res.status.code;
               statusCodes[code] = (statusCodes[code] ?? 0) + 1;
-              totalDuration += res.responseTime.difference(req.requestTime).inMilliseconds;
+              totalDuration += res.responseTime
+                  .difference(req.requestTime)
+                  .inMilliseconds;
               if (code >= 400) errorCount++;
             }
           }
@@ -2153,7 +2617,9 @@ Body Encoding Rules:
             'total_requests': requests.length,
             'methods': methods,
             'status_codes': statusCodes,
-            'avg_duration_ms': requests.isEmpty ? 0 : (totalDuration / requests.length).round(),
+            'avg_duration_ms': requests.isEmpty
+                ? 0
+                : (totalDuration / requests.length).round(),
             'error_count': errorCount,
             'total_size_bytes': totalSize,
           };
@@ -2226,7 +2692,10 @@ Body Encoding Rules:
         try {
           var clickableOnly = args['clickable_only'] as bool? ?? false;
           var packageFilter = args['package_filter'] as String?;
-          var uiJson = await McpScreen.dumpUi(clickableOnly: clickableOnly, packageFilter: packageFilter);
+          var uiJson = await McpScreen.dumpUi(
+            clickableOnly: clickableOnly,
+            packageFilter: packageFilter,
+          );
           return {'ui': jsonDecode(uiJson)};
         } catch (e) {
           return {'error': 'Failed to dump UI: $e'};
@@ -2269,7 +2738,13 @@ Body Encoding Rules:
           var x2 = (args['x2'] as num).toInt();
           var y2 = (args['y2'] as num).toInt();
           var duration = (args['duration'] as num?)?.toInt() ?? 300;
-          var success = await McpScreen.swipe(x1, y1, x2, y2, duration: duration);
+          var success = await McpScreen.swipe(
+            x1,
+            y1,
+            x2,
+            y2,
+            duration: duration,
+          );
           return {'success': success};
         } catch (e) {
           return {'error': 'Failed to swipe: $e'};
@@ -2328,8 +2803,14 @@ Body Encoding Rules:
         try {
           var command = args['command'] as String;
           var useSu = args['use_su'] as bool? ?? false;
+          var mode = args['mode'] as String?;
           var timeoutMs = (args['timeout_ms'] as num?)?.toInt() ?? 10000;
-          return await McpScreen.shell(command, useSu: useSu, timeoutMs: timeoutMs);
+          return await McpScreen.shell(
+            command,
+            useSu: useSu,
+            mode: mode,
+            timeoutMs: timeoutMs,
+          );
         } catch (e) {
           return {'error': 'Failed to execute shell command: $e'};
         }
@@ -2359,11 +2840,14 @@ Body Encoding Rules:
             method: method,
           );
           manager.add(rule);
-          _notifyConfigChanged('breakpoint', {'action': 'add', 'url': urlPattern});
+          _notifyConfigChanged('breakpoint', {
+            'action': 'add',
+            'url': urlPattern,
+          });
           return {
             'status': 'success',
             'message': 'Added breakpoint rule for $urlPattern',
-            'rule': rule.toJson()
+            'rule': rule.toJson(),
           };
         } catch (e) {
           return {'error': 'Failed to add breakpoint rule: $e'};
@@ -2375,10 +2859,13 @@ Body Encoding Rules:
           var manager = await RequestBreakpointManager.instance;
           manager.list.removeWhere((r) => r.url == urlPattern);
           await manager.save();
-          _notifyConfigChanged('breakpoint', {'action': 'remove', 'url': urlPattern});
+          _notifyConfigChanged('breakpoint', {
+            'action': 'remove',
+            'url': urlPattern,
+          });
           return {
             'status': 'success',
-            'message': 'Removed breakpoint rule for $urlPattern'
+            'message': 'Removed breakpoint rule for $urlPattern',
           };
         } catch (e) {
           return {'error': 'Failed to remove breakpoint rule: $e'};
@@ -2402,11 +2889,11 @@ Body Encoding Rules:
           var manager = await RequestBreakpointManager.instance;
           manager.enabled = enabled;
           await manager.save();
-          _notifyConfigChanged('breakpoint', {'action': 'toggle', 'enabled': enabled});
-          return {
-            'status': 'success',
-            'enabled': manager.enabled,
-          };
+          _notifyConfigChanged('breakpoint', {
+            'action': 'toggle',
+            'enabled': enabled,
+          });
+          return {'status': 'success', 'enabled': manager.enabled};
         } catch (e) {
           return {'error': 'Failed to toggle breakpoint: $e'};
         }
@@ -2414,11 +2901,9 @@ Body Encoding Rules:
       // ==================== MCP 拦截队列工具（2.x 增强） ====================
       case 'get_pending_intercepts':
         try {
-          final items = RequestBreakpointInterceptor.instance.pendingIntercepts();
-          return {
-            'count': items.length,
-            'intercepts': items,
-          };
+          final items = RequestBreakpointInterceptor.instance
+              .pendingIntercepts();
+          return {'count': items.length, 'intercepts': items};
         } catch (e) {
           return {'error': 'Failed to get pending intercepts: $e'};
         }
@@ -2433,8 +2918,10 @@ Body Encoding Rules:
             // 请求拦截：可携带 modifier 修改请求后放行
             if (modifier != null && modifier.isNotEmpty) {
               // 通过 toJson/fromJson 重建并应用修改
-              final original = interceptor.pendingIntercepts()
-                  .firstWhere((e) => e['id'] == requestId, orElse: () => {});
+              final original = interceptor.pendingIntercepts().firstWhere(
+                (e) => e['id'] == requestId,
+                orElse: () => {},
+              );
               if (original.isNotEmpty) {
                 final req = interceptor.getPausedRequest(requestId);
                 if (req != null) {
@@ -2451,7 +2938,9 @@ Body Encoding Rules:
                     final normalized = <String, List<String>>{};
                     rawHeaders.forEach((k, v) {
                       if (v is List) {
-                        normalized[k.toString()] = v.map((e) => e.toString()).toList();
+                        normalized[k.toString()] = v
+                            .map((e) => e.toString())
+                            .toList();
                       } else {
                         normalized[k.toString()] = [v.toString()];
                       }
@@ -2463,7 +2952,12 @@ Body Encoding Rules:
                   }
                   final modified = HttpRequest.fromJson(json);
                   interceptor.resumeRequest(requestId, modified);
-                  return {'status': 'approved', 'id': requestId, 'type': 'request', 'modified': true};
+                  return {
+                    'status': 'approved',
+                    'id': requestId,
+                    'type': 'request',
+                    'modified': true,
+                  };
                 }
               }
             }
@@ -2492,11 +2986,21 @@ Body Encoding Rules:
           if (interceptor.isResponsePaused(requestId)) {
             // 响应拦截：拒绝即丢弃响应
             interceptor.resumeResponse(requestId, null);
-            return {'status': 'rejected', 'id': requestId, 'type': 'response', 'reason': reason};
+            return {
+              'status': 'rejected',
+              'id': requestId,
+              'type': 'response',
+              'reason': reason,
+            };
           } else if (interceptor.isRequestPaused(requestId)) {
             // 请求拦截：拒绝即中止请求（resume null 会 abort）
             interceptor.resumeRequest(requestId, null);
-            return {'status': 'rejected', 'id': requestId, 'type': 'request', 'reason': reason};
+            return {
+              'status': 'rejected',
+              'id': requestId,
+              'type': 'request',
+              'reason': reason,
+            };
           }
           return {'error': 'No pending intercept with id: $requestId'};
         } catch (e) {
@@ -2515,7 +3019,10 @@ Body Encoding Rules:
           // Validate profile exists
           var profile = manager.findProfile(profileId);
           if (profile == null) {
-            return {'error': 'Profile not found: $profileId. Available: ${manager.allProfiles.map((p) => p.id).join(", ")}'};
+            return {
+              'error':
+                  'Profile not found: $profileId. Available: ${manager.allProfiles.map((p) => p.id).join(", ")}',
+            };
           }
 
           var rule = NetworkConditionRule(
@@ -2525,10 +3032,14 @@ Body Encoding Rules:
           );
           manager.rules.add(rule);
           await manager.flushConfig();
-          _notifyConfigChanged('weak_network', {'action': 'add_rule', 'url': urlPattern});
+          _notifyConfigChanged('weak_network', {
+            'action': 'add_rule',
+            'url': urlPattern,
+          });
           return {
             'status': 'success',
-            'message': 'Added weak network rule for $urlPattern with profile $profileId',
+            'message':
+                'Added weak network rule for $urlPattern with profile $profileId',
             'rule': rule.toJson(),
           };
         } catch (e) {
@@ -2540,8 +3051,10 @@ Body Encoding Rules:
           final name = args['name'] as String;
           final uploadKbps = (args['upload_kbps'] as num?)?.toInt();
           final downloadKbps = (args['download_kbps'] as num?)?.toInt();
-          final requestLatencyMs = (args['request_latency_ms'] as num?)?.toInt() ?? 0;
-          final responseLatencyMs = (args['response_latency_ms'] as num?)?.toInt() ?? 0;
+          final requestLatencyMs =
+              (args['request_latency_ms'] as num?)?.toInt() ?? 0;
+          final responseLatencyMs =
+              (args['response_latency_ms'] as num?)?.toInt() ?? 0;
           final jitterMs = (args['jitter_ms'] as num?)?.toInt() ?? 0;
           final lossRate = (args['loss_rate'] as num?)?.toDouble() ?? 0.0;
           final offline = args['offline'] as bool? ?? false;
@@ -2559,7 +3072,10 @@ Body Encoding Rules:
             offline: offline,
           );
           await manager.upsertCustomProfile(profile);
-          _notifyConfigChanged('weak_network', {'action': 'add_profile', 'name': name});
+          _notifyConfigChanged('weak_network', {
+            'action': 'add_profile',
+            'name': name,
+          });
           return {
             'status': 'success',
             'message': 'Created custom network profile: $name',
@@ -2575,8 +3091,12 @@ Body Encoding Rules:
           return {
             'enabled': manager.enabled,
             'rules': manager.rules.map((r) => r.toJson()).toList(),
-            'builtin_profiles': NetworkConditionProfile.builtin.map((p) => p.toJson()).toList(),
-            'custom_profiles': manager.customProfiles.map((p) => p.toJson()).toList(),
+            'builtin_profiles': NetworkConditionProfile.builtin
+                .map((p) => p.toJson())
+                .toList(),
+            'custom_profiles': manager.customProfiles
+                .map((p) => p.toJson())
+                .toList(),
             'total_rules': manager.rules.length,
           };
         } catch (e) {
@@ -2589,10 +3109,13 @@ Body Encoding Rules:
           var manager = await NetworkConditionManager.instance;
           manager.rules.removeWhere((r) => r.url == urlPattern);
           await manager.flushConfig();
-          _notifyConfigChanged('weak_network', {'action': 'remove_rule', 'url': urlPattern});
+          _notifyConfigChanged('weak_network', {
+            'action': 'remove_rule',
+            'url': urlPattern,
+          });
           return {
             'status': 'success',
-            'message': 'Removed weak network rule for $urlPattern'
+            'message': 'Removed weak network rule for $urlPattern',
           };
         } catch (e) {
           return {'error': 'Failed to remove weak network rule: $e'};
@@ -2604,11 +3127,11 @@ Body Encoding Rules:
           var manager = await NetworkConditionManager.instance;
           manager.enabled = enabled;
           await manager.flushConfig();
-          _notifyConfigChanged('weak_network', {'action': 'toggle', 'enabled': enabled});
-          return {
-            'status': 'success',
-            'enabled': manager.enabled,
-          };
+          _notifyConfigChanged('weak_network', {
+            'action': 'toggle',
+            'enabled': enabled,
+          });
+          return {'status': 'success', 'enabled': manager.enabled};
         } catch (e) {
           return {'error': 'Failed to toggle weak network: $e'};
         }
@@ -2621,7 +3144,9 @@ Body Encoding Rules:
             'enabled': manager.enabled,
             'active_id': manager.activeId,
             'active_name': manager.active?.name,
-            'environments': manager.environments.map((e) => e.toJson()).toList(),
+            'environments': manager.environments
+                .map((e) => e.toJson())
+                .toList(),
             'flat_variables': manager.flatMap(),
             'total_environments': manager.environments.length,
           };
@@ -2668,11 +3193,16 @@ Body Encoding Rules:
               existing.value = value;
               existing.enabled = enabled;
             } else {
-              target.variables.add(EnvironmentVariable(key: key, value: value, enabled: enabled));
+              target.variables.add(
+                EnvironmentVariable(key: key, value: value, enabled: enabled),
+              );
             }
           }
           await manager.flushConfig();
-          _notifyConfigChanged('environment', {'action': 'set_variable', 'key': key});
+          _notifyConfigChanged('environment', {
+            'action': 'set_variable',
+            'key': key,
+          });
           return {
             'status': 'success',
             'message': value == null
@@ -2688,13 +3218,13 @@ Body Encoding Rules:
         try {
           final name = args['name'] as String;
           var manager = await EnvironmentManager.instance;
-          var env = Environment(
-            id: RandomUtil.randomString(8),
-            name: name,
-          );
+          var env = Environment(id: RandomUtil.randomString(8), name: name);
           manager.upsertEnvironment(env);
           await manager.flushConfig();
-          _notifyConfigChanged('environment', {'action': 'create', 'name': name});
+          _notifyConfigChanged('environment', {
+            'action': 'create',
+            'name': name,
+          });
           return {
             'status': 'success',
             'message': 'Created environment: $name',
@@ -2723,7 +3253,10 @@ Body Encoding Rules:
             manager.setActive(environmentId);
           }
           await manager.flushConfig();
-          _notifyConfigChanged('environment', {'action': 'set_active', 'active_id': manager.activeId});
+          _notifyConfigChanged('environment', {
+            'action': 'set_active',
+            'active_id': manager.activeId,
+          });
           return {
             'status': 'success',
             'active_id': manager.activeId,
@@ -2745,10 +3278,13 @@ Body Encoding Rules:
 
           manager.removeEnvironment(environmentId);
           await manager.flushConfig();
-          _notifyConfigChanged('environment', {'action': 'remove', 'environment_id': environmentId});
+          _notifyConfigChanged('environment', {
+            'action': 'remove',
+            'environment_id': environmentId,
+          });
           return {
             'status': 'success',
-            'message': 'Removed environment: $environmentId'
+            'message': 'Removed environment: $environmentId',
           };
         } catch (e) {
           return {'error': 'Failed to remove environment: $e'};
@@ -2760,11 +3296,11 @@ Body Encoding Rules:
           var manager = await EnvironmentManager.instance;
           manager.setEnabled(enabled);
           await manager.flushConfig();
-          _notifyConfigChanged('environment', {'action': 'toggle', 'enabled': enabled});
-          return {
-            'status': 'success',
-            'enabled': manager.enabled,
-          };
+          _notifyConfigChanged('environment', {
+            'action': 'toggle',
+            'enabled': enabled,
+          });
+          return {'status': 'success', 'enabled': manager.enabled};
         } catch (e) {
           return {'error': 'Failed to toggle environment variables: $e'};
         }
@@ -2777,21 +3313,21 @@ Body Encoding Rules:
   String _generateCurl(HttpRequest req) {
     var sb = StringBuffer();
     sb.write("curl -X ${req.method.name} '${req.requestUrl}'");
-    
+
     req.headers.forEach((key, values) {
-        for (var v in values) {
-            sb.write(" -H '$key: $v'");
-        }
+      for (var v in values) {
+        sb.write(" -H '$key: $v'");
+      }
     });
-    
+
     var body = req.bodyAsString;
     if (body.isNotEmpty) {
-        var escapedBody = body.replaceAll("'", "'\\''");
-        sb.write(" -d '$escapedBody'");
+      var escapedBody = body.replaceAll("'", "'\\''");
+      sb.write(" -d '$escapedBody'");
     }
-    
+
     if (req.headers.contentEncoding == 'gzip') {
-         sb.write(" --compressed");
+      sb.write(" --compressed");
     }
     return sb.toString();
   }
@@ -2802,39 +3338,49 @@ Body Encoding Rules:
     sb.writeln();
     sb.writeln("url = \"${req.requestUrl}\"");
     sb.writeln();
-    
+
     sb.writeln("headers = {");
     req.headers.forEach((key, values) {
-       // Python requests usually takes the first value if multiple, or list
-       var val = values.length == 1 ? values.first : values.join(','); 
-       // Escape quotes
-       val = val.replaceAll('"', '\\"');
-       sb.writeln("    \"$key\": \"$val\",");
+      // Python requests usually takes the first value if multiple, or list
+      var val = values.length == 1 ? values.first : values.join(',');
+      // Escape quotes
+      val = val.replaceAll('"', '\\"');
+      sb.writeln("    \"$key\": \"$val\",");
     });
     sb.writeln("}");
     sb.writeln();
-    
+
     var body = req.bodyAsString;
     if (body.isNotEmpty) {
-        // Try to pretty print JSON if possible
-        try {
-            // Check if it's json
-            if (req.headers.contentType.contains("json")) {
-                 // Use json parameter
-                 sb.writeln("payload = $body"); // Assume body is valid json string, maybe problematic if not formatted
-                 // Safe way: treat as string then json.loads? Or just raw string
-                 // Let's just use data for now to be safe
-                 sb.writeln("response = requests.request(\"${req.method.name}\", url, headers=headers, data='''$body''')");
-            } else {
-                 sb.writeln("response = requests.request(\"${req.method.name}\", url, headers=headers, data='''$body''')");
-            }
-        } catch(e) {
-             sb.writeln("response = requests.request(\"${req.method.name}\", url, headers=headers, data='''$body''')");
+      // Try to pretty print JSON if possible
+      try {
+        // Check if it's json
+        if (req.headers.contentType.contains("json")) {
+          // Use json parameter
+          sb.writeln(
+            "payload = $body",
+          ); // Assume body is valid json string, maybe problematic if not formatted
+          // Safe way: treat as string then json.loads? Or just raw string
+          // Let's just use data for now to be safe
+          sb.writeln(
+            "response = requests.request(\"${req.method.name}\", url, headers=headers, data='''$body''')",
+          );
+        } else {
+          sb.writeln(
+            "response = requests.request(\"${req.method.name}\", url, headers=headers, data='''$body''')",
+          );
         }
+      } catch (e) {
+        sb.writeln(
+          "response = requests.request(\"${req.method.name}\", url, headers=headers, data='''$body''')",
+        );
+      }
     } else {
-        sb.writeln("response = requests.request(\"${req.method.name}\", url, headers=headers)");
+      sb.writeln(
+        "response = requests.request(\"${req.method.name}\", url, headers=headers)",
+      );
     }
-    
+
     sb.writeln();
     sb.writeln("print(response.text)");
     return sb.toString();
@@ -2847,20 +3393,20 @@ Body Encoding Rules:
     sb.writeln("  method: \"${req.method.name}\",");
     sb.writeln("  headers: {");
     req.headers.forEach((key, values) {
-        var val = values.join(',');
-        val = val.replaceAll('"', '\\"');
-        sb.writeln("    \"$key\": \"$val\",");
+      var val = values.join(',');
+      val = val.replaceAll('"', '\\"');
+      sb.writeln("    \"$key\": \"$val\",");
     });
     sb.writeln("  },");
-    
+
     var body = req.bodyAsString;
     if (body.isNotEmpty) {
-        // 转义 backtick 和 ${} 防止模板字符串注入
-        var escapedBody = body
-            .replaceAll('\\', '\\\\')
-            .replaceAll('`', '\\`')
-            .replaceAll('\$', '\\\$');
-        sb.writeln("  body: `$escapedBody`");
+      // 转义 backtick 和 ${} 防止模板字符串注入
+      var escapedBody = body
+          .replaceAll('\\', '\\\\')
+          .replaceAll('`', '\\`')
+          .replaceAll('\$', '\\\$');
+      sb.writeln("  body: `$escapedBody`");
     }
     sb.writeln("};");
     sb.writeln();
@@ -2889,10 +3435,10 @@ Body Encoding Rules:
 
     var body = req.bodyAsString;
     if (body.isNotEmpty) {
-        var escapedBody = body.replaceAll('"', '\\"').replaceAll('\n', '\\n');
-        sb.writeln("    payload := strings.NewReader(\"$escapedBody\")");
+      var escapedBody = body.replaceAll('"', '\\"').replaceAll('\n', '\\n');
+      sb.writeln("    payload := strings.NewReader(\"$escapedBody\")");
     } else {
-        sb.writeln("    var payload io.Reader");
+      sb.writeln("    var payload io.Reader");
     }
     sb.writeln();
     sb.writeln("    req, err := http.NewRequest(method, url, payload)");
@@ -2901,10 +3447,10 @@ Body Encoding Rules:
     sb.writeln("        return");
     sb.writeln("    }");
     req.headers.forEach((key, values) {
-        for (var v in values) {
-            var val = v.replaceAll('"', '\\"');
-            sb.writeln("    req.Header.Add(\"$key\", \"$val\")");
-        }
+      for (var v in values) {
+        var val = v.replaceAll('"', '\\"');
+        sb.writeln("    req.Header.Add(\"$key\", \"$val\")");
+      }
     });
     sb.writeln();
     sb.writeln("    res, err := http.DefaultClient.Do(req)");
@@ -2933,9 +3479,9 @@ Body Encoding Rules:
     sb.writeln("  path: url.pathname + url.search,");
     sb.writeln("  headers: {");
     req.headers.forEach((key, values) {
-        var val = values.join(',');
-        val = val.replaceAll('"', '\\"');
-        sb.writeln("    \"$key\": \"$val\",");
+      var val = values.join(',');
+      val = val.replaceAll('"', '\\"');
+      sb.writeln("    \"$key\": \"$val\",");
     });
     sb.writeln("  }");
     sb.writeln("};");
@@ -2948,8 +3494,8 @@ Body Encoding Rules:
     sb.writeln("});");
     var body = req.bodyAsString;
     if (body.isNotEmpty) {
-        var escapedBody = body.replaceAll('`', '\\`').replaceAll('\$', '\\\$');
-        sb.writeln("req.write(`$escapedBody`);");
+      var escapedBody = body.replaceAll('`', '\\`').replaceAll('\$', '\\\$');
+      sb.writeln("req.write(`$escapedBody`);");
     }
     sb.writeln("req.end();");
     return sb.toString();
@@ -2958,147 +3504,172 @@ Body Encoding Rules:
   Map<String, dynamic> _generateHar(Iterable<HttpRequest> requests) {
     var entries = [];
     for (var req in requests) {
-        var response = req.response;
-        var duration = response != null ? response.responseTime.difference(req.requestTime).inMilliseconds : 0;
-        
-        entries.add({
-            "startedDateTime": req.requestTime.toIso8601String(),
-            "time": duration,
-            "request": {
-                "method": req.method.name,
-                "url": req.requestUrl,
-                "httpVersion": req.protocolVersion,
-                "cookies": _parseCookies(req.headers.get('cookie')),
-                "headers": req.headers.entries.map((e) => {"name": e.key, "value": e.value.join(',')}).toList(),
-                "queryString": _parseQueryString(req.requestUrl),
-                "headersSize": -1,
-                "bodySize": req.packageSize ?? -1,
-                "postData": req.bodyAsString.isNotEmpty ? {"mimeType": req.headers.contentType, "text": req.bodyAsString} : null
-            },
-            "response": {
-                "status": response?.status.code ?? 0,
-                "statusText": response?.status.reasonPhrase ?? "",
-                "httpVersion": response?.protocolVersion ?? "HTTP/1.1",
-                "cookies": [],
-                "headers": response?.headers.entries.map((e) => {"name": e.key, "value": e.value.join(',')}).toList() ?? [],
-                "content": {
-                    "size": response?.body?.length ?? 0,
-                    "mimeType": response?.headers.contentType ?? "",
-                    "text": response?.bodyAsString
-                },
-                "redirectURL": "",
-                "headersSize": -1,
-                "bodySize": response?.packageSize ?? -1,
-            },
-            "cache": {},
-            "timings": {
-                "send": 0,
-                "wait": duration,
-                "receive": 0
-            }
-        });
+      var response = req.response;
+      var duration = response != null
+          ? response.responseTime.difference(req.requestTime).inMilliseconds
+          : 0;
+
+      entries.add({
+        "startedDateTime": req.requestTime.toIso8601String(),
+        "time": duration,
+        "request": {
+          "method": req.method.name,
+          "url": req.requestUrl,
+          "httpVersion": req.protocolVersion,
+          "cookies": _parseCookies(req.headers.get('cookie')),
+          "headers": req.headers.entries
+              .map((e) => {"name": e.key, "value": e.value.join(',')})
+              .toList(),
+          "queryString": _parseQueryString(req.requestUrl),
+          "headersSize": -1,
+          "bodySize": req.packageSize ?? -1,
+          "postData": req.bodyAsString.isNotEmpty
+              ? {"mimeType": req.headers.contentType, "text": req.bodyAsString}
+              : null,
+        },
+        "response": {
+          "status": response?.status.code ?? 0,
+          "statusText": response?.status.reasonPhrase ?? "",
+          "httpVersion": response?.protocolVersion ?? "HTTP/1.1",
+          "cookies": [],
+          "headers":
+              response?.headers.entries
+                  .map((e) => {"name": e.key, "value": e.value.join(',')})
+                  .toList() ??
+              [],
+          "content": {
+            "size": response?.body?.length ?? 0,
+            "mimeType": response?.headers.contentType ?? "",
+            "text": response?.bodyAsString,
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": response?.packageSize ?? -1,
+        },
+        "cache": {},
+        "timings": {"send": 0, "wait": duration, "receive": 0},
+      });
     }
 
     return {
-        "log": {
-            "version": "1.2",
-            "creator": {"name": "ProxyPin MCP", "version": "1.0"},
-            "entries": entries
-        }
+      "log": {
+        "version": "1.2",
+        "creator": {"name": "ProxyPin MCP", "version": "1.0"},
+        "entries": entries,
+      },
     };
   }
 
   HttpRequest? _parseHarEntry(Map<String, dynamic> entry) {
-     try {
-         var requestJson = entry['request'];
-         var url = requestJson['url'];
-         var method = requestJson['method'];
-         var req = HttpRequest(HttpMethod.valueOf(method), url);
-         
-         if (entry['startedDateTime'] != null) {
-             req.requestTime = DateTime.parse(entry['startedDateTime']);
-         }
-         
-         // Headers
-         if (requestJson['headers'] != null) {
-             for (var h in requestJson['headers']) {
-                 req.headers.add(h['name'], h['value']);
-             }
-         }
-         
-         // Body
-         if (requestJson['postData'] != null && requestJson['postData']['text'] != null) {
-             req.body = utf8.encode(requestJson['postData']['text']);
-         }
-         
-         // Response
-         var responseJson = entry['response'];
-         if (responseJson != null) {
-             var status = responseJson['status'];
-             var statusText = responseJson['statusText'];
-             var res = HttpResponse(HttpStatus(status is num ? status.toInt() : (int.tryParse(status.toString()) ?? 0), statusText?.toString() ?? ""));
-             
-             if (responseJson['headers'] != null) {
-                 for (var h in responseJson['headers']) {
-                     res.headers.add(h['name'], h['value']);
-                 }
-             }
-             
-             if (responseJson['content'] != null && responseJson['content']['text'] != null) {
-                 res.body = utf8.encode(responseJson['content']['text']);
-             }
-             
-             res.request = req;
-             // Calculate response time from duration
-             var time = entry['time'] ?? 0;
-             res.responseTime = req.requestTime.add(Duration(milliseconds: time is num ? time.toInt() : 0));
-             req.response = res;
-         }
-         
-         return req;
-     } catch (e) {
-         logger.e("Failed to parse HAR entry", error: e);
-         return null;
-     }
-  }
-  
-  Future<dynamic> _readResource(String uri) async {
-      if (uri == 'proxypin://requests/latest') {
-          return McpBridge().getRecentRequests(limit: 50).map((r) => McpBridge.requestToJson(r)).toList();
-      } else if (uri == 'proxypin://config/current') {
-          var config = await Configuration.instance;
-          return config.toJson();
-      } else if (uri == 'proxypin://breakpoints/rules') {
-          var manager = await RequestBreakpointManager.instance;
-          return {
-            'enabled': manager.enabled,
-            'rules': manager.list.map((r) => r.toJson()).toList(),
-          };
-      } else if (uri == 'proxypin://network/conditions') {
-          var manager = await NetworkConditionManager.instance;
-          return {
-            'enabled': manager.enabled,
-            'rules': manager.rules.map((r) => r.toJson()).toList(),
-            'custom_profiles': manager.customProfiles.map((p) => p.toJson()).toList(),
-          };
-      } else if (uri == 'proxypin://environments/list') {
-          var manager = await EnvironmentManager.instance;
-          return {
-            'enabled': manager.enabled,
-            'active_id': manager.activeId,
-            'environments': manager.environments.map((e) => e.toJson()).toList(),
-            'flat_variables': manager.flatMap(),
-          };
+    try {
+      var requestJson = entry['request'];
+      var url = requestJson['url'];
+      var method = requestJson['method'];
+      var req = HttpRequest(HttpMethod.valueOf(method), url);
+
+      if (entry['startedDateTime'] != null) {
+        req.requestTime = DateTime.parse(entry['startedDateTime']);
       }
-      throw Exception('Resource not found: $uri');
+
+      // Headers
+      if (requestJson['headers'] != null) {
+        for (var h in requestJson['headers']) {
+          req.headers.add(h['name'], h['value']);
+        }
+      }
+
+      // Body
+      if (requestJson['postData'] != null &&
+          requestJson['postData']['text'] != null) {
+        req.body = utf8.encode(requestJson['postData']['text']);
+      }
+
+      // Response
+      var responseJson = entry['response'];
+      if (responseJson != null) {
+        var status = responseJson['status'];
+        var statusText = responseJson['statusText'];
+        var res = HttpResponse(
+          HttpStatus(
+            status is num
+                ? status.toInt()
+                : (int.tryParse(status.toString()) ?? 0),
+            statusText?.toString() ?? "",
+          ),
+        );
+
+        if (responseJson['headers'] != null) {
+          for (var h in responseJson['headers']) {
+            res.headers.add(h['name'], h['value']);
+          }
+        }
+
+        if (responseJson['content'] != null &&
+            responseJson['content']['text'] != null) {
+          res.body = utf8.encode(responseJson['content']['text']);
+        }
+
+        res.request = req;
+        // Calculate response time from duration
+        var time = entry['time'] ?? 0;
+        res.responseTime = req.requestTime.add(
+          Duration(milliseconds: time is num ? time.toInt() : 0),
+        );
+        req.response = res;
+      }
+
+      return req;
+    } catch (e) {
+      logger.e("Failed to parse HAR entry", error: e);
+      return null;
+    }
+  }
+
+  Future<dynamic> _readResource(String uri) async {
+    if (uri == 'proxypin://requests/latest') {
+      return McpBridge()
+          .getRecentRequests(limit: 50)
+          .map((r) => McpBridge.requestToJson(r))
+          .toList();
+    } else if (uri == 'proxypin://config/current') {
+      var config = await Configuration.instance;
+      return config.toJson();
+    } else if (uri == 'proxypin://breakpoints/rules') {
+      var manager = await RequestBreakpointManager.instance;
+      return {
+        'enabled': manager.enabled,
+        'rules': manager.list.map((r) => r.toJson()).toList(),
+      };
+    } else if (uri == 'proxypin://network/conditions') {
+      var manager = await NetworkConditionManager.instance;
+      return {
+        'enabled': manager.enabled,
+        'rules': manager.rules.map((r) => r.toJson()).toList(),
+        'custom_profiles': manager.customProfiles
+            .map((p) => p.toJson())
+            .toList(),
+      };
+    } else if (uri == 'proxypin://environments/list') {
+      var manager = await EnvironmentManager.instance;
+      return {
+        'enabled': manager.enabled,
+        'active_id': manager.activeId,
+        'environments': manager.environments.map((e) => e.toJson()).toList(),
+        'flat_variables': manager.flatMap(),
+      };
+    }
+    throw Exception('Resource not found: $uri');
   }
 
   /// 比较两个 Header Map 的差异
-  Map<String, dynamic> _compareHeaders(Map<String, String> h1, Map<String, String> h2) {
+  Map<String, dynamic> _compareHeaders(
+    Map<String, String> h1,
+    Map<String, String> h2,
+  ) {
     var added = <String, String>{};
     var removed = <String, String>{};
     var changed = <String, Map<String, String>>{};
-    
+
     // 检查新增和修改
     h2.forEach((key, value) {
       if (!h1.containsKey(key)) {
@@ -3107,14 +3678,14 @@ Body Encoding Rules:
         changed[key] = {'old': h1[key]!, 'new': value};
       }
     });
-    
+
     // 检查删除
     h1.forEach((key, value) {
       if (!h2.containsKey(key)) {
         removed[key] = value;
       }
     });
-    
+
     return {
       'added': added,
       'removed': removed,
@@ -3128,12 +3699,12 @@ Body Encoding Rules:
     if (body1 == body2) {
       return {'same': true, 'type': 'identical'};
     }
-    
+
     // 尝试作为 JSON 对比
     try {
       var json1 = jsonDecode(body1);
       var json2 = jsonDecode(body2);
-      
+
       if (json1 is Map && json2 is Map) {
         return {
           'same': false,
@@ -3144,7 +3715,7 @@ Body Encoding Rules:
     } catch (e) {
       // 不是 JSON，按文本对比
     }
-    
+
     return {
       'same': false,
       'type': 'text',
@@ -3159,7 +3730,7 @@ Body Encoding Rules:
     var added = <String, dynamic>{};
     var removed = <String, dynamic>{};
     var changed = <String, Map<String, dynamic>>{};
-    
+
     // 检查新增和修改
     json2.forEach((key, value) {
       if (!json1.containsKey(key)) {
@@ -3168,19 +3739,15 @@ Body Encoding Rules:
         changed[key.toString()] = {'old': json1[key], 'new': value};
       }
     });
-    
+
     // 检查删除
     json1.forEach((key, value) {
       if (!json2.containsKey(key)) {
         removed[key.toString()] = value;
       }
     });
-    
-    return {
-      'added': added,
-      'removed': removed,
-      'changed': changed,
-    };
+
+    return {'added': added, 'removed': removed, 'changed': changed};
   }
 
   /// 解析 Cookie 字符串为 HAR 格式
@@ -3189,10 +3756,10 @@ Body Encoding Rules:
 
   List<Map<String, String>> _parseCookies(String? cookieHeader) {
     if (cookieHeader == null || cookieHeader.isEmpty) return [];
-    
+
     var cookies = <Map<String, String>>[];
     var parts = cookieHeader.split(';');
-    
+
     for (var part in parts) {
       var trimmed = part.trim();
       var index = trimmed.indexOf('=');
@@ -3202,7 +3769,7 @@ Body Encoding Rules:
         cookies.add({'name': name, 'value': value});
       }
     }
-    
+
     return cookies;
   }
 
@@ -3226,18 +3793,18 @@ class ApiEndpoint {
   final String path;
   final List<HttpRequest> requests = [];
   final Set<int> statusCodes = {};
-  
+
   ApiEndpoint(this.method, this.domain, this.path);
-  
+
   void addRequest(HttpRequest req) {
     requests.add(req);
     if (req.response?.status.code != null) {
       statusCodes.add(req.response!.status.code);
     }
   }
-  
+
   int get count => requests.length;
-  
+
   Map<String, dynamic> toJson() {
     return {
       'method': method,

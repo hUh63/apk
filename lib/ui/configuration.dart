@@ -55,9 +55,9 @@ class ThemeModel {
   ThemeModel({this.mode = ThemeMode.system, this.useMaterial3 = true});
 
   ThemeModel copy({ThemeMode? mode, bool? useMaterial3}) => ThemeModel(
-        mode: mode ?? this.mode,
-        useMaterial3: useMaterial3 ?? this.useMaterial3,
-      );
+    mode: mode ?? this.mode,
+    useMaterial3: useMaterial3 ?? this.useMaterial3,
+  );
 
   Color get themeColor => ColorMapping.colors[color] ?? Colors.blue;
 }
@@ -87,6 +87,9 @@ class AppConfiguration {
 
   /// 内存清理
   int? memoryCleanupThreshold;
+
+  /// 抓包列表最大保留条数（0 = 不限，超出自动丢弃最旧请求）
+  int maxRequestCount = 10000;
 
   ///自动已读
   bool autoReadEnabled = true;
@@ -169,8 +172,11 @@ class AppConfiguration {
 
   Future<File> get _path async {
     if (Platforms.isDesktop()) {
-      var userHome = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
-      return File('$userHome${Platform.pathSeparator}.proxypin${Platform.pathSeparator}ui_config.json');
+      var userHome =
+          Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+      return File(
+        '$userHome${Platform.pathSeparator}.proxypin${Platform.pathSeparator}ui_config.json',
+      );
     }
 
     final directory = await getApplicationSupportDirectory();
@@ -197,28 +203,41 @@ class AppConfiguration {
 
     try {
       Map<String, dynamic> config = jsonDecode(json);
-      var mode =
-          ThemeMode.values.firstWhere((element) => element.name == config['mode'], orElse: () => ThemeMode.system);
-      _theme = ThemeModel(mode: mode, useMaterial3: config['useMaterial3'] ?? true);
+      var mode = ThemeMode.values.firstWhere(
+        (element) => element.name == config['mode'],
+        orElse: () => ThemeMode.system,
+      );
+      _theme = ThemeModel(
+        mode: mode,
+        useMaterial3: config['useMaterial3'] ?? true,
+      );
       _theme.color = config['themeColor'] ?? "Blue";
 
       upgradeNoticeV30 = config['upgradeNoticeV30'] ?? true;
       _language = config['language'] == null
           ? null
-          : Locale.fromSubtags(languageCode: config['language'], scriptCode: config['languageScript']);
+          : Locale.fromSubtags(
+              languageCode: config['language'],
+              scriptCode: config['languageScript'],
+            );
       pipEnabled.value = config['pipEnabled'] ?? true;
       pipIcon.value = config['pipIcon'] ?? false;
       headerViewMode = config['headerViewMode'] ?? "table";
       bottomNavigation = config['bottomNavigation'] ?? true;
       memoryCleanupThreshold = config['memoryCleanupThreshold'];
+      maxRequestCount = config['maxRequestCount'] ?? 10000;
       autoReadEnabled = config['autoReadEnabled'] ?? true;
       clearConfirm = config['clearConfirm'] ?? false;
 
-      windowSize =
-          config['windowSize'] == null ? null : Size(config['windowSize']['width'], config['windowSize']['height']);
+      windowSize = config['windowSize'] == null
+          ? null
+          : Size(config['windowSize']['width'], config['windowSize']['height']);
       windowPosition = config['windowPosition'] == null
           ? null
-          : Offset(config['windowPosition']['dx'], config['windowPosition']['dy']);
+          : Offset(
+              config['windowPosition']['dx'],
+              config['windowPosition']['dy'],
+            );
       if (config['panelRatio'] != null) {
         panelRatio = config['panelRatio'];
       }
@@ -258,14 +277,20 @@ class AppConfiguration {
       "headerViewMode": headerViewMode,
       "autoReadEnabled": autoReadEnabled,
       "clearConfirm": clearConfirm,
-      if (memoryCleanupThreshold != null) 'memoryCleanupThreshold': memoryCleanupThreshold,
+      if (memoryCleanupThreshold != null)
+        'memoryCleanupThreshold': memoryCleanupThreshold,
+      if (maxRequestCount > 0) 'maxRequestCount': maxRequestCount,
       if (Platforms.isMobile()) 'pipEnabled': pipEnabled.value,
       if (Platforms.isMobile()) 'pipIcon': pipIcon.value ? true : null,
       if (Platforms.isMobile()) 'bottomNavigation': bottomNavigation,
       if (Platforms.isDesktop())
-        "windowSize": windowSize == null ? null : {"width": windowSize?.width, "height": windowSize?.height},
+        "windowSize": windowSize == null
+            ? null
+            : {"width": windowSize?.width, "height": windowSize?.height},
       if (Platforms.isDesktop())
-        "windowPosition": windowPosition == null ? null : {"dx": windowPosition?.dx, "dy": windowPosition?.dy},
+        "windowPosition": windowPosition == null
+            ? null
+            : {"dx": windowPosition?.dx, "dy": windowPosition?.dy},
       if (Platforms.isDesktop()) 'panelRatio': panelRatio,
       if (Platforms.isDesktop()) 'minimizeToTray': minimizeToTray,
     };

@@ -107,11 +107,13 @@ class McpPlugin : FlutterPlugin {
             }
             "screenshot" -> screenshot()
             "openAccessibilitySettings" -> openAccessibilitySettings()
+            "openShizukuSettings" -> openShizukuSettings()
             "shell" -> {
                 val command = args["command"] as? String ?: ""
                 val useSu = args["useSu"] as? Boolean ?: false
+                val mode = args["mode"] as? String
                 val timeoutMs = (args["timeoutMs"] as? Number)?.toLong() ?: 10000L
-                shell(command, useSu, timeoutMs)
+                if (mode != null) shellWithMode(command, mode, timeoutMs) else shell(command, useSu, timeoutMs)
             }
             else -> throw UnsupportedOperationException("Unknown method: $method")
         }
@@ -127,9 +129,13 @@ class McpPlugin : FlutterPlugin {
         val wifiIp = getWifiIpAddress()
         val hasRoot = hasRoot()
         val accessibilityEnabled = McpAccessibilityService.isRunning()
+        val hasShizuku = hasShizuku()
+        val hasDhizuku = hasDhizuku()
 
         val mode = when {
             hasRoot -> "root"
+            hasShizuku -> "shizuku"
+            hasDhizuku -> "dhizuku"
             accessibilityEnabled -> "accessibility"
             else -> "none"
         }
@@ -141,6 +147,8 @@ class McpPlugin : FlutterPlugin {
             "sdkVersion" to sdkVersion,
             "wifiIp" to wifiIp,
             "hasRoot" to hasRoot,
+            "hasShizuku" to hasShizuku,
+            "hasDhizuku" to hasDhizuku,
             "accessibilityEnabled" to accessibilityEnabled,
             "mode" to mode
         )
@@ -410,6 +418,207 @@ class McpPlugin : FlutterPlugin {
         }
         context?.startActivity(intent)
         return true
+    }
+
+    /**
+     * 打开 Shizuku 授权页面
+     * Shizuku 官方提供了专用授权 Intent（moe.shizuku.privileged.api 的 ACTIVITY_PERMISSION）
+     */
+    private fun openShizukuSettings(): Boolean {
+        return try {
+            val activity = Class.forName("moe.shizuku.privileged.api.constant.Intent")
+            val action = activity.getField("ACTIVITY_PERMISSION").getString(null)
+            val intent = Intent(action).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context?.startActivity(intent)
+            true
+        } catch (e: Exception) {
+            // 反射失败时退回 Shizuku 应用主页
+            try {
+                val pm = context?.packageManager ?: return false
+                val launch = pm.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+                if (launch != null) {
+                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context?.startActivity(launch)
+                    true
+                } else false
+            } catch (e2: Exception) {
+                false
+            }
+        }
+    }
+
+    // ==================== Shizuku / Dhizuku ====================
+
+    private val shizukuBinder: android.os.IBinder? by lazy {
+        try {
+            // Shizuku 通过系统服务 user 的 binder 提供
+            val clazz = Class.forName("moe.shizuku.api.Shizuku")
+            val binderMethod = clazz.getMethod("binderReceived")
+            binderMethod.invoke(null) as? android.os.IBinder
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * 检测 Shizuku 是否可用：
+     * 1. Shizuku 应用已安装
+     * 2. binder 已连接（用户已在 Shizuku 中授权）
+     */
+    @Volatile
+    private var shizukuStatus: Boolean? = null
+    @Volatile
+    private var shizukuCheckTime: Long = 0L
+
+    private fun hasShizuku(): Boolean {
+        // 5 秒缓存，授权返回后能重新检测
+        val now = System.currentTimeMillis()
+        if (shizukuStatus != null && now - shizukuCheckTime < 5000) return shizukuStatus!!
+        val result = try {
+            // 方式1：反射检查 binder
+            val clazz = Class.forName("moe.shizuku.api.Shizuku")
+            val ping = clazz.getMethod("pingBinder")
+            if (ping.invoke(null) == true) {
+                true
+            } else {
+                // 方式2：检查 Shizuku 应用是否安装且授权（ping 可能因进程隔离失败）
+                val pm = context?.packageManager ?: return false
+                pm.getPackageInfo("moe.shizuku.privileged.api", 0)
+                val binder = shizukuBinder
+                binder != null
+            }
+        } catch (e: Exception) {
+            false
+        }
+        shizukuStatus = result
+        shizukuCheckTime = now
+        return result
+    }
+
+    /**
+     * 检测 Dhizuku（Device Owner 扩展）是否可用：
+     * 检查 me.bmax.dhizuku 是否被授予 Device Owner 权限
+     */
+    @Volatile
+    private var dhizukuStatus: Boolean? = null
+
+    private fun hasDhizuku(): Boolean {
+        dhizukuStatus?.let { return it }
+        val result = try {
+            val pm = context?.packageManager ?: return false
+            val dpm = context?.getSystemService(android.content.Context.DEVICE_POLICY_SERVICE)
+                    as? android.app.admin.DevicePolicyManager
+            val isOwner = dpm?.isDeviceOwnerApp("me.bmax.dhizuku") == true
+            // Dhizuku 未作为 device owner 时，检查其是否已安装（部分系统用其它方式激活）
+            val installed = try {
+                pm.getPackageInfo("me.bmax.dhizuku", 0)
+                true
+            } catch (e: Exception) {
+                false
+            }
+            isOwner || installed
+        } catch (e: Exception) {
+            false
+        }
+        dhizukuStatus = result
+        return result
+    }
+
+    /**
+     * 通过 Shizuku 执行 shell 命令（无需 root）
+     */
+    private fun shellViaShizuku(command: String, timeoutMs: Long): Map<String, Any> {
+        try {
+            val binder = shizukuBinder ?: throw IllegalStateException("Shizuku binder not connected")
+            val clazz = Class.forName("moe.shizuku.api.Shizuku")
+            val newProcess = clazz.getMethod("newProcess", Array<String>::class.java, String::class.java, Array<String>::class.java)
+            val process = newProcess.invoke(null, arrayOf("sh", "-c", command), null, arrayOf<String>()) as android.os.Process
+            val stdout = process.inputStream.bufferedReader().readText()
+            val stderr = process.errorStream.bufferedReader().readText()
+            val completed = process.waitFor(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+            val exitCode = if (completed) process.exitValue() else -1
+            if (!completed) process.destroyForcibly()
+            return mapOf(
+                "success" to (completed && exitCode == 0),
+                "command" to command,
+                "useSu" to false,
+                "useShizuku" to true,
+                "timeoutMs" to timeoutMs,
+                "timedOut" to !completed,
+                "exitCode" to exitCode,
+                "stdout" to stdout,
+                "stderr" to stderr
+            )
+        } catch (e: Exception) {
+            return mapOf(
+                "success" to false,
+                "command" to command,
+                "useSu" to false,
+                "useShizuku" to true,
+                "timedOut" to false,
+                "exitCode" to -1,
+                "stdout" to "",
+                "stderr" to "Shizuku failed: ${e.message}"
+            )
+        }
+    }
+
+    /**
+     * 通过 Dhizuku 执行 shell 命令（Device Owner 权限，无需 root）
+     */
+    private fun shellViaDhizuku(command: String, timeoutMs: Long): Map<String, Any> {
+        try {
+            val clazz = Class.forName("me.bmax.dhizuku.api.Dhizuku")
+            val execMethod = clazz.getMethod("execCommand", String::class.java)
+            val result = execMethod.invoke(null, command) as? String ?: ""
+            // execCommand 返回 {status: 0, stdout: "...", stderr: "..."} JSON
+            val json = org.json.JSONObject(result)
+            val code = json.optInt("status", -1)
+            return mapOf(
+                "success" to (code == 0),
+                "command" to command,
+                "useSu" to false,
+                "useDhizuku" to true,
+                "timeoutMs" to timeoutMs,
+                "timedOut" to false,
+                "exitCode" to code,
+                "stdout" to json.optString("stdout", ""),
+                "stderr" to json.optString("stderr", "")
+            )
+        } catch (e: Exception) {
+            return mapOf(
+                "success" to false,
+                "command" to command,
+                "useSu" to false,
+                "useDhizuku" to true,
+                "timedOut" to false,
+                "exitCode" to -1,
+                "stdout" to "",
+                "stderr" to "Dhizuku failed: ${e.message}"
+            )
+        }
+    }
+
+    /**
+     * 统一 shell 执行：root > shizuku > dhizuku > 普通 shell
+     * [mode] 指定模式: root / shizuku / dhizuku / auto
+     */
+    private fun shellWithMode(command: String, mode: String, timeoutMs: Long): Map<String, Any> {
+        return when (mode) {
+            "root" -> shell(command, true, timeoutMs)
+            "shizuku" -> shellViaShizuku(command, timeoutMs)
+            "dhizuku" -> shellViaDhizuku(command, timeoutMs)
+            else -> { // auto
+                when {
+                    hasRoot() -> shell(command, true, timeoutMs)
+                    hasShizuku() -> shellViaShizuku(command, timeoutMs)
+                    hasDhizuku() -> shellViaDhizuku(command, timeoutMs)
+                    else -> shell(command, false, timeoutMs)
+                }
+            }
+        }
     }
 
     // ==================== Utilities ====================

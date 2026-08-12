@@ -138,13 +138,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get autoStartup => 'Auto Start Recording Traffic';
 
   @override
-  String get autoStartupDescribe => 'Automatically start recording traffic when the program starts';
+  String get autoStartupDescribe =>
+      'Automatically start recording traffic when the program starts';
 
   @override
   String get minimizeToTrayTitle => 'Minimize to tray on close';
 
   @override
-  String get minimizeToTraySubtitle => 'Closing the window will keep ProxyPin running and hide it to the system tray.';
+  String get minimizeToTraySubtitle =>
+      'Closing the window will keep ProxyPin running and hide it to the system tray.';
 
   @override
   String get trayClosePromptContent =>
@@ -672,10 +674,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get install => 'Install';
 
   @override
-  String get installCaDescribe => 'Install CA Setting > Profile Download > Install';
+  String get installCaDescribe =>
+      'Install CA Setting > Profile Download > Install';
 
   @override
-  String get trustCaDescribe => 'Trust CA Setting > General > About > Certificate Trust Setting';
+  String get trustCaDescribe =>
+      'Trust CA Setting > General > About > Certificate Trust Setting';
 
   @override
   String get androidRoot => 'System Certificate (ROOT Device)';
@@ -696,7 +700,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get androidUserCA => 'User Certificate';
 
   @override
-  String get androidUserCATips => 'Tips: Android7+ many apps will not trust user certificates';
+  String get androidUserCATips =>
+      'Tips: Android7+ many apps will not trust user certificates';
 
   @override
   String get androidUserCAInstall =>
@@ -752,19 +757,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get captureDetail => 'Capture Detail';
 
   @override
-  String get proxyPinSoftware => 'ProxyPin Open source traffic capture software for all platforms';
+  String get proxyPinSoftware =>
+      'ProxyPin Open source traffic capture software for all platforms';
 
   @override
   String get prompt => 'Prompt';
 
   @override
-  String get curlSchemeRequest => 'If the curl format is recognized, should it be converted into an HTTP request?';
+  String get curlSchemeRequest =>
+      'If the curl format is recognized, should it be converted into an HTTP request?';
 
   @override
   String get appExitTips => 'Press again to exit the program';
 
   @override
-  String get remoteConnectDisconnect => 'Check remote connection failed, disconnected';
+  String get remoteConnectDisconnect =>
+      'Check remote connection failed, disconnected';
 
   @override
   String get connect => 'Connect';
@@ -778,7 +786,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get remoteConnectForward => 'Remote connection, forwarding requests to other terminals';
+  String get remoteConnectForward =>
+      'Remote connection, forwarding requests to other terminals';
 
   @override
   String get connectSuccess => 'Connect successful';
@@ -799,7 +808,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ipLayerProxy => 'IP Layer Proxy';
 
   @override
-  String get ipLayerProxyDesc => 'IP layer proxy can capture Flutter app requests';
+  String get ipLayerProxyDesc =>
+      'IP layer proxy can capture Flutter app requests';
 
   @override
   String get inputAddress => 'Input Address';
@@ -808,7 +818,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncConfig => 'Sync configuration';
 
   @override
-  String get pullConfigFail => 'Failed to pull configuration, please check the network connection';
+  String get pullConfigFail =>
+      'Failed to pull configuration, please check the network connection';
 
   @override
   String get sync => 'Sync';
@@ -821,13 +832,15 @@ class AppLocalizationsEn extends AppLocalizations {
       'Connection failed，Please check if it is allowed on the same LAN and firewall, iOS needs to enable local network permissions';
 
   @override
-  String get remoteConnectSuccessTips => 'Your phone needs to enable packet capture in order to capture requests';
+  String get remoteConnectSuccessTips =>
+      'Your phone needs to enable packet capture in order to capture requests';
 
   @override
   String get windowMode => 'Window Mode';
 
   @override
-  String get windowModeSubTitle => 'Enabled Packet Capture, Enter the background, Display a small window';
+  String get windowModeSubTitle =>
+      'Enabled Packet Capture, Enter the background, Display a small window';
 
   @override
   String get pipIcon => 'Window shortcut icon';
@@ -839,7 +852,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bottomNavigation => 'Bottom Navigation';
 
   @override
-  String get bottomNavigationSubtitle => 'Bottom navigation bar is displayed, effective after restart';
+  String get bottomNavigationSubtitle =>
+      'Bottom navigation bar is displayed, effective after restart';
 
   @override
   String get memoryCleanup => 'Memory Cleanup';
@@ -849,10 +863,18 @@ class AppLocalizationsEn extends AppLocalizations {
       'Automatically clean up requests on memory limit reached and keep 32 most recent after cleaning';
 
   @override
+  String get maxRequestCount => 'Request Record Limit';
+
+  @override
+  String get maxRequestCountSubtitle =>
+      'Max number of requests kept in the list; oldest requests are dropped automatically when exceeded';
+
+  @override
   String get clearConfirm => 'Confirm before clearing captured records';
 
   @override
-  String get clearConfirmSubtitle => 'Show a confirmation dialog before clearing captured records';
+  String get clearConfirmSubtitle =>
+      'Show a confirmation dialog before clearing captured records';
 
   @override
   String get unlimited => 'Unlimited';
@@ -892,7 +914,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'Only proxy domain names on the whitelist. If the whitelist is enabled, the blacklist will be invalid';
 
   @override
-  String get domainBlacklistDescribe => 'Domain names on the blacklist will not be proxied';
+  String get domainBlacklistDescribe =>
+      'Domain names on the blacklist will not be proxied';
 
   @override
   String get domain => 'Host';
@@ -901,7 +924,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get enableScript => 'Enable Script';
 
   @override
-  String get scriptUseDescribe => 'Use JavaScript to modify requests and responses';
+  String get scriptUseDescribe =>
+      'Use JavaScript to modify requests and responses';
 
   @override
   String get scriptEdit => 'Edit script';
@@ -913,7 +937,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get logger => 'Log';
 
   @override
-  String get material3 => 'Material 3 is the latest version of Google’s open-source design system';
+  String get material3 =>
+      'Material 3 is the latest version of Google’s open-source design system';
 
   @override
   String get iosVpnBackgroundAudio =>
@@ -1069,7 +1094,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appUpdateDialogTitle => 'Update Available';
 
   @override
-  String get appUpdateUpdateMsg => 'A new version of ProxyPin is available. Would you like to update now?';
+  String get appUpdateUpdateMsg =>
+      'A new version of ProxyPin is available. Would you like to update now?';
 
   @override
   String get appUpdateCurrentVersionLbl => 'Current Version';
@@ -1102,7 +1128,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get requestMap => 'Request Map';
 
   @override
-  String get requestMapDescribe => 'Do not request remote services, use local configuration or script for response';
+  String get requestMapDescribe =>
+      'Do not request remote services, use local configuration or script for response';
 
   @override
   String get automatic => 'Automatic';
@@ -1155,7 +1182,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cryptoIvPrefixLabel => 'IV Prefix';
 
   @override
-  String get cryptoIvPrefixTooltip => 'Use the first N bytes of the response body as IV';
+  String get cryptoIvPrefixTooltip =>
+      'Use the first N bytes of the response body as IV';
 
   @override
   String get local => 'Local';
@@ -1188,7 +1216,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get envEmptyHint => 'No variables yet. Click + to add.';
 
   @override
-  String get envUsageHint => 'Reference variables as %s in rules, or read/write via context.env in scripts.';
+  String get envUsageHint =>
+      'Reference variables as %s in rules, or read/write via context.env in scripts.';
 
   @override
   String get weakNetwork => 'Network Throttling';

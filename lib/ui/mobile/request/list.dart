@@ -21,6 +21,7 @@ import 'package:proxypin/network/channel/channel.dart';
 import 'package:proxypin/network/channel/channel_context.dart';
 import 'package:proxypin/network/http/http.dart';
 import 'package:proxypin/ui/component/multi_select_controller.dart';
+import 'package:proxypin/ui/configuration.dart';
 import 'package:proxypin/ui/mobile/request/domians.dart';
 import 'package:proxypin/ui/mobile/request/request.dart';
 import 'package:proxypin/ui/mobile/request/request_sequence.dart';
@@ -36,7 +37,12 @@ class RequestListWidget extends StatefulWidget {
   final ListenableList<HttpRequest>? list;
   final MultiSelectController selectionController;
 
-  const RequestListWidget({super.key, required this.proxyServer, this.list, required this.selectionController});
+  const RequestListWidget({
+    super.key,
+    required this.proxyServer,
+    this.list,
+    required this.selectionController,
+  });
 
   @override
   State<StatefulWidget> createState() {
@@ -45,7 +51,8 @@ class RequestListWidget extends StatefulWidget {
 }
 
 class RequestListState extends State<RequestListWidget> {
-  final GlobalKey<RequestSequenceState> requestSequenceKey = GlobalKey<RequestSequenceState>();
+  final GlobalKey<RequestSequenceState> requestSequenceKey =
+      GlobalKey<RequestSequenceState>();
   final GlobalKey<DomainListState> domainListKey = GlobalKey<DomainListState>();
 
   //请求列表容器
@@ -66,47 +73,64 @@ class RequestListState extends State<RequestListWidget> {
 
   @override
   void dispose() {
-    RequestRowState.removeAutoReadByIds(container.map((request) => request.requestId));
+    RequestRowState.removeAutoReadByIds(
+      container.map((request) => request.requestId),
+    );
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    List<Widget> tabs = [Tab(child: Text(localizations.sequence)), Tab(child: Text(localizations.domainList))];
+    List<Widget> tabs = [
+      Tab(child: Text(localizations.sequence)),
+      Tab(child: Text(localizations.domainList)),
+    ];
 
     //double click scroll to top
     var tabClickHandles = [
-      DoubleClickHandle(handle: () => requestSequenceKey.currentState?.scrollToTop()),
-      DoubleClickHandle(handle: () => domainListKey.currentState?.scrollToTop())
+      DoubleClickHandle(
+        handle: () => requestSequenceKey.currentState?.scrollToTop(),
+      ),
+      DoubleClickHandle(
+        handle: () => domainListKey.currentState?.scrollToTop(),
+      ),
     ];
 
     return DefaultTabController(
-        length: tabs.length,
-        child: Scaffold(
-          appBar: AppBar(
-              title: TabBar(tabs: tabs, onTap: (index) => tabClickHandles[index].call()),
-              automaticallyImplyLeading: false),
-          body: TabBarView(
-            children: [
-              RequestSequence(
-                  key: requestSequenceKey,
-                  container: container,
-                  proxyServer: widget.proxyServer,
-                  onRemove: sequenceRemove,
-                  selectionController: widget.selectionController),
-              DomainList(
-                  key: domainListKey,
-                  list: container,
-                  proxyServer: widget.proxyServer,
-                  onRemove: domainListRemove,
-                  onInitialized: () {
-                    if (_currentSearchModel != null && _currentSearchModel!.isNotEmpty) {
-                      domainListKey.currentState?.search(_currentSearchModel!);
-                    }
-                  }),
-            ],
+      length: tabs.length,
+      child: Scaffold(
+        appBar: AppBar(
+          title: TabBar(
+            tabs: tabs,
+            onTap: (index) => tabClickHandles[index].call(),
           ),
-        ));
+          automaticallyImplyLeading: false,
+        ),
+        body: TabBarView(
+          children: [
+            RequestSequence(
+              key: requestSequenceKey,
+              container: container,
+              proxyServer: widget.proxyServer,
+              onRemove: sequenceRemove,
+              selectionController: widget.selectionController,
+            ),
+            DomainList(
+              key: domainListKey,
+              list: container,
+              proxyServer: widget.proxyServer,
+              onRemove: domainListRemove,
+              onInitialized: () {
+                if (_currentSearchModel != null &&
+                    _currentSearchModel!.isNotEmpty) {
+                  domainListKey.currentState?.search(_currentSearchModel!);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   ///添加请求
@@ -114,6 +138,18 @@ class RequestListState extends State<RequestListWidget> {
     container.add(request);
     requestSequenceKey.currentState?.add(request);
     domainListKey.currentState?.add(request);
+
+    // 数量上限：超出自动丢弃最旧请求，防止长时间抓包内存无限增长
+    final maxCount = AppConfiguration.current?.maxRequestCount ?? 0;
+    if (maxCount > 0 && container.length > maxCount) {
+      final overflow = container.length - maxCount;
+      final removed = container.removeRange(0, overflow);
+      domainListKey.currentState?.clean();
+      requestSequenceKey.currentState?.clean();
+      RequestRowState.removeAutoReadByIds(
+        removed.map((request) => request.requestId),
+      );
+    }
   }
 
   ///添加响应
@@ -126,14 +162,18 @@ class RequestListState extends State<RequestListWidget> {
   void domainListRemove(List<HttpRequest> list) {
     container.removeWhere((element) => list.contains(element));
     requestSequenceKey.currentState?.remove(list);
-    RequestRowState.removeAutoReadByIds(list.map((request) => request.requestId));
+    RequestRowState.removeAutoReadByIds(
+      list.map((request) => request.requestId),
+    );
   }
 
   ///全部请求删除
   void sequenceRemove(List<HttpRequest> list) {
     container.removeWhere((element) => list.contains(element));
     domainListKey.currentState?.remove(list);
-    RequestRowState.removeAutoReadByIds(list.map((request) => request.requestId));
+    RequestRowState.removeAutoReadByIds(
+      list.map((request) => request.requestId),
+    );
   }
 
   void search(SearchModel searchModel) {
@@ -149,7 +189,9 @@ class RequestListState extends State<RequestListWidget> {
   ///清理
   void clean() {
     setState(() {
-      RequestRowState.removeAutoReadByIds(container.map((request) => request.requestId));
+      RequestRowState.removeAutoReadByIds(
+        container.map((request) => request.requestId),
+      );
       container.clear();
       domainListKey.currentState?.clean();
       requestSequenceKey.currentState?.clean();
@@ -167,13 +209,17 @@ class RequestListState extends State<RequestListWidget> {
 
     domainListKey.currentState?.clean();
     requestSequenceKey.currentState?.clean();
-    RequestRowState.removeAutoReadByIds(removeRange.map((request) => request.requestId));
+    RequestRowState.removeAutoReadByIds(
+      removeRange.map((request) => request.requestId),
+    );
   }
 
   //导出har或文件夹
   Future<void> export(BuildContext context, String title) async {
     var view = currentView()!;
-    var folderName = '${title.contains("ProxyPin") ? '' : 'ProxyPin'}$title'.replaceAll(" ", "_").replaceAll(":", "_");
+    var folderName = '${title.contains("ProxyPin") ? '' : 'ProxyPin'}$title'
+        .replaceAll(" ", "_")
+        .replaceAll(":", "_");
 
     showExportDialog(context, view.toList(), folderName);
   }

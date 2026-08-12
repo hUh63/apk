@@ -288,6 +288,8 @@
   "bottomNavigationSubtitle": "底部导航栏是否显示，重启后生效",
   "memoryCleanup": "内存清理",
   "memoryCleanupSubtitle": "到内存限制自动清理请求，清理后保留最近32条请求",
+  "maxRequestCount": "请求记录上限",
+  "maxRequestCountSubtitle": "抓包列表最多保留的请求条数，超出自动丢弃最旧请求（防止内存无限增长）",
   "clearConfirm": "清理抓包记录前确认",
   "clearConfirmSubtitle": "开启后，点击清理抓包记录会先弹出确认框",
   "unlimited": "无限制",

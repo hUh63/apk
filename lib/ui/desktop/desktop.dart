@@ -114,8 +114,8 @@ class _DesktopHomePagePageState extends State<DesktopHomePage> implements EventL
       requestListStateKey.currentState?.clean();
     };
     proxyServer.addListener(McpBridge());
-    // 根据配置决定是否随应用启动自动启动 MCP 服务
-    if (widget.configuration.mcpAutoStart) {
+    // MCP 服务：默认启用且自动启动，应用启动即运行（可在 MCP 设置页关闭）
+    if (widget.configuration.mcpEnabled && widget.configuration.mcpAutoStart) {
       McpServer().start();
     }
 

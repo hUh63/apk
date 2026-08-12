@@ -144,7 +144,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String get minimizeToTrayTitle => 'ย่อไปที่ถาดเมื่อปิด';
 
   @override
-  String get minimizeToTraySubtitle => 'Closing the window will keep ProxyPin running and hide it to the system tray.';
+  String get minimizeToTraySubtitle =>
+      'Closing the window will keep ProxyPin running and hide it to the system tray.';
 
   @override
   String get trayClosePromptContent =>
@@ -646,7 +647,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String get resetDefaultCA => 'รีเซ็ตใบรับรองรากเริ่มต้น';
 
   @override
-  String get resetDefaultCADescribe => 'ต้องการรีเซ็ตใบรับรองรากเริ่มต้นหรือไม่?';
+  String get resetDefaultCADescribe =>
+      'ต้องการรีเซ็ตใบรับรองรากเริ่มต้นหรือไม่?';
 
   @override
   String get exportCaP12 => 'ส่งออกใบรับรองราก (.p12)';
@@ -694,7 +696,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String get androidUserCA => 'User Certificate';
 
   @override
-  String get androidUserCATips => 'Tips: Android7+ many apps will not trust user certificates';
+  String get androidUserCATips =>
+      'Tips: Android7+ many apps will not trust user certificates';
 
   @override
   String get androidUserCAInstall =>
@@ -756,13 +759,15 @@ class AppLocalizationsTh extends AppLocalizations {
   String get prompt => 'Prompt';
 
   @override
-  String get curlSchemeRequest => 'If the curl format is recognized, should it be converted into an HTTP request?';
+  String get curlSchemeRequest =>
+      'If the curl format is recognized, should it be converted into an HTTP request?';
 
   @override
   String get appExitTips => 'กดอีกครั้งเพื่อออกจากแอป';
 
   @override
-  String get remoteConnectDisconnect => 'ตรวจสอบการเชื่อมต่อระยะไกลล้มเหลว, ตัดการเชื่อมต่อแล้ว';
+  String get remoteConnectDisconnect =>
+      'ตรวจสอบการเชื่อมต่อระยะไกลล้มเหลว, ตัดการเชื่อมต่อแล้ว';
 
   @override
   String get connect => 'Connect';
@@ -776,7 +781,8 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get remoteConnectForward => 'เชื่อมต่อระยะไกล ส่งต่อคำขอไปยังอุปกรณ์อื่น';
+  String get remoteConnectForward =>
+      'เชื่อมต่อระยะไกล ส่งต่อคำขอไปยังอุปกรณ์อื่น';
 
   @override
   String get connectSuccess => 'เชื่อมต่อสำเร็จ';
@@ -797,7 +803,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String get ipLayerProxy => 'พร็อกซีชั้น IP (Beta)';
 
   @override
-  String get ipLayerProxyDesc => 'พร็อกซีชั้น IP สามารถจับคำขอ Flutter ได้ ความเสถียรยังจำกัด';
+  String get ipLayerProxyDesc =>
+      'พร็อกซีชั้น IP สามารถจับคำขอ Flutter ได้ ความเสถียรยังจำกัด';
 
   @override
   String get inputAddress => 'Input Address';
@@ -824,7 +831,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String get windowMode => 'โหมดหน้าต่าง';
 
   @override
-  String get windowModeSubTitle => 'Enabled Packet Capture, Enter the background, Display a small window';
+  String get windowModeSubTitle =>
+      'Enabled Packet Capture, Enter the background, Display a small window';
 
   @override
   String get pipIcon => 'ไอคอนหน้าต่าง';
@@ -842,7 +850,15 @@ class AppLocalizationsTh extends AppLocalizations {
   String get memoryCleanup => 'ล้างหน่วยความจำ';
 
   @override
-  String get memoryCleanupSubtitle => 'ล้างคำขออัตโนมัติเมื่อถึงขีดจำกัดหน่วยความจำ';
+  String get memoryCleanupSubtitle =>
+      'ล้างคำขออัตโนมัติเมื่อถึงขีดจำกัดหน่วยความจำ';
+
+  @override
+  String get maxRequestCount => 'ขีดจำกัดรายการคำขอ';
+
+  @override
+  String get maxRequestCountSubtitle =>
+      'จำนวนคำขอสูงสุดที่เก็บในรายการ; คำขอที่เก่าที่สุดจะถูกลบออกอัตโนมัติเมื่อเกิน';
 
   @override
   String get clearConfirm => 'ยืนยันก่อนล้าง';
@@ -884,7 +900,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String get proxyIgnoreDomain => 'พร็อกซีข้ามโดเมน';
 
   @override
-  String get domainWhitelistDescribe => 'พร็อกซีเฉพาะโดเมนในบัญชีขาว หากเปิดใช้งาน บัญชีดำจะใช้ไม่ได้';
+  String get domainWhitelistDescribe =>
+      'พร็อกซีเฉพาะโดเมนในบัญชีขาว หากเปิดใช้งาน บัญชีดำจะใช้ไม่ได้';
 
   @override
   String get domainBlacklistDescribe => 'โดเมนในบัญชีดำจะไม่ถูกพร็อกซี';
@@ -1064,7 +1081,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String get appUpdateDialogTitle => 'Update Available';
 
   @override
-  String get appUpdateUpdateMsg => 'A new version of ProxyPin is available. Would you like to update now?';
+  String get appUpdateUpdateMsg =>
+      'A new version of ProxyPin is available. Would you like to update now?';
 
   @override
   String get appUpdateCurrentVersionLbl => 'Current Version';
@@ -1097,7 +1115,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String get requestMap => 'แม็ปคำขอ';
 
   @override
-  String get requestMapDescribe => 'ไม่เรียกบริการระยะไกล ใช้การตั้งค่าหรือสคริปต์ในเครื่องตอบกลับ';
+  String get requestMapDescribe =>
+      'ไม่เรียกบริการระยะไกล ใช้การตั้งค่าหรือสคริปต์ในเครื่องตอบกลับ';
 
   @override
   String get automatic => 'Automatic';
@@ -1149,7 +1168,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String get cryptoIvPrefixLabel => 'IV Prefix';
 
   @override
-  String get cryptoIvPrefixTooltip => 'Use the first N bytes of the response body as IV';
+  String get cryptoIvPrefixTooltip =>
+      'Use the first N bytes of the response body as IV';
 
   @override
   String get local => 'ภายในเครื่อง';

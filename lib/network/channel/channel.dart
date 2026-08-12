@@ -15,6 +15,7 @@
  */
 
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 import 'dart:math';
 
@@ -35,16 +36,29 @@ abstract class ChannelHandler<T> {
   void channelActive(ChannelContext context, Channel channel) {}
 
   ///读取数据事件
-  Future<void> channelRead(ChannelContext channelContext, Channel channel, T msg) async {}
+  Future<void> channelRead(
+    ChannelContext channelContext,
+    Channel channel,
+    T msg,
+  ) async {}
 
   ///连接断开
   void channelInactive(ChannelContext channelContext, Channel channel) {
     //log.i("[${channel.id}] close $channel");
   }
 
-  void exceptionCaught(ChannelContext channelContext, Channel channel, dynamic error, {StackTrace? trace}) {
+  void exceptionCaught(
+    ChannelContext channelContext,
+    Channel channel,
+    dynamic error, {
+    StackTrace? trace,
+  }) {
     HostAndPort? host = channelContext.host;
-    log.e("[${channel.id}] exceptionCaught $host $channel", error: error, stackTrace: trace);
+    log.e(
+      "[${channel.id}] exceptionCaught $host $channel",
+      error: error,
+      stackTrace: trace,
+    );
     channel.close();
   }
 }
@@ -64,30 +78,48 @@ class Channel {
   //是否写入中
   bool isWriting = false;
 
+  //待写队列：Socket.add 在 dart:io 中是同步排队的，
+  //用 FIFO 队列替代原来的忙等轮询，避免高并发下 writeBytes 互相阻塞。
+  final Queue<List<int>> _writeQueue = Queue();
+  bool _draining = false;
+
   Object? error; //异常
   //是否使用代理
   bool useProxy = false;
 
   Channel(this._socket)
-      : _id = DateTime.now().millisecondsSinceEpoch + Random().nextInt(999999),
-        remoteSocketAddress = InetSocketAddress(_socket.remoteAddress, _socket.remotePort);
+    : _id = DateTime.now().millisecondsSinceEpoch + Random().nextInt(999999),
+      remoteSocketAddress = InetSocketAddress(
+        _socket.remoteAddress,
+        _socket.remotePort,
+      );
 
   ///返回此channel的全局唯一标识符。
   String get id => _id.toRadixString(36);
 
   Socket get socket => _socket;
 
-  void serverSecureSocket(SecureSocket secureSocket, ChannelContext channelContext) {
+  void serverSecureSocket(
+    SecureSocket secureSocket,
+    ChannelContext channelContext,
+  ) {
     _socket = secureSocket;
     _socket.done.then((value) => isOpen = false);
     dispatcher.listen(this, channelContext);
   }
 
   //向远程发起ssl连接
-  Future<SecureSocket> secureSocket(ChannelContext channelContext,
-      {String? host, List<String>? supportedProtocols}) async {
-    SecureSocket secureSocket = await SecureSocket.secure(socket,
-        host: host, supportedProtocols: supportedProtocols, onBadCertificate: (certificate) => true);
+  Future<SecureSocket> secureSocket(
+    ChannelContext channelContext, {
+    String? host,
+    List<String>? supportedProtocols,
+  }) async {
+    SecureSocket secureSocket = await SecureSocket.secure(
+      socket,
+      host: host,
+      supportedProtocols: supportedProtocols,
+      onBadCertificate: (certificate) => true,
+    );
 
     _socket = secureSocket;
     _socket.done.then((value) => isOpen = false);
@@ -96,10 +128,17 @@ class Channel {
     return secureSocket;
   }
 
-  Future<SecureSocket> startSecureSocket(ChannelContext channelContext,
-      {String? host, List<String>? supportedProtocols}) async {
-    SecureSocket secureSocket = await SecureSocket.secure(socket,
-        host: host, supportedProtocols: supportedProtocols, onBadCertificate: (certificate) => true);
+  Future<SecureSocket> startSecureSocket(
+    ChannelContext channelContext, {
+    String? host,
+    List<String>? supportedProtocols,
+  }) async {
+    SecureSocket secureSocket = await SecureSocket.secure(
+      socket,
+      host: host,
+      supportedProtocols: supportedProtocols,
+      onBadCertificate: (certificate) => true,
+    );
 
     _socket = secureSocket;
     _socket.done.then((value) => isOpen = false);
@@ -110,13 +149,16 @@ class Channel {
     dispatcher.listen(this, channelContext);
   }
 
-  String? get selectedProtocol => isSsl && isOpen ? (_socket as SecureSocket).selectedProtocol : null;
+  String? get selectedProtocol =>
+      isSsl && isOpen ? (_socket as SecureSocket).selectedProtocol : null;
 
   ///是否是ssl链接
   bool get isSsl => _socket is SecureSocket;
 
   ///远程服务器证书(仅ssl链接有效)
-  X509Certificate? get peerCertificate => _socket is SecureSocket ? (_socket as SecureSocket).peerCertificate : null;
+  X509Certificate? get peerCertificate => _socket is SecureSocket
+      ? (_socket as SecureSocket).peerCertificate
+      : null;
 
   Future<void> write(ChannelContext channelContext, Object obj) async {
     var data = dispatcher.encoder.encode(channelContext, obj);
@@ -125,32 +167,36 @@ class Channel {
 
   Future<void> writeBytes(List<int> bytes) async {
     if (isClosed) {
-      logger.w("[$id] $remoteSocketAddress channel is closed", stackTrace: StackTrace.current);
+      logger.w(
+        "[$id] $remoteSocketAddress channel is closed",
+        stackTrace: StackTrace.current,
+      );
+      return;
     }
 
-    //只能有一个写入
-    int retry = 0;
-    while (isWriting && retry++ < 30) {
-      await Future.delayed(const Duration(milliseconds: 100));
-    }
-
-    if (isWriting) {
-      logger.d("[$id] write busy");
-    }
-
-    isWriting = true;
+    // Socket.add 内部同步排队，按到达顺序写入即可，无需等待前一次写完。
+    // 只在同一事件循环内串行排空，避免无界增长。
+    _writeQueue.add(bytes);
+    if (_draining) return;
+    _draining = true;
     try {
-      if (!isClosed) {
-        _socket.add(bytes);
+      while (_writeQueue.isNotEmpty) {
+        final chunk = _writeQueue.removeFirst();
+        if (!isClosed) {
+          _socket.add(chunk);
+        }
       }
     } catch (e, t) {
       if (e is StateError && e.message == "StreamSink is closed") {
-        logger.w("[$id] $remoteSocketAddress write error channel is closed $e", stackTrace: t);
+        logger.w(
+          "[$id] $remoteSocketAddress write error channel is closed $e",
+          stackTrace: t,
+        );
       } else {
         logger.e("[$id] write error", error: e, stackTrace: t);
       }
     } finally {
-      isWriting = false;
+      _draining = false;
     }
   }
 
@@ -166,17 +212,8 @@ class Channel {
       return;
     }
 
-    //写入中，延迟关闭
-    int retry = 0;
-    while (isWriting && retry++ < 10) {
-      await Future.delayed(const Duration(milliseconds: 150));
-    }
     isOpen = false;
-    // if (!isWriting) {
-    //   await _socket.flush();
-    // }
     await _socket.close();
-    // _socket.destroy();
   }
 
   ///返回此channel是否打开

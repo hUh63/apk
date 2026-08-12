@@ -67,7 +67,7 @@ class Configuration {
   bool mcpEnabled = true;
 
   //MCP Server 是否随应用启动自动启动
-  bool mcpAutoStart = false;
+  bool mcpAutoStart = true;
 
   //MCP 工具启用状态（工具名 -> 是否启用），默认全部启用
   Map<String, bool> mcpToolsEnabled = {};
@@ -109,7 +109,7 @@ class Configuration {
     historyCacheTime = config['historyCacheTime'] ?? 0;
     mcpPort = config['mcpPort'] ?? 9010;
     mcpEnabled = config['mcpEnabled'] ?? true;
-    mcpAutoStart = config['mcpAutoStart'] ?? false;
+    mcpAutoStart = config['mcpAutoStart'] ?? true;
     if (config['mcpToolsEnabled'] is Map) {
       mcpToolsEnabled = (config['mcpToolsEnabled'] as Map)
           .map((key, value) => MapEntry(key.toString(), value == true));
