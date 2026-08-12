@@ -8,6 +8,7 @@ import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/network/mcp/mcp_server.dart';
 import 'package:proxypin/native/mcp_screen.dart';
 import 'package:proxypin/utils/ip.dart';
+import 'package:proxypin/ui/mobile/setting/mcp_automation.dart';
 
 /// MCP 设置页面
 /// 展示 MCP 服务状态、自动启动、连接信息、AI 配置指南、控制模式、可用工具列表
@@ -181,7 +182,22 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
     final tools = mcpServer.getTools();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('MCP 设置'), centerTitle: true),
+      appBar: AppBar(
+        title: const Text('MCP 设置'),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.auto_awesome),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const McpAutomationPage()),
+              );
+            },
+            tooltip: '自动化配置',
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(

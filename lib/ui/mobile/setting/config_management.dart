@@ -11,6 +11,7 @@ import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/network/bin/server.dart';
 import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/ui/component/widgets.dart';
+import 'package:proxypin/ui/mobile/setting/backup_management.dart';
 
 /// 配置管理页面 - 导入/导出配置
 class ConfigManagement extends StatefulWidget {
@@ -79,6 +80,19 @@ class _ConfigManagementState extends State<ConfigManagement> {
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () => _importConfig(context, localizations),
             ),
+            Divider(height: 0, thickness: 0.3, color: dividerColor),
+            ListTile(
+              leading: const Icon(Icons.backup, color: Colors.purple),
+              title: const Text('备份管理'),
+              subtitle: const Text('查看、恢复或删除自动备份的配置文件'),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const BackupManagement()),
+                );
+              },
+            ),
           ]),
           const SizedBox(height: 12),
           Card(
@@ -126,7 +140,53 @@ class _ConfigManagementState extends State<ConfigManagement> {
   /// 导出配置
   Future<void> _exportConfig(
       BuildContext context, AppLocalizations localizations) async {
+    double exportProgress = 0.0;
+    bool isExporting = false;
+
     try {
+      // 显示进度对话框
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  CircularProgressIndicator(strokeWidth: 2, value: null),
+                  SizedBox(width: 12),
+                  Text('正在导出配置'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('请稍候，正在准备导出文件...'),
+                  const SizedBox(height: 16),
+                  LinearProgressIndicator(
+                    value: exportProgress > 0 ? exportProgress : null,
+                    minHeight: 6,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    exportProgress > 0 ? '${(exportProgress * 100).toInt()}%' : '准备中...',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+              actions: [
+                if (!isExporting)
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('关闭'),
+                  ),
+              ],
+            );
+          },
+        ),
+      );
+
       // 生成默认文件名
       final timestamp = DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
       final defaultName = 'proxypin_config_$timestamp.json';
@@ -134,6 +194,10 @@ class _ConfigManagementState extends State<ConfigManagement> {
       // 导出配置
       final jsonStr = configuration.exportConfig();
       final bytes = Uint8List.fromList(utf8.encode(jsonStr));
+
+      // 更新进度
+      exportProgress = 0.3;
+      isExporting = true;
 
       // 使用 FilePicker v12+ API 保存文件 (直接传入 bytes)
       String? outputPath = await FilePicker.saveFile(
@@ -144,10 +208,21 @@ class _ConfigManagementState extends State<ConfigManagement> {
         bytes: bytes,
       );
 
+      // 更新进度
+      exportProgress = 0.8;
+
       if (outputPath == null || outputPath.isEmpty) {
         // 用户取消
+        if (context.mounted) Navigator.of(context).pop();
         return;
       }
+
+      // 完成
+      exportProgress = 1.0;
+      
+      // 延迟关闭对话框
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (context.mounted) Navigator.of(context).pop();
 
       if (mounted) {
         FlutterToastr.show(
@@ -160,6 +235,8 @@ class _ConfigManagementState extends State<ConfigManagement> {
       }
     } catch (e) {
       logger.e('导出配置失败', error: e, stackTrace: StackTrace.current);
+      // 关闭进度对话框
+      if (context.mounted) Navigator.of(context).pop();
       if (mounted) {
         FlutterToastr.show(
           '导出失败：${e.toString()}',
