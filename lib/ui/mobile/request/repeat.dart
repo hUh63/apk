@@ -45,6 +45,9 @@ class _CustomRepeatState extends State<MobileCustomRepeat> {
   bool fixed = true;
   bool keepSetting = true;
 
+  // 时间单位：0=毫秒，1=秒，2=分钟 (#887)
+  int timeUnit = 0;
+
   DateTime? time;
 
   AppLocalizations get localizations => AppLocalizations.of(context)!;
@@ -183,7 +186,7 @@ class _CustomRepeatState extends State<MobileCustomRepeat> {
 
   String _two(int v) => v.toString().padLeft(2, '0');
 
-  //定时重放
+  //定时重放 - 支持时间单位 (#887)
   void submitTask(int counter) {
     if (counter <= 0) {
       return;
@@ -191,10 +194,14 @@ class _CustomRepeatState extends State<MobileCustomRepeat> {
     widget.onRepeat.call();
 
     int intervalValue = int.parse(interval.text);
+    // 根据时间单位转换为毫秒
+    int multiplier = timeUnit == 0 ? 1 : (timeUnit == 1 ? 1000 : 60000);
+    intervalValue = intervalValue * multiplier;
+    
     //随机
     if (!fixed) {
-      int min = int.parse(minInterval.text);
-      int max = int.parse(maxInterval.text);
+      int min = int.parse(minInterval.text) * multiplier;
+      int max = int.parse(maxInterval.text) * multiplier;
       intervalValue = Random().nextInt(max - min) + min;
     }
 
