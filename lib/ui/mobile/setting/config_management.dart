@@ -130,7 +130,7 @@ class _ConfigManagementState extends State<ConfigManagement> {
       final defaultName = 'proxypin_config_$timestamp.json';
 
       // 使用 FilePicker 选择保存位置
-      String? outputPath = await FilePicker().saveFile(
+      String? outputPath = await FilePicker.platform.saveFile(
         dialogTitle: '选择保存位置',
         fileName: defaultName,
         type: FileType.custom,
@@ -175,7 +175,7 @@ class _ConfigManagementState extends State<ConfigManagement> {
       BuildContext context, AppLocalizations localizations) async {
     try {
       // 选择文件
-      FilePickerResult? result = await FilePicker().pickFiles(
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json'],
         allowMultiple: false,
