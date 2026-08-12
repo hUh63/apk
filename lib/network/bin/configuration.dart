@@ -181,3 +181,56 @@ class Configuration {
     };
   }
 }
+
+/// 导出配置到 JSON 字符串（用于备份/分享）
+extension ConfigurationExport on Configuration {
+  String exportConfig() {
+    return jsonEncode(toJson());
+  }
+}
+
+/// 配置导入工具类
+class ConfigImportExport {
+  /// 从 JSON 字符串导入配置
+  static Future<Configuration> importConfig(String jsonStr) async {
+    try {
+      Map<String, dynamic> config = jsonDecode(jsonStr);
+      return Configuration.fromJson(config);
+    } catch (e) {
+      logger.e('导入配置失败', error: e, stackTrace: StackTrace.current);
+      rethrow;
+    }
+  }
+
+  /// 导出配置文件到指定路径
+  static Future<String> exportConfigToFile(String? customPath) async {
+    final config = await Configuration.instance;
+    final jsonStr = config.exportConfig();
+    
+    String targetPath;
+    if (customPath != null && customPath.isNotEmpty) {
+      targetPath = customPath;
+    } else {
+      final separator = Platform.pathSeparator;
+      final home = await FileRead.homeDir();
+      final timestamp = DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
+      targetPath = '${home.path}${separator}proxypin_config_$timestamp.json';
+    }
+    
+    final file = File(targetPath);
+    await file.create(recursive: true);
+    await file.writeAsString(jsonStr);
+    logger.i('配置已导出到：$targetPath');
+    return targetPath;
+  }
+
+  /// 从文件导入配置
+  static Future<Configuration> importConfigFromFile(String filePath) async {
+    final file = File(filePath);
+    if (!await file.exists()) {
+      throw FileSystemException('配置文件不存在', filePath);
+    }
+    final jsonStr = await file.readAsString();
+    return importConfig(jsonStr);
+  }
+}
