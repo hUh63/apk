@@ -427,7 +427,7 @@ class McpPlugin : FlutterPlugin {
     private fun openShizukuSettings(): Boolean {
         return try {
             val activity = Class.forName("moe.shizuku.privileged.api.constant.Intent")
-            val action = activity.getField("ACTIVITY_PERMISSION").getString(null)
+            val action = activity.getField("ACTIVITY_PERMISSION").get(null) as String
             val intent = Intent(action).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
@@ -534,9 +534,9 @@ class McpPlugin : FlutterPlugin {
             val binder = shizukuBinder ?: throw IllegalStateException("Shizuku binder not connected")
             val clazz = Class.forName("moe.shizuku.api.Shizuku")
             val newProcess = clazz.getMethod("newProcess", Array<String>::class.java, String::class.java, Array<String>::class.java)
-            val process = newProcess.invoke(null, arrayOf("sh", "-c", command), null, arrayOf<String>()) as android.os.Process
+            val process = newProcess.invoke(null, arrayOf("sh", "-c", command), null, arrayOf<String>()) as java.lang.Process
             val stdout = process.inputStream.bufferedReader().readText()
-            val stderr = process.errorStream.bufferedReader().readText()
+            val stderr = process.getErrorStream().bufferedReader().readText()
             val completed = process.waitFor(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
             val exitCode = if (completed) process.exitValue() else -1
             if (!completed) process.destroyForcibly()
