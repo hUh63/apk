@@ -172,6 +172,15 @@ Future<void> exportRequestsAsFiles(
       }
       if (selectedDirectory == null) return;
 
+      // 修复 #893: 检查路径是否为目录，防止 iOS 上"Is a directory"错误
+      final selectedDir = Directory(selectedDirectory);
+      if (!await selectedDir.exists()) {
+        await selectedDir.create(recursive: true);
+      } else if (!await selectedDir.stat().then((s) => s.type == FileSystemEntityType.directory)) {
+        // 如果选择的不是目录而是文件，使用其父目录
+        selectedDirectory = selectedDir.parent.path;
+      }
+
       // 创建主文件夹
       final folder = Directory(selectedDirectory);
       if (!await folder.exists()) {
