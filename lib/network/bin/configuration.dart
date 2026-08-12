@@ -323,7 +323,7 @@ class ConfigAutoSave {
     _saveTimer = Timer(Duration(seconds: 2), () async {
       try {
         final config = await Configuration.instance;
-        await config.save();
+        await config.flushConfig();
         logger.d('配置自动保存成功');
       } catch (e) {
         logger.e('配置自动保存失败', error: e);
