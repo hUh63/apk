@@ -18,6 +18,235 @@ import 'dart:async';
 import 'package:proxypin/network/http/http.dart';
 import 'package:proxypin/network/util/logger.dart';
 
+/// 规则优先级
+enum RulePriority { low, normal, high, critical }
+
+/// 条件类型
+enum ConditionType {
+  httpRequest,
+  networkStatus,
+  proxyStatus,
+  systemStatus,
+  custom,
+}
+
+/// 操作符
+enum Operator {
+  equals,
+  notEquals,
+  greaterThan,
+  lessThan,
+  greaterThanOrEqual,
+  lessThanOrEqual,
+  contains,
+  startsWith,
+  endsWith,
+  matches,
+  inList,
+  notInList,
+  exists,
+  notExists,
+}
+
+/// 动作类型
+enum ActionType {
+  log,
+  notify,
+  stopCapture,
+  startCapture,
+  exportData,
+  executeScript,
+  sendWebhook,
+  custom,
+}
+
+/// 动作回调类型
+typedef ActionCallback = Future<void> Function(dynamic context, Map<String, dynamic>? params);
+
+/// 规则执行记录
+class RuleExecutionRecord {
+  final String ruleId;
+  final DateTime timestamp;
+  final bool matched;
+  final String? action;
+  
+  RuleExecutionRecord(this.ruleId, this.matched, this.action) 
+      : timestamp = DateTime.now();
+}
+
+/// 规则类
+class Rule {
+  final String id;
+  final String name;
+  final String description;
+  final List<Condition> conditions;
+  final List<Action> actions;
+  final RulePriority priority;
+  final bool enabled;
+  final DateTime? expiresAt;
+
+  Rule({
+    required this.id,
+    required this.name,
+    this.description = '',
+    required this.conditions,
+    required this.actions,
+    this.priority = RulePriority.normal,
+    this.enabled = true,
+    this.expiresAt,
+  });
+
+  /// 检查规则是否过期
+  bool get isExpired => expiresAt != null && DateTime.now().isAfter(expiresAt!);
+
+  /// 检查规则是否可用
+  bool get isAvailable => enabled && !isExpired;
+}
+
+/// 条件类
+class Condition {
+  final ConditionType type;
+  final String field;
+  final Operator operator;
+  final dynamic value;
+
+  Condition({
+    required this.type,
+    required this.field,
+    required this.operator,
+    required this.value,
+  });
+
+  /// 评估条件是否匹配
+  bool evaluate(dynamic context) {
+    final actualValue = _getFieldValue(context, field);
+    
+    switch (operator) {
+      case Operator.equals:
+        return actualValue == value;
+      case Operator.notEquals:
+        return actualValue != value;
+      case Operator.greaterThan:
+        return _compare(actualValue, value) > 0;
+      case Operator.lessThan:
+        return _compare(actualValue, value) < 0;
+      case Operator.greaterThanOrEqual:
+        return _compare(actualValue, value) >= 0;
+      case Operator.lessThanOrEqual:
+        return _compare(actualValue, value) <= 0;
+      case Operator.contains:
+        return actualValue.toString().contains(value.toString());
+      case Operator.startsWith:
+        return actualValue.toString().startsWith(value.toString());
+      case Operator.endsWith:
+        return actualValue.toString().endsWith(value.toString());
+      case Operator.matches:
+        if (value is RegExp) {
+          return value.hasMatch(actualValue.toString());
+        }
+        return RegExp(value.toString()).hasMatch(actualValue.toString());
+      case Operator.inList:
+        if (value is List) {
+          return value.contains(actualValue);
+        }
+        return false;
+      case Operator.notInList:
+        if (value is List) {
+          return !value.contains(actualValue);
+        }
+        return true;
+      case Operator.exists:
+        return actualValue != null;
+      case Operator.notExists:
+        return actualValue == null;
+    }
+  }
+
+  /// 获取字段值
+  dynamic _getFieldValue(dynamic context, String field) {
+    if (context == null) return null;
+    
+    // 支持嵌套字段，如 "request.headers.content-type"
+    final parts = field.split('.');
+    dynamic result = context;
+    
+    for (final part in parts) {
+      if (result is Map) {
+        result = result[part];
+      } else if (result is HttpRequest) {
+        result = _getHttpRequestField(result, part);
+      } else {
+        return null;
+      }
+      
+      if (result == null) break;
+    }
+    
+    return result;
+  }
+
+  /// 获取 HttpRequest 字段
+  dynamic _getHttpRequestField(HttpRequest request, String field) {
+    switch (field) {
+      case 'url':
+        return request.url;
+      case 'method':
+        return request.method;
+      case 'statusCode':
+        return request.statusCode;
+      case 'duration':
+        return request.response?.duration?.inMilliseconds ?? 0;
+      case 'requestSize':
+        return request.requestContentLength;
+      case 'responseSize':
+        return request.response?.responseContentLength ?? 0;
+      case 'host':
+        return request.host;
+      case 'path':
+        return request.path;
+      case 'contentType':
+        return request.requestContentType;
+      case 'responseContentType':
+        return request.response?.responseContentType;
+      default:
+        return null;
+    }
+  }
+
+  /// 比较两个值
+  int _compare(dynamic a, dynamic b) {
+    if (a is num && b is num) {
+      return a.compareTo(b);
+    }
+    if (a is DateTime && b is DateTime) {
+      return a.compareTo(b);
+    }
+    return a.toString().compareTo(b.toString());
+  }
+}
+
+/// 动作类
+class Action {
+  final ActionType type;
+  final String? target;
+  final Map<String, dynamic>? parameters;
+  final ActionCallback? callback;
+
+  Action({
+    required this.type,
+    this.target,
+    this.parameters,
+    this.callback,
+  });
+
+  /// 执行动作
+  Future<void> execute(dynamic context) async {
+    if (callback != null) {
+      await callback!(context, parameters);
+    }
+  }
+}
+
 /// MCP 条件规则引擎
 /// 支持基于条件的自动化决策和资源管理
 /// @author wanghongen
@@ -33,235 +262,6 @@ class McpRuleEngine {
   // 规则执行历史
   final List<RuleExecutionRecord> _executionHistory = [];
   static const int _maxHistorySize = 50;
-
-  /// 规则执行记录
-  class RuleExecutionRecord {
-    final String ruleId;
-    final DateTime timestamp;
-    final bool matched;
-    final String? action;
-    
-    RuleExecutionRecord(this.ruleId, this.matched, this.action) 
-        : timestamp = DateTime.now();
-  }
-
-  /// 规则类
-  class Rule {
-    final String id;
-    final String name;
-    final String description;
-    final List<Condition> conditions;
-    final List<Action> actions;
-    final RulePriority priority;
-    final bool enabled;
-    final DateTime? expiresAt;
-
-    Rule({
-      required this.id,
-      required this.name,
-      this.description = '',
-      required this.conditions,
-      required this.actions,
-      this.priority = RulePriority.normal,
-      this.enabled = true,
-      this.expiresAt,
-    });
-
-    /// 检查规则是否过期
-    bool get isExpired => expiresAt != null && DateTime.now().isAfter(expiresAt!);
-
-    /// 检查规则是否可用
-    bool get isAvailable => enabled && !isExpired;
-  }
-
-  /// 规则优先级
-  enum RulePriority { low, normal, high, critical }
-
-  /// 条件类
-  class Condition {
-    final ConditionType type;
-    final String field;
-    final Operator operator;
-    final dynamic value;
-
-    Condition({
-      required this.type,
-      required this.field,
-      required this.operator,
-      required this.value,
-    });
-
-    /// 评估条件是否匹配
-    bool evaluate(dynamic context) {
-      final actualValue = _getFieldValue(context, field);
-      
-      switch (operator) {
-        case Operator.equals:
-          return actualValue == value;
-        case Operator.notEquals:
-          return actualValue != value;
-        case Operator.greaterThan:
-          return _compare(actualValue, value) > 0;
-        case Operator.lessThan:
-          return _compare(actualValue, value) < 0;
-        case Operator.greaterThanOrEqual:
-          return _compare(actualValue, value) >= 0;
-        case Operator.lessThanOrEqual:
-          return _compare(actualValue, value) <= 0;
-        case Operator.contains:
-          return actualValue.toString().contains(value.toString());
-        case Operator.startsWith:
-          return actualValue.toString().startsWith(value.toString());
-        case Operator.endsWith:
-          return actualValue.toString().endsWith(value.toString());
-        case Operator.matches:
-          if (value is RegExp) {
-            return value.hasMatch(actualValue.toString());
-          }
-          return RegExp(value.toString()).hasMatch(actualValue.toString());
-        case Operator.inList:
-          if (value is List) {
-            return value.contains(actualValue);
-          }
-          return false;
-        case Operator.notInList:
-          if (value is List) {
-            return !value.contains(actualValue);
-          }
-          return true;
-        case Operator.exists:
-          return actualValue != null;
-        case Operator.notExists:
-          return actualValue == null;
-      }
-    }
-
-    /// 获取字段值
-    dynamic _getFieldValue(dynamic context, String field) {
-      if (context == null) return null;
-      
-      // 支持嵌套字段，如 "request.headers.content-type"
-      final parts = field.split('.');
-      dynamic result = context;
-      
-      for (final part in parts) {
-        if (result is Map) {
-          result = result[part];
-        } else if (result is HttpRequest) {
-          result = _getHttpRequestField(result, part);
-        } else {
-          return null;
-        }
-        
-        if (result == null) break;
-      }
-      
-      return result;
-    }
-
-    /// 获取 HttpRequest 字段
-    dynamic _getHttpRequestField(HttpRequest request, String field) {
-      switch (field) {
-        case 'url':
-          return request.url;
-        case 'method':
-          return request.method;
-        case 'statusCode':
-          return request.statusCode;
-        case 'duration':
-          return request.response?.duration?.inMilliseconds ?? 0;
-        case 'requestSize':
-          return request.requestContentLength;
-        case 'responseSize':
-          return request.response?.responseContentLength ?? 0;
-        case 'host':
-          return request.host;
-        case 'path':
-          return request.path;
-        case 'contentType':
-          return request.requestContentType;
-        case 'responseContentType':
-          return request.response?.responseContentType;
-        default:
-          return null;
-      }
-    }
-
-    /// 比较两个值
-    int _compare(dynamic a, dynamic b) {
-      if (a is num && b is num) {
-        return a.compareTo(b);
-      }
-      if (a is DateTime && b is DateTime) {
-        return a.compareTo(b);
-      }
-      return a.toString().compareTo(b.toString());
-    }
-  }
-
-  /// 条件类型
-  enum ConditionType {
-    httpRequest,
-    networkStatus,
-    proxyStatus,
-    systemStatus,
-    custom,
-  }
-
-  /// 操作符
-  enum Operator {
-    equals,
-    notEquals,
-    greaterThan,
-    lessThan,
-    greaterThanOrEqual,
-    lessThanOrEqual,
-    contains,
-    startsWith,
-    endsWith,
-    matches,
-    inList,
-    notInList,
-    exists,
-    notExists,
-  }
-
-  /// 动作类
-  class Action {
-    final ActionType type;
-    final String? target;
-    final Map<String, dynamic>? parameters;
-    final ActionCallback? callback;
-
-    Action({
-      required this.type,
-      this.target,
-      this.parameters,
-      this.callback,
-    });
-
-    /// 执行动作
-    Future<void> execute(dynamic context) async {
-      if (callback != null) {
-        await callback!(context, parameters);
-      }
-    }
-  }
-
-  /// 动作类型
-  enum ActionType {
-    log,
-    notify,
-    stopCapture,
-    startCapture,
-    exportData,
-    executeScript,
-    sendWebhook,
-    custom,
-  }
-
-  /// 动作回调类型
-  typedef ActionCallback = Future<void> Function(dynamic context, Map<String, dynamic>? params);
 
   // ==================== 规则管理 ====================
 
@@ -518,8 +518,8 @@ class McpRuleEngineExample {
       name: '慢请求日志',
       minDuration: 5000, // 超过 5 秒
       actions: [
-        McpRuleEngine.Action(
-          type: McpRuleEngine.ActionType.log,
+        Action(
+          type: ActionType.log,
           parameters: {'level': 'warning', 'message': '检测到慢请求'},
         ),
       ],
@@ -537,8 +537,8 @@ class McpRuleEngineExample {
       name: '错误请求自动导出',
       minStatusCode: 400,
       actions: [
-        McpRuleEngine.Action(
-          type: McpRuleEngine.ActionType.exportData,
+        Action(
+          type: ActionType.exportData,
           parameters: {'format': 'har', 'autoSave': true},
         ),
       ],
@@ -556,12 +556,12 @@ class McpRuleEngineExample {
       name: '内存保护',
       maxMemoryUsage: 500, // MB
       actions: [
-        McpRuleEngine.Action(
-          type: McpRuleEngine.ActionType.log,
+        Action(
+          type: ActionType.log,
           parameters: {'message': '内存使用过高，自动清理缓存'},
         ),
-        McpRuleEngine.Action(
-          type: McpRuleEngine.ActionType.custom,
+        Action(
+          type: ActionType.custom,
           callback: (context, params) async {
             // 调用清理缓存的逻辑
             logger.i('执行内存清理');
@@ -581,8 +581,8 @@ class McpRuleEngineExample {
       id: 'large_file_block',
       name: '大文件下载拦截',
       actions: [
-        McpRuleEngine.Action(
-          type: McpRuleEngine.ActionType.custom,
+        Action(
+          type: ActionType.custom,
           callback: (context, params) async {
             if (context is HttpRequest) {
               final size = context.response?.responseContentLength ?? 0;
