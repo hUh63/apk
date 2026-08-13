@@ -118,24 +118,35 @@ class SearchConditionsState extends State<SearchConditions> {
               Row(
                 children: [
                   // 排序字段
-                  DropdownMenu<SortBy>(
-                    initialValue: searchModel.sortBy.name,
-                    items: ['time', 'duration', 'statusCode'],
+                  DropdownMenu<String>(
+                    initialSelection: searchModel.sortBy.name,
+                    dropdownMenuEntries: const [
+                      DropdownMenuEntry(value: 'time', label: '时间'),
+                      DropdownMenuEntry(value: 'duration', label: '耗时'),
+                      DropdownMenuEntry(value: 'statusCode', label: '状态码'),
+                    ],
                     onSelected: (val) {
-                      setState(() {
-                        searchModel.sortBy = SortBy.values.firstWhere((e) => e.name == val);
-                      });
+                      if (val != null) {
+                        setState(() {
+                          searchModel.sortBy = SortBy.values.firstWhere((e) => e.name == val);
+                        });
+                      }
                     },
                   ),
                   const SizedBox(width: 8),
                   // 排序方向
-                  DropdownMenu<SortOrder>(
-                    initialValue: searchModel.sortOrder.name,
-                    items: ['desc', 'asc'],
+                  DropdownMenu<String>(
+                    initialSelection: searchModel.sortOrder.name,
+                    dropdownMenuEntries: const [
+                      DropdownMenuEntry(value: 'desc', label: '降序↓'),
+                      DropdownMenuEntry(value: 'asc', label: '升序↑'),
+                    ],
                     onSelected: (val) {
-                      setState(() {
-                        searchModel.sortOrder = SortOrder.values.firstWhere((e) => e.name == val);
-                      });
+                      if (val != null) {
+                        setState(() {
+                          searchModel.sortOrder = SortOrder.values.firstWhere((e) => e.name == val);
+                        });
+                      }
                     },
                   ),
                 ],
