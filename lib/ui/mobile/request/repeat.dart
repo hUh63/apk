@@ -193,31 +193,67 @@ class _CustomRepeatState extends State<MobileCustomRepeat> {
 
   String _two(int v) => v.toString().padLeft(2, '0');
 
-  //定时重放 - 支持时间单位 (#887)
+  // 定时重放 - 支持时间单位 (#887) + 重试机制 (#892)
   void submitTask(int counter) {
     if (counter <= 0) {
+      _showRepeatResult();
       return;
     }
-    widget.onRepeat.call();
+    _executeWithRetry(counter);
+  }
 
+  // 带重试机制的执行 (#892)
+  Future<void> _executeWithRetry(int counter, {int attempt = 1}) async {
+    try {
+      await widget.onRepeat.call();
+      successCount++;
+      _scheduleNext(counter - 1);
+    } catch (e) {
+      failCount++;
+      if (enableRetry && attempt < maxRetries) {
+        retryCount++;
+        Future.delayed(const Duration(milliseconds: 500), () {
+          _executeWithRetry(counter, attempt: attempt + 1);
+        });
+      } else {
+        _scheduleNext(counter - 1);
+      }
+    }
+  }
+
+  // 调度下一次重放
+  void _scheduleNext(int counter) {
+    if (counter <= 0) return;
     int intervalValue = int.parse(interval.text);
-    // 根据时间单位转换为毫秒
     int multiplier = timeUnit == 0 ? 1 : (timeUnit == 1 ? 1000 : 60000);
     intervalValue = intervalValue * multiplier;
-    
-    //随机
     if (!fixed) {
       int min = int.parse(minInterval.text) * multiplier;
       int max = int.parse(maxInterval.text) * multiplier;
       intervalValue = Random().nextInt(max - min) + min;
     }
-
     Future.delayed(Duration(milliseconds: intervalValue), () {
-      if (counter - 1 > 0) {
-        submitTask(counter - 1);
-      }
+      submitTask(counter);
     });
   }
+
+  // 显示重放结果统计 (#892)
+  void _showRepeatResult() {
+    if (successCount > 0 || failCount > 0) {
+      String message = '成功：$successCount\n失败：$failCount\n重试：$retryCount';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 3),
+          backgroundColor: failCount > 0 ? Colors.orange : Colors.green,
+        ),
+      );
+      successCount = 0;
+      failCount = 0;
+      retryCount = 0;
+    }
+  }
+
 
   //间隔widget
   Widget intervalWidget() {
