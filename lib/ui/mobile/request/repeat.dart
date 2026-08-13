@@ -44,11 +44,18 @@ class _CustomRepeatState extends State<MobileCustomRepeat> {
 
   bool fixed = true;
   bool keepSetting = true;
+  bool enableRetry = true; // 启用重试 (#892)
+  int maxRetries = 3; // 最大重试次数 (#892)
 
   // 时间单位：0=毫秒，1=秒，2=分钟 (#887)
   int timeUnit = 0;
 
   DateTime? time;
+
+  // 重放统计 (#892)
+  int successCount = 0;
+  int failCount = 0;
+  int retryCount = 0;
 
   AppLocalizations get localizations => AppLocalizations.of(context)!;
 
