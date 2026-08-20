@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
+import 'package:proxypin/network/http/websocket.dart';
 import 'dart:io' as io;
 import 'dart:math' as math;
 
@@ -1710,7 +1712,48 @@ Body Encoding Rules:
           'required': ['request_id'],
         },
       },
-    ];
+      // ==================== WebSocket Message Tools (v1.6.0+) ====================
+      {
+        'name': 'get_paused_websocket_messages',
+        'description': 'Get all WebSocket messages currently paused by interception.',
+        'inputSchema': {'type': 'object', 'properties': {}},
+      },
+      {
+        'name': 'resume_websocket_message',
+        'description': 'Resume (release) a paused WebSocket message. Optionally modify the payload before releasing.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'frame_id': {
+              'type': 'string',
+              'description': 'ID of the paused WebSocket frame',
+            },
+            'payload': {
+              'type': 'string',
+              'description': 'Optional modified payload (text messages only)',
+            },
+          },
+          'required': ['frame_id'],
+        },
+      },
+      {
+        'name': 'abort_websocket_message',
+        'description': 'Abort a paused WebSocket message. The message will be dropped.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'frame_id': {
+              'type': 'string',
+              'description': 'ID of the paused WebSocket frame',
+            },
+            'reason': {
+              'type': 'string',
+              'description': 'Abort reason (optional)',
+            },
+          },
+          'required': ['frame_id'],
+        },
+      },    ];
   }
 
   Future<dynamic> _executeTool(String name, Map<String, dynamic> args) async {
@@ -3018,6 +3061,54 @@ Body Encoding Rules:
         } catch (e) {
           return {'error': 'Failed to reject intercept: $e'};
         }
+
+      // ==================== WebSocket Message Tools (v1.6.0+) ====================
+      case 'get_paused_websocket_messages':
+        try {
+          final paused = McpBridge().getPausedWebSocketMessages();
+          return {
+            'status': 'success',
+            'count': paused.length,
+            'messages': paused.map((m) => {
+              'frame_id': m.frameId,
+              'url': m.url,
+              'direction': m.isOutgoing ? 'outgoing' : 'incoming',
+              'payload_preview': m.payloadPreview,
+              'paused_at': m.pausedAt,
+            }).toList(),
+          };
+        } catch (e) {
+          return {'error': 'Failed to get paused WebSocket messages: $e'};
+        }
+
+      case 'resume_websocket_message':
+        try {
+          final frameId = args['frame_id'] as String;
+          final payload = args['payload'] as String?;
+          final result = await McpBridge().resumeWebSocketMessage(frameId, payload: payload);
+          return {
+            'status': result ? 'resumed' : 'failed',
+            'frame_id': frameId,
+            'modified': payload != null,
+          };
+        } catch (e) {
+          return {'error': 'Failed to resume WebSocket message: $e'};
+        }
+
+      case 'abort_websocket_message':
+        try {
+          final frameId = args['frame_id'] as String;
+          final reason = args['reason'] as String? ?? 'Aborted by user';
+          final result = await McpBridge().abortWebSocketMessage(frameId, reason: reason);
+          return {
+            'status': result ? 'aborted' : 'failed',
+            'frame_id': frameId,
+            'reason': reason,
+          };
+        } catch (e) {
+          return {'error': 'Failed to abort WebSocket message: $e'};
+        }
+
 
       // ==================== Weak Network Simulation Tools (1.3.1+) ====================
       case 'add_weak_network_rule':

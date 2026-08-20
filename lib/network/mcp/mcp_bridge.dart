@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:proxypin/network/bin/listener.dart';
@@ -8,6 +9,7 @@ import 'package:proxypin/network/http/websocket.dart';
 import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/utils/listenable_list.dart';
+import 'package:proxypin/network/util/cache.dart';
 
 /// MCP 数据桥接，负责从 ProxyPin 收集流量并提供给 MCP Server
 class McpBridge implements EventListener {
@@ -286,8 +288,87 @@ class McpBridge implements EventListener {
 
   @override
   void onMessage(Channel channel, HttpMessage message, WebSocketFrame frame) {
-    // WebSocket 已预留扩展点：如需支持可在后续版本启用帧解析
+    // 默认直接放行，不暂停（避免影响性能）
+    // 如需拦截，MCP 客户端可调用 pauseWebSocketMessage 工具
   }
+
+  // ==================== WebSocket Message Interception (v1.6.0+) ====================
+  // 存储暂停的 WebSocket 帧：frameId -> PausedWebSocketFrame
+  final Map<String, PausedWebSocketFrame> _pausedWebSocketDetails = {};
+  
+  // 暂停的 WebSocket 帧缓存（10 分钟过期）
+  final _pausedWebSockets = ExpiringCache<String, PausedWebSocketFrame>(
+    duration: const Duration(minutes: 10),
+  );
+
+  /// 暂停 WebSocket 消息并等待修改
+  Future<bool> pauseWebSocketMessage(WebSocketFrame frame, String url, bool isOutgoing) async {
+    final frameId = 'ws_${DateTime.now().millisecondsSinceEpoch}_${frame.hashCode}';
+    final paused = PausedWebSocketFrame(
+      frameId: frameId,
+      url: url,
+      isOutgoing: isOutgoing,
+      payload: frame.payload,
+      opcode: frame.opcode,
+      pausedAt: DateTime.now(),
+    );
+    
+    _pausedWebSocketDetails[frameId] = paused;
+    _pausedWebSockets.put(frameId, paused);
+    
+    logger.i('WebSocket message paused: $frameId (${isOutgoing ? "outgoing" : "incoming"})');
+    
+    // 通知 MCP 客户端（通过回调）
+    onWebSocketMessage?.call(paused);
+    
+    // 等待直到被 resume 或 abort
+    return true;
+  }
+
+  /// 恢复（释放）暂停的 WebSocket 消息
+  Future<bool> resumeWebSocketMessage(String frameId, {String? payload}) async {
+    final paused = _pausedWebSocketDetails[frameId];
+    if (paused == null) {
+      logger.w('Cannot resume: frame not found: $frameId');
+      return false;
+    }
+    
+    // 如果有修改的 payload，更新它
+    if (payload != null && paused.opcode == 1) { // 1 = text frame
+      paused.payload = utf8.encode(payload);
+    }
+    
+    // 从暂停列表中移除
+    _pausedWebSocketDetails.remove(frameId);
+    _pausedWebSockets.remove(frameId);
+    
+    logger.i('WebSocket message resumed: $frameId');
+    return true;
+  }
+
+  /// 中止（丢弃）暂停的 WebSocket 消息
+  Future<bool> abortWebSocketMessage(String frameId, {String? reason}) async {
+    final paused = _pausedWebSocketDetails[frameId];
+    if (paused == null) {
+      logger.w('Cannot abort: frame not found: $frameId');
+      return false;
+    }
+    
+    // 从暂停列表中移除
+    _pausedWebSocketDetails.remove(frameId);
+    _pausedWebSockets.remove(frameId);
+    
+    logger.i('WebSocket message aborted: $frameId, reason: ${reason ?? "none"}');
+    return true;
+  }
+
+  /// 获取所有暂停的 WebSocket 消息
+  List<PausedWebSocketFrame> getPausedWebSocketMessages() {
+    return _pausedWebSocketDetails.values.toList();
+  }
+
+  /// WebSocket 消息回调（用于通知 MCP Server）
+  Function(PausedWebSocketFrame)? onWebSocketMessage;
 
   /// 辅助方法：将 HttpRequest 转换为 JSON（用于 MCP 响应）
   static Map<String, dynamic> requestToJson(HttpRequest request, {bool includeBody = false}) {

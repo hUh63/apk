@@ -243,6 +243,51 @@ class WebSocketDecoder {
   }
 }
 
+/// 暂停的 WebSocket 帧（用于 MCP 拦截）
+class PausedWebSocketFrame {
+  final String frameId;
+  final String url;
+  final bool isOutgoing; // true=客户端发出，false=服务端返回
+  Uint8List payload;
+  final int opcode;
+  final DateTime pausedAt;
+
+  PausedWebSocketFrame({
+    required this.frameId,
+    required this.url,
+    required this.isOutgoing,
+    required this.payload,
+    required this.opcode,
+    required this.pausedAt,
+  });
+
+  String get payloadPreview {
+    if (opcode == 0x08) return '[Connection Close]';
+    if (opcode == 0x09) return '[Ping]';
+    if (opcode == 0x0A) return '[Pong]';
+    if (opcode == 0x02) return '[Binary Data]';
+    try {
+      var text = utf8.decode(payload, allowMalformed: true);
+      if (text.length > 100) return text.substring(0, 100) + '...';
+      return text;
+    } catch (e) {
+      return '[Binary: ${payload.length} bytes]';
+    }
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'frameId': frameId,
+      'url': url,
+      'direction': isOutgoing ? 'outgoing' : 'incoming',
+      'opcode': opcode,
+      'payload': base64Encode(payload),
+      'payloadPreview': payloadPreview,
+      'pausedAt': pausedAt.toIso8601String(),
+    };
+  }
+}
+
 class ByteBuffer {
   Uint8List _bytes = Uint8List(0);
 
