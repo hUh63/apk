@@ -357,7 +357,7 @@ class _DesktopBackupManagementState extends State<DesktopBackupManagement> {
   }
 
   Future<void> _exportBackup(BuildContext context, _BackupFile backup) async {
-    final result = await FilePicker.platform.saveFile(
+    final result = await FilePicker().saveFile(
       dialogTitle: '导出备份文件',
       fileName: backup.name,
       type: FileType.custom,
