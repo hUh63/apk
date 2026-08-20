@@ -104,7 +104,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
             leading: CircleAvatar(
               backgroundColor: task.repeatDaily ? Colors.blue : Colors.green,
               child: Icon(
-                task.repeatDaily ? Icons.repeat : Icons.play_once,
+                task.repeatDaily ? Icons.repeat : Icons.play_circle_outline,
                 color: Colors.white,
                 size: 20,
               ),

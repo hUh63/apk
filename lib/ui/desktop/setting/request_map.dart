@@ -387,7 +387,7 @@ class _RequestMapListState extends State<RequestMapList> {
     if (indexes.isEmpty) return;
     //文件名称
     String fileName = 'request_map.json';
-    String? path = await Platforms.saveFileAdaptive(fileName: fileName);
+    Uri? path = await Platforms.saveFileAdaptive(fileName: fileName);
     if (path == null) {
       return;
     }

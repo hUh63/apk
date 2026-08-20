@@ -364,7 +364,7 @@ class _RequestRuleListState extends State<RequestRuleList> {
     if (indexes.isEmpty) return;
 
     String fileName = 'proxypin-rewrites.config';
-    String? path = await Platforms.saveFileAdaptive(fileName: fileName);
+    Uri? path = await Platforms.saveFileAdaptive(fileName: fileName);
     if (path == null) {
       return;
     }

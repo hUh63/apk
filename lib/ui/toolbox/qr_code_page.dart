@@ -352,7 +352,7 @@ class _QrEncodeState extends State<_QrEncode> with AutomaticKeepAliveClientMixin
     var imageBytes = await toImageBytes();
     if (imageBytes == null) return;
 
-    String? path = await FilePicker.saveFile(fileName: "qrcode.png", bytes: imageBytes, type: FileType.image);
+    Uri? path = await FilePicker.saveFile(fileName: "qrcode.png", bytes: imageBytes, type: FileType.image);
     if (path == null) return;
     if (mounted) {
       CustomToast.success(localizations.saveSuccess).show(context);

@@ -949,7 +949,7 @@ class _ScriptListState extends State<ScriptList> {
     if (indexes.isEmpty) return;
     //文件名称
     String fileName = 'proxypin-scripts.json';
-    String? path = await Platforms.saveFileAdaptive(fileName: fileName);
+    Uri? path = await Platforms.saveFileAdaptive(fileName: fileName);
     if (path == null) {
       return;
     }

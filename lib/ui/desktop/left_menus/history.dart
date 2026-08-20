@@ -194,7 +194,7 @@ class _HistoryListState extends State<_HistoryListWidget> {
   //导入har
   Future<void> import() async {
     final results = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['har']);
-    if (results == null || results.files.isEmpty) {
+    if (results == null || results.isEmpty) {
       return;
     }
 
@@ -331,7 +331,7 @@ class _HistoryListState extends State<_HistoryListWidget> {
     String fileName =
         '${item.name.contains("ProxyPin") ? '' : 'ProxyPin'}${item.name}.har'.replaceAll(" ", "_").replaceAll(":", "_");
 
-    final String? path = await Platforms.saveFileAdaptive(fileName: fileName);
+    final Uri? path = await Platforms.saveFileAdaptive(fileName: fileName);
     if (path == null) {
       return;
     }
