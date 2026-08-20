@@ -2331,7 +2331,10 @@ Body Encoding Rules:
                   });
                 }
               }
-            } catch (_) {}
+            } catch (e, st) {
+              // URL 解析失败时静默忽略（可能是无效 URL）
+              debugPrint('[MCP Security] URL parse error: $e\n$st');
+            }
 
             // Cookie 中的会话标识
             var cookieHeader = req.headers.get('cookie');
@@ -2434,7 +2437,10 @@ Body Encoding Rules:
                             '$key: ${v.length > 60 ? v.substring(0, 60) : v}',
                       });
                     }
-                  } catch (_) {}
+                  } catch (e, st) {
+                    // 正则表达式无效时静默忽略
+                    debugPrint('[MCP Security] Header regex error: $e\n$st');
+                  }
                 }
               }
             });
@@ -2458,7 +2464,10 @@ Body Encoding Rules:
                             : match.group(0),
                       });
                     }
-                  } catch (_) {}
+                  } catch (e, st) {
+                    // 正则表达式无效时静默忽略
+                    debugPrint('[MCP Security] Body regex error: $e\n$st');
+                  }
                 }
               }
             }
@@ -2516,7 +2525,10 @@ Body Encoding Rules:
                   if (!(cookieMap[name]!['domains'] as List).contains(host)) {
                     (cookieMap[name]!['domains'] as List).add(host);
                   }
-                } catch (_) {}
+                } catch (e, st) {
+                  // URL 解析失败时静默忽略（可能是无效 URL）
+                  debugPrint('[MCP Security] Cookie URL parse error: $e\n$st');
+                }
                 cookieMap[name]!['request_count'] =
                     (cookieMap[name]!['request_count'] as int) + 1;
               }
