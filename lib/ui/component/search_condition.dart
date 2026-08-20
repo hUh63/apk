@@ -120,7 +120,7 @@ class SearchConditionsState extends State<SearchConditions> {
                   // 排序字段
                   DropdownMenu<String>(
                     initialValue: searchModel.sortBy.name,
-                    items: const [
+                    items: [
                       DropdownMenuEntry(value: 'time', label: '时间'),
                       DropdownMenuEntry(value: 'duration', label: '耗时'),
                       DropdownMenuEntry(value: 'statusCode', label: '状态码'),
@@ -137,7 +137,7 @@ class SearchConditionsState extends State<SearchConditions> {
                   // 排序方向
                   DropdownMenu<String>(
                     initialValue: searchModel.sortOrder.name,
-                    items: const [
+                    items: [
                       DropdownMenuEntry(value: 'desc', label: '降序↓'),
                       DropdownMenuEntry(value: 'asc', label: '升序↑'),
                     ],
