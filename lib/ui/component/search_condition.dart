@@ -120,7 +120,7 @@ class SearchConditionsState extends State<SearchConditions> {
                   // 排序字段
                   DropdownMenu<String>(
                     initialValue: searchModel.sortBy.name,
-                    menuChildren: [
+                    items: [
                       DropdownMenuEntry(value: 'time', label: '时间'),
                       DropdownMenuEntry(value: 'duration', label: '耗时'),
                       DropdownMenuEntry(value: 'statusCode', label: '状态码'),
@@ -137,7 +137,7 @@ class SearchConditionsState extends State<SearchConditions> {
                   // 排序方向
                   DropdownMenu<String>(
                     initialValue: searchModel.sortOrder.name,
-                    menuChildren: [
+                    items: [
                       DropdownMenuEntry(value: 'desc', label: '降序↓'),
                       DropdownMenuEntry(value: 'asc', label: '升序↑'),
                     ],
@@ -414,9 +414,9 @@ class SearchConditionsState extends State<SearchConditions> {
 }
 
 class DropdownMenu<T> extends StatefulWidget {
-  final String? initialValue;
-  final Iterable<String> items;
-  final Function(String value) onSelected;
+  final T? initialValue;
+  final Iterable<DropdownMenuEntry<T>> items;
+  final Function(T value) onSelected;
 
   const DropdownMenu({super.key, this.initialValue, required this.items, required this.onSelected});
 
@@ -427,7 +427,7 @@ class DropdownMenu<T> extends StatefulWidget {
 }
 
 class DropdownMenuState extends State<DropdownMenu> {
-  String? selectValue;
+  T? selectValue;
 
   @override
   void initState() {
@@ -452,8 +452,8 @@ class DropdownMenuState extends State<DropdownMenu> {
       },
       itemBuilder: (BuildContext context) {
         return widget.items
-            .map((it) =>
-                PopupMenuItem<String>(height: 35, value: it, child: Text(it, style: const TextStyle(fontSize: 12))))
+            .map((entry) =>
+                PopupMenuItem<T>(height: 35, value: entry.value, child: Text(entry.label ?? '${entry.value}', style: const TextStyle(fontSize: 12))))
             .toList();
       },
     );
