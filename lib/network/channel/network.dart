@@ -153,8 +153,11 @@ class Server extends Network {
       channelContext.putAttribute(AttributeKeys.proxyInfo, externalProxy);
 
       if (externalProxy.capturePacket == false) {
-        //不抓包直接转发
+        //不抓包直接转发到外部代理，但仍然允许脚本/重写了处理
+        //设置 remote 属性让后续连接使用外部代理地址
         channelContext.putAttribute(AttributeKeys.remote, HostAndPort.host(externalProxy.host, externalProxy.port!));
+        //标记需要跳过抓包但保留拦截器处理
+        channelContext.putAttribute(AttributeKeys.skipCapture, true);
       }
     }
 

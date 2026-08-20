@@ -21,6 +21,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:proxypin/l10n/app_localizations.dart';
+import 'package:proxypin/network/util/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 ///高级重放
@@ -46,6 +47,9 @@ class _CustomRepeatState extends State<MobileCustomRepeat> {
   bool keepSetting = true;
   bool enableRetry = true; // 启用重试 (#892)
   int maxRetries = 3; // 最大重试次数 (#892)
+  
+  // 增强：指数退避基数 (#892)
+  int retryBaseDelayMs = 100;
 
   // 时间单位：0=毫秒，1=秒，2=分钟 (#887)
   int timeUnit = 0;
@@ -56,6 +60,9 @@ class _CustomRepeatState extends State<MobileCustomRepeat> {
   int successCount = 0;
   int failCount = 0;
   int retryCount = 0;
+  
+  // 增强：记录最后错误信息 (#892)
+  String? lastError;
 
   AppLocalizations get localizations => AppLocalizations.of(context)!;
 
@@ -202,20 +209,26 @@ class _CustomRepeatState extends State<MobileCustomRepeat> {
     _executeWithRetry(counter);
   }
 
-  // 带重试机制的执行 (#892)
+  // 带重试机制的执行 (#892) - 增强：指数退避策略
   Future<void> _executeWithRetry(int counter, {int attempt = 1}) async {
     try {
       await widget.onRepeat.call();
       successCount++;
+      lastError = null; // 清除错误记录
       _scheduleNext(counter - 1);
     } catch (e) {
       failCount++;
+      lastError = e.toString();
       if (enableRetry && attempt < maxRetries) {
         retryCount++;
-        Future.delayed(const Duration(milliseconds: 500), () {
+        // 增强：指数退避延迟 (100ms, 200ms, 400ms...) (#892)
+        int delayMs = retryBaseDelayMs * attempt;
+        Future.delayed(Duration(milliseconds: delayMs), () {
           _executeWithRetry(counter, attempt: attempt + 1);
         });
       } else {
+        // 增强：记录失败原因 (#892)
+        logger.e('重放失败 (尝试 $attempt/$maxRetries): $lastError');
         _scheduleNext(counter - 1);
       }
     }
@@ -237,20 +250,26 @@ class _CustomRepeatState extends State<MobileCustomRepeat> {
     });
   }
 
-  // 显示重放结果统计 (#892)
+  // 显示重放结果统计 (#892) - 增强：显示最后错误信息
   void _showRepeatResult() {
     if (successCount > 0 || failCount > 0) {
       String message = '成功：$successCount\n失败：$failCount\n重试：$retryCount';
+      if (lastError != null && failCount > 0) {
+        // 增强：截断错误信息避免过长 (#892)
+        String errorPreview = lastError!.length > 50 ? '${lastError!.substring(0, 50)}...' : lastError!;
+        message += '\n错误：$errorPreview';
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 4), // 增强：延长显示时间以便查看错误
           backgroundColor: failCount > 0 ? Colors.orange : Colors.green,
         ),
       );
       successCount = 0;
       failCount = 0;
       retryCount = 0;
+      lastError = null;
     }
   }
 

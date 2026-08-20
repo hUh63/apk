@@ -27,7 +27,7 @@ jobs:
           java-version: '17'
 
       - name: Cache Gradle packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.gradle/caches
@@ -97,7 +97,7 @@ jobs:
 
       - name: Create Release (on tag)
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             build/app/outputs/flutter-apk/proxypin-universal.apk

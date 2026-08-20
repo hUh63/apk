@@ -9,4 +9,5 @@ interface class AttributeKeys {
   static const String proxyInfo = "PROXY_INFO";
   static const String socks5Proxy = "SOCKS5_PROXY";
   static const String processInfo = "PROCESS_INFO";
+  static const String skipCapture = "SKIP_CAPTURE";
 }

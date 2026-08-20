@@ -232,8 +232,71 @@ abstract class Http2Codec<T extends HttpMessage> implements Codec<T, T> {
         var lastStreamId = readInt32(framePayload, 0);
         var errorCode = readInt32(framePayload, 4);
         var debugData = viewOrSublist(framePayload, 8, frameHeader.length - 8);
+        final debugText = String.fromCharCodes(debugData);
+        
+        // HTTP/2 错误码分类处理
+        String errorCategory;
+        bool shouldRetry = false;
+        switch (errorCode) {
+          case 0: // NO_ERROR - 优雅关闭
+            errorCategory = '优雅关闭';
+            break;
+          case 1: // PROTOCOL_ERROR
+            errorCategory = '协议错误';
+            shouldRetry = true;
+            break;
+          case 2: // INTERNAL_ERROR
+            errorCategory = '内部错误';
+            shouldRetry = true;
+            break;
+          case 3: // FLOW_CONTROL_ERROR
+            errorCategory = '流控错误';
+            break;
+          case 4: // SETTINGS_TIMEOUT
+            errorCategory = '设置超时';
+            shouldRetry = true;
+            break;
+          case 5: // STREAM_CLOSED
+            errorCategory = '流已关闭';
+            break;
+          case 6: // FRAME_SIZE_ERROR
+            errorCategory = '帧大小错误';
+            break;
+          case 7: // REFUSED_STREAM
+            errorCategory = '流被拒绝';
+            shouldRetry = true;
+            break;
+          case 8: // CANCEL
+            errorCategory = '已取消';
+            break;
+          case 9: // COMPRESSION_ERROR
+            errorCategory = '压缩错误';
+            break;
+          case 10: // CONNECT_ERROR
+            errorCategory = '连接错误';
+            shouldRetry = true;
+            break;
+          case 11: // ENHANCE_YOUR_CALM
+            errorCategory = '速率限制';
+            break;
+          case 12: // INADEQUATE_SECURITY
+            errorCategory = '安全不足';
+            break;
+          case 13: // HTTP_1_1_REQUIRED
+            errorCategory = '需要 HTTP/1.1';
+            break;
+          default:
+            errorCategory = '未知错误 ($errorCode)';
+        }
+        
         logger.i(
-            "[${channelContext.clientChannel?.id}] ${this is Http2RequestDecoder ? 'request' : 'response'} h2 goaway streamId: ${frameHeader.streamIdentifier} lastStreamId: $lastStreamId errorCode: $errorCode debugData: ${String.fromCharCodes(debugData)}");
+            "[${channelContext.clientChannel?.id}] ${this is Http2RequestDecoder ? 'request' : 'response'} h2 goaway "
+            "streamId: ${frameHeader.streamIdentifier} "
+            "lastStreamId: $lastStreamId "
+            "errorCode: $errorCode ($errorCategory) "
+            "debugData: $debugText "
+            "shouldRetry: $shouldRetry");
+        
         result.forward = List.from(frameHeader.encode())..addAll(framePayload);
         return result;
       default:

@@ -119,6 +119,7 @@ class _RequestBreakpointPageState extends State<MobileRequestBreakpointPage> {
           Expanded(
             child: ListView.builder(
               itemCount: rules.length,
+                          cacheExtent: 300,
               itemBuilder: (context, index) => _buildRow(index),
             ),
           )

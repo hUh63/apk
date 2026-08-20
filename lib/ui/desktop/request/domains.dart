@@ -481,6 +481,10 @@ class DomainRequests extends StatefulWidget {
           int codeB = b.response.get()?.status.code ?? 0;
           comparison = codeA.compareTo(codeB);
           break;
+        case SortBy.relevance:
+          // 相关性排序已在 search_model.dart 的 sortResults 中处理，此处默认按时间降序
+          comparison = b.request.requestTime.compareTo(a.request.requestTime);
+          break;
       }
       return searchModel.sortOrder == SortOrder.asc ? comparison : -comparison;
     });

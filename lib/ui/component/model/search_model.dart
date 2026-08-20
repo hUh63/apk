@@ -134,28 +134,117 @@ class SearchModel {
   String? _matcherCacheKey;
   bool Function(String)? _cachedMatcher;
 
-  /// 对搜索结果进行排序
+  /// 对搜索结果进行排序（增强版：支持相关性评分）(#843)
   List<HttpRequest> sortResults(List<HttpRequest> results) {
-    results.sort((a, b) {
-      int comparison = 0;
-      switch (sortBy) {
-        case SortBy.time:
-          comparison = a.requestTime.compareTo(b.requestTime);
-          break;
-        case SortBy.duration:
-          int durationA = a.response?.responseTime.difference(a.requestTime).inMilliseconds ?? 0;
-          int durationB = b.response?.responseTime.difference(b.requestTime).inMilliseconds ?? 0;
-          comparison = durationA.compareTo(durationB);
-          break;
-        case SortBy.statusCode:
-          int codeA = a.response?.status.code ?? 0;
-          int codeB = b.response?.status.code ?? 0;
-          comparison = codeA.compareTo(codeB);
-          break;
-      }
-      return sortOrder == SortOrder.asc ? comparison : -comparison;
-    });
+    if (sortBy == SortBy.relevance && keyword != null && keyword!.isNotEmpty) {
+      // 按相关性排序：计算每个请求与关键词的匹配度
+      results.sort((a, b) {
+        int scoreA = _calculateRelevanceScore(a);
+        int scoreB = _calculateRelevanceScore(b);
+        return sortOrder == SortOrder.asc ? scoreA - scoreB : scoreB - scoreA;
+      });
+    } else {
+      results.sort((a, b) {
+        int comparison = 0;
+        switch (sortBy) {
+          case SortBy.time:
+            comparison = a.requestTime.compareTo(b.requestTime);
+            break;
+          case SortBy.duration:
+            int durationA = a.response?.responseTime.difference(a.requestTime).inMilliseconds ?? 0;
+            int durationB = b.response?.responseTime.difference(b.requestTime).inMilliseconds ?? 0;
+            comparison = durationA.compareTo(durationB);
+            break;
+          case SortBy.statusCode:
+            int codeA = a.response?.status.code ?? 0;
+            int codeB = b.response?.status.code ?? 0;
+            comparison = codeA.compareTo(codeB);
+            break;
+          case SortBy.relevance:
+            // 默认按时间降序
+            comparison = b.requestTime.compareTo(a.requestTime);
+            break;
+        }
+        return sortOrder == SortOrder.asc ? comparison : -comparison;
+      });
+    }
     return results;
+  }
+
+  /// 计算请求与关键词的相关性评分 (#843)
+  int _calculateRelevanceScore(HttpRequest request) {
+    if (keyword == null || keyword!.isEmpty) return 0;
+    
+    final pattern = caseSensitive.value ? keyword! : keyword!.toLowerCase();
+    int score = 0;
+    
+    // URL 匹配权重最高 (100 分)
+    final urlToCheck = caseSensitive.value ? request.requestUrl : request.requestUrl.toLowerCase();
+    if (urlToCheck.contains(pattern)) {
+      score += 100;
+      // 完全匹配额外加分
+      if (urlToCheck == pattern) score += 50;
+    }
+    
+    // 请求方法匹配 (20 分)
+    if (request.method.name.toLowerCase().contains(pattern)) {
+      score += 20;
+    }
+    
+    // 响应状态码匹配 (30 分)
+    final statusCode = request.response?.status.code ?? 0;
+    if (statusCode.toString().contains(pattern)) {
+      score += 30;
+    }
+    
+    // 请求体匹配 (50 分)
+    if (searchOptions.contains(Option.requestBody)) {
+      final bodyToCheck = caseSensitive.value 
+          ? (request.body?.toString() ?? '') 
+          : (request.body?.toString().toLowerCase() ?? '');
+      if (bodyToCheck.contains(pattern)) {
+        score += 50;
+      }
+    }
+    
+    // 响应体匹配 (50 分)
+    if (searchOptions.contains(Option.responseBody)) {
+      final responseBodyToCheck = caseSensitive.value 
+          ? (request.response?.body?.toString() ?? '') 
+          : (request.response?.body?.toString().toLowerCase() ?? '');
+      if (responseBodyToCheck.contains(pattern)) {
+        score += 50;
+      }
+    }
+    
+    // 请求头匹配 (40 分)
+    if (searchOptions.contains(Option.requestHeader)) {
+      for (var entry in request.headers.entries) {
+        final headerToCheck = caseSensitive.value 
+            ? '${entry.key}: ${entry.value}' 
+            : '${entry.key}: ${entry.value}'.toLowerCase();
+        if (headerToCheck.contains(pattern)) {
+          score += 40;
+          break;
+        }
+      }
+    }
+    
+    // 响应头匹配 (40 分)
+    if (searchOptions.contains(Option.responseHeader)) {
+      var respHeaders = request.response?.headers ?? {};
+      for (var entry in respHeaders.entries) {
+        final headerToCheck = caseSensitive.value 
+            ? '${entry.key}: ${entry.value}' 
+            : '${entry.key}: ${entry.value}'.toLowerCase();
+        if (headerToCheck.contains(pattern)) {
+          score += 40;
+          break;
+        }
+      }
+    }
+    
+    return score;
   }
 
   ///是否匹配
@@ -320,7 +409,7 @@ enum Option {
 enum Protocol { http, https, ws, sse, http1, h2 }
 
 /// 排序字段 (#843)
-enum SortBy { time, duration, statusCode }
+enum SortBy { time, duration, statusCode, relevance }
 
 /// 排序方向 (#843)
 enum SortOrder { asc, desc }

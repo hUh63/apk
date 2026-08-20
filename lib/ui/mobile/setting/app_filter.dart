@@ -151,6 +151,7 @@ class _AppWhitelistState extends State<AppWhitelist> {
                         )
                       : ListView.builder(
                           itemCount: appInfoList.length,
+                          cacheExtent: 300,
                           itemBuilder: (BuildContext context, int index) {
                             AppInfo appInfo = appInfoList[index];
                             return ListTile(
@@ -284,6 +285,7 @@ class _AppBlacklistState extends State<AppBlacklist> {
                 )
               : ListView.builder(
                   itemCount: appInfoList.length,
+                          cacheExtent: 300,
                   itemBuilder: (BuildContext context, int index) {
                     AppInfo appInfo = appInfoList[index];
                     return ListTile(
@@ -414,6 +416,7 @@ class _InstalledAppsWidgetState extends State<InstalledAppsWidget> {
 
     return ListView.builder(
         itemCount: appInfoList.length,
+                          cacheExtent: 300,
         itemBuilder: (BuildContext context, int index) {
           AppInfo appInfo = appInfoList[index];
           return ListTile(
