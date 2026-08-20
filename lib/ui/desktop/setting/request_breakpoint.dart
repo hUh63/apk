@@ -48,8 +48,8 @@ class _RequestBreakpointPageState extends State<RequestBreakpointPage> {
   }
 
   Future<void> _import() async {
-    FilePickerResult? result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['json']);
-    final path = result?.files.single.path;
+    var result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['json']);
+    final path = result?.files.single.xFile.path;
     if (path == null) return;
     File file = File(path);
     try {

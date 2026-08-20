@@ -185,7 +185,7 @@ class _MobileSslState extends State<MobileSslWidget> {
   }
 
   void importPk12() async {
-    FilePickerResult? result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['p12', 'pfx']);
+    var result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['p12', 'pfx']);
     if (result == null || !mounted) return;
     //entry password
     showDialog(
@@ -207,7 +207,7 @@ class _MobileSslState extends State<MobileSslWidget> {
               TextButton(onPressed: () => Navigator.pop(context), child: Text(localizations.cancel)),
               TextButton(
                 onPressed: () async {
-                  var bytes = await result.files.single.xFile.readAsBytes();
+                  var bytes = await result.single.xFile.readAsBytes();
                   try {
                     await CertificateManager.importPkcs12(bytes, password);
                     if (context.mounted) {

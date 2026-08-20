@@ -224,9 +224,9 @@ class _QrDecodeState extends State<_QrDecode> with AutomaticKeepAliveClientMixin
 
     if (Platforms.isDesktop()) {
       //<String>['jpg', 'png', 'jpeg']
-      FilePickerResult? result = await FilePicker.pickFiles(type: FileType.image);
+      var result = await FilePicker.pickFiles(type: FileType.image);
       if (result == null || result.files.isEmpty) return null;
-      return result.files.single.path;
+      return result.single.xFile.path;
     }
 
     return null;

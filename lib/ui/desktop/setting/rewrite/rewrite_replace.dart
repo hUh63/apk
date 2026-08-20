@@ -277,8 +277,8 @@ class RewriteReplaceState extends State<DesktopRewriteReplace> {
       const SizedBox(width: 10),
       FilledButton(
           onPressed: () async {
-            FilePickerResult? result = await FilePicker.pickFiles();
-            final path = result?.files.single.path;
+            var result = await FilePicker.pickFiles();
+            final path = result?.files.single.xFile.path;
 
             if (path == null) {
               return;

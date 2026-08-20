@@ -198,7 +198,7 @@ class _HistoryListState extends State<_HistoryListWidget> {
       return;
     }
 
-    var file = results.files.first;
+    var file = results.first;
     try {
       var historyItem = await storage.addHarFile(file.xFile);
       setState(() {

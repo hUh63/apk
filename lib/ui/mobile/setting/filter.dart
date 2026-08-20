@@ -138,11 +138,11 @@ class _DomainFilterState extends State<DomainFilter> {
 
   //导入
   Future<void> import() async {
-    final FilePickerResult? result = await FilePicker.pickFiles(type: FileType.any);
+    final var result = await FilePicker.pickFiles(type: FileType.any);
     if (result == null || result.files.isEmpty) {
       return;
     }
-    var file = File(result.files.single.path!);
+    var file = File(result.single.xFile.path!);
     try {
       List json = jsonDecode(await file.readAsString());
       for (var item in json) {
