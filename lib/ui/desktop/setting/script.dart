@@ -177,7 +177,7 @@ class _ScriptWidgetState extends State<ScriptWidget> {
       return;
     }
     try {
-      var json = jsonDecode(await File(path.toFilePath()).readAsString());
+      var json = jsonDecode(await File(path).readAsString());
       var scriptManager = (await ScriptManager.instance);
       if (json is List<dynamic>) {
         for (var item in json) {
@@ -968,7 +968,7 @@ class _ScriptListState extends State<ScriptList> {
       json.add(map);
     }
 
-    await File(path.toFilePath()).writeAsBytes(utf8.encode(jsonEncode(json)));
+    await File(path).writeAsBytes(utf8.encode(jsonEncode(json)));
     if (mounted) FlutterToastr.show(localizations.exportSuccess, context);
   }
 
