@@ -21,6 +21,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:proxypin/l10n/app_localizations.dart';
+import 'package:proxypin/network/util/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 ///高级重放
