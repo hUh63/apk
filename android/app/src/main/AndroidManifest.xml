@@ -10,6 +10,9 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
 
+    <!-- Shizuku permission - required for Shizuku to recognize and manage this app -->
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+
     <!-- Declare media/storage permissions. These are required if your app or
          plugins directly read media files. You still need to request these at
          runtime on Android (and on Android 13+ use the READ_MEDIA_* permissions).
