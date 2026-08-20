@@ -57,7 +57,8 @@ class _RequestBlockState extends State<MobileRequestBlock> {
                     const Divider(thickness: 0.5),
                     Expanded(
                         child: ListView.builder(
-                            itemCount: widget.requestBlockManager.list.length, itemBuilder: (_, index) => row(index)))
+                            itemCount: widget.requestBlockManager.list.length,
+                          cacheExtent: 300, itemBuilder: (_, index) => row(index)))
                   ]))
             ])));
   }
