@@ -138,7 +138,7 @@ class _RequestCryptoPageState extends State<RequestCryptoPage> {
     final path = result?.single.xFile.path;
     if (path == null) return;
     try {
-      final content = await File(path.toFilePath()).readAsString();
+      final content = await File(path).readAsString();
       final List list = jsonDecode(content);
       for (final item in list) {
         await manager.addRule(CryptoRule.fromJson(Map<String, dynamic>.from(item)));
