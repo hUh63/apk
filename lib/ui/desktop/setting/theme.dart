@@ -44,14 +44,14 @@ class DesktopThemeSetting extends StatelessWidget {
       },
       menuChildren: [
         // Material 3 开关
-        CheckboxMenuItem(
+        CheckboxMenuButton(
           value: appConfiguration.useMaterial3,
           onChanged: (bool? value) {
             appConfiguration.useMaterial3 = value ?? true;
           },
           child: const Text('Material 3'),
         ),
-        const MenuDivider(),
+        MenuDivider(),
         // 跟随系统
         MenuItemButton(
           leadingIcon: const Icon(Icons.cached),
