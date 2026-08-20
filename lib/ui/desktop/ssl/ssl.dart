@@ -165,7 +165,7 @@ class _SslState extends State<SslWidget> {
                               TextButton(onPressed: () => Navigator.pop(context), child: Text(localizations.cancel)),
                               TextButton(
                                 onPressed: () async {
-                                  String? path = (await Platforms.saveFileAdaptive(
+                                  Uri? path = (await Platforms.saveFileAdaptive(
                                       fileName: "ProxyPinPkcs12.p12"));
                                   if (path == null) return;
                                   var p12Bytes = await CertificateManager.generatePkcs12(
@@ -188,7 +188,7 @@ class _SslState extends State<SslWidget> {
                 if (path == null) return;
 
                 var keyFile = await CertificateManager.privateKeyFile();
-                await keyFile.copy(path);
+                await keyFile.copy(path.toFilePath());
               }),
         ],
         child: Padding(

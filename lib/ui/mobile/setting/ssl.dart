@@ -271,7 +271,7 @@ class _MobileSslState extends State<MobileSslWidget> {
 
     bytes ??= await file!.readAsBytes();
 
-    String? outputFile =
+    Uri? outputFile =
         await FilePicker.saveFile(dialogTitle: 'Please select the path to save:', fileName: name, bytes: bytes);
 
     if (outputFile != null && mounted) {

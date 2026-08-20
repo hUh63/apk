@@ -145,16 +145,19 @@ class _McpAutomationPageState extends State<McpAutomationPage>
             ),
           )
         else
-          ...listeners.map((listener) => Card(
+          ...listeners.entries.map((entry) {
+            final eventName = entry.key;
+            final callbacks = entry.value;
+            return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: _getEventTypeColor(listener.eventType),
-                    child: Icon(_getEventTypeIcon(listener.eventType),
+                    backgroundColor: _getEventTypeColor(eventName),
+                    child: Icon(_getEventTypeIcon(eventName),
                         color: Colors.white, size: 20),
                   ),
-                  title: Text(_getEventTypeName(listener.eventType)),
-                  subtitle: Text('回调函数已注册'),
+                  title: Text(_getEventTypeName(eventName)),
+                  subtitle: Text('${callbacks.length} 个回调函数已注册'),
                   trailing: Switch(
                     value: true,
                     onChanged: (value) {
@@ -162,7 +165,8 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                     },
                   ),
                 ),
-              )),
+              );
+          }),
         const SizedBox(height: 60),
         Card(
           color: Colors.blue.withValues(alpha: 0.1),
@@ -456,16 +460,15 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     }
   }
 
-  Color _getRulePriorityColor(String priority) {
+  Color _getRulePriorityColor(RulePriority priority) {
     switch (priority) {
-      case 'high':
+      case RulePriority.high:
+      case RulePriority.critical:
         return Colors.red;
-      case 'medium':
+      case RulePriority.normal:
         return Colors.orange;
-      case 'low':
+      case RulePriority.low:
         return Colors.green;
-      default:
-        return Colors.blue;
     }
   }
 
