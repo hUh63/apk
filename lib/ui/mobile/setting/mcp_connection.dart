@@ -175,7 +175,7 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
       _configuredPort = newPort;
     });
     final loc = AppLocalizations.of(context)!;
-    FlutterToastr.show(loc.mcpPortApplied().replaceAll('{port}', newPort.toString()), context);
+    FlutterToastr.show(loc.mcpPortApplied(newPort.toString()), context);
   }
 
   /// 复制文本到剪贴板

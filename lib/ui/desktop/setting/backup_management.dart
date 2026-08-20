@@ -369,7 +369,7 @@ class _DesktopBackupManagementState extends State<DesktopBackupManagement> {
 
     if (result != null) {
       try {
-        await File(result).writeAsBytes(utf8.encode(content));
+        await File(result.path).writeAsBytes(utf8.encode(content));
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('导出成功')),
