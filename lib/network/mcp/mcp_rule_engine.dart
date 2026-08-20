@@ -248,6 +248,9 @@ class Action {
     } else if (type == ActionType.sendWebhook) {
       // Webhook 动作实现：发送 HTTP POST 请求到指定 URL
       await _executeWebhook(context, parameters);
+    } else if (type == ActionType.executeScript) {
+      // 脚本执行动作增强：支持多种脚本类型
+      await _executeScript(context, parameters);
     }
   }
 
@@ -276,6 +279,69 @@ class Action {
     } catch (e) {
       logger.e('Webhook 发送失败：$e');
     }
+  }
+
+  /// 执行脚本动作（增强版）
+  Future<void> _executeScript(dynamic context, Map<String, dynamic>? params) async {
+    try {
+      final scriptType = params?['type'] as String? ?? 'dart';
+      final scriptContent = params?['content'] as String?;
+      final scriptPath = params?['path'] as String?;
+      
+      if (scriptContent == null && scriptPath == null) {
+        logger.w('脚本内容或路径未指定');
+        return;
+      }
+
+      logger.i('执行脚本：type=$scriptType, path=$scriptPath');
+      
+      switch (scriptType) {
+        case 'dart':
+          // Dart 脚本执行（需要隔离环境）
+          await _executeDartScript(scriptContent, scriptPath, context);
+          break;
+        case 'javascript':
+          // JavaScript 脚本执行（通过 JS 引擎）
+          await _executeJavaScript(scriptContent, scriptPath, context);
+          break;
+        case 'shell':
+          // Shell 脚本执行（仅 Android/桌面）
+          await _executeShellScript(scriptContent, scriptPath, context);
+          break;
+        case 'python':
+          // Python 脚本执行（需要 Python 环境）
+          await _executePythonScript(scriptContent, scriptPath, context);
+          break;
+        default:
+          logger.w('不支持的脚本类型：$scriptType');
+      }
+    } catch (e) {
+      logger.e('脚本执行失败：$e');
+    }
+  }
+
+  /// 执行 Dart 脚本
+  Future<void> _executeDartScript(String? content, String? path, dynamic context) async {
+    logger.i('执行 Dart 脚本');
+    // TODO: 实现 Dart 脚本沙箱执行
+  }
+
+  /// 执行 JavaScript 脚本
+  Future<void> _executeJavaScript(String? content, String? path, dynamic context) async {
+    logger.i('执行 JavaScript 脚本');
+    // TODO: 集成 JavaScript 引擎执行
+  }
+
+  /// 执行 Shell 脚本
+  Future<void> _executeShellScript(String? content, String? path, dynamic context) async {
+    logger.i('执行 Shell 脚本');
+    // TODO: 实现 Shell 脚本执行（需要权限检查）
+  }
+
+  /// 执行 Python 脚本
+  Future<void> _executePythonScript(String? content, String? path, dynamic context) async {
+    logger.i('执行 Python 脚本');
+    // TODO: 集成 Python 执行环境
   }
 }
 
