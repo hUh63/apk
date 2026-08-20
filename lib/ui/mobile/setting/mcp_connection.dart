@@ -19,7 +19,7 @@ class McpConnectionPage extends StatefulWidget {
   State<McpConnectionPage> createState() => _McpConnectionPageState();
 }
 
-class _McpConnectionPageState extends State<McpConnectionPage> {
+class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindingObserver {
   Map<String, dynamic>? _deviceInfo;
   bool _loading = true;
   String? _deviceIp;
@@ -38,6 +38,7 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _portController = TextEditingController(text: '9010');
     // 注册状态变化回调，实现实时更新
     McpServer().onStatusChanged = _onMcpStatusChanged;
@@ -46,10 +47,20 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     // 清除回调，避免页面销毁后仍被调用
     McpServer().onStatusChanged = null;
     _portController.dispose();
     super.dispose();
+  }
+
+  /// 监听应用生命周期变化（用于检测从设置页返回）
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // 从无障碍设置返回后刷新状态
+      _refreshDeviceInfo();
+    }
   }
 
   /// MCP 服务器状态变化时刷新 UI
@@ -63,6 +74,15 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
   Future<void> _loadDeviceInfo() async {
     if (!McpScreen.isSupported) return;
     _deviceInfo = await McpScreen.getDeviceInfo();
+  }
+
+  /// 刷新设备信息（静默刷新，不显示 loading）
+  Future<void> _refreshDeviceInfo() async {
+    if (!McpScreen.isSupported || !mounted) return;
+    final info = await McpScreen.getDeviceInfo();
+    if (mounted) {
+      setState(() => _deviceInfo = info);
+    }
   }
 
   Future<void> _loadInfo() async {
@@ -459,7 +479,7 @@ class _McpConnectionPageState extends State<McpConnectionPage> {
                         leading: const Icon(Icons.accessibility),
                         title: const Text('无障碍服务'),
                         trailing: Text(
-                          accessibilityEnabled ? '已开启' : '未开启',
+                          accessibilityEnabled ? '可用' : '未开启',
                           style: TextStyle(
                             color: accessibilityEnabled
                                 ? Colors.green
