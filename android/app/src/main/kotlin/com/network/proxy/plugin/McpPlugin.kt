@@ -453,26 +453,28 @@ class McpPlugin : FlutterPlugin {
     }
 
     /**
-     * 请求 Shizuku 授权（弹出授权弹窗）
-     * 使用 Shizuku 的 requestBinder() 方法，会触发系统弹窗请求用户授权
+     * 请求 Shizuku 授权
+     * Shizuku 12.0+ 需要在 Shizuku 应用中手动授权
+     * 此方法打开 Shizuku 应用的授权页面
      */
     private fun requestShizukuAuthorization(): Boolean {
         return try {
-            // 检查 Shizuku 是否已安装
             val pm = context?.packageManager ?: return false
             val shizukuPkg = "moe.shizuku.privileged.api"
             
-            // 先检查 Shizuku 应用是否安装
+            // 检查 Shizuku 是否已安装
             pm.getPackageInfo(shizukuPkg, 0)
             
-            // 尝试使用 Shizuku 的 requestBinder 方法（需要已安装的 Shizuku）
-            // 这会触发系统弹窗请求用户授权
-            val shizukuClazz = Class.forName("moe.shizuku.api.Shizuku")
-            val requestBinderMethod = shizukuClazz.getMethod("requestBinder")
-            requestBinderMethod.invoke(null)
+            // 打开 Shizuku 的授权页面（不是主页）
+            // Shizuku 提供了专门的授权 Activity
+            val intent = Intent("moe.shizuku.manager.action.PERMISSION").apply {
+                setPackage(shizukuPkg)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context?.startActivity(intent)
             true
         } catch (e: Exception) {
-            // Shizuku 未安装或 API 调用失败，打开 Shizuku 应用让用户安装/启动
+            // 如果授权页面 Intent 失败，打开 Shizuku 应用主页
             try {
                 val pm = context?.packageManager ?: return false
                 val launch = pm.getLaunchIntentForPackage("moe.shizuku.privileged.api")
