@@ -283,7 +283,7 @@ class _DesktopMcpConnectionState extends State<DesktopMcpConnection> {
                         const SizedBox(height: 8),
                         _buildInfoRow('SSE URL', sseUrl, Icons.http),
                         const SizedBox(height: 8),
-                        _buildInfoRow('IP 地址', ip, Icons.ip),
+                        _buildInfoRow('IP 地址', ip, Icons.wifi),
                         const SizedBox(height: 8),
                         _buildInfoRow('端口', port.toString(), Icons.settings),
                         const SizedBox(height: 8),
