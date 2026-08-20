@@ -356,6 +356,7 @@ class _VariableListState extends State<_VariableList> {
               )
             : ListView.builder(
                 itemCount: vars.length,
+                          cacheExtent: 300,
                 itemBuilder: (ctx, i) => _VarRow(
                   key: ValueKey('${widget.env.id}-$i-${vars[i].hashCode}'),
                   v: vars[i],
