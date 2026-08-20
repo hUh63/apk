@@ -18,6 +18,27 @@ import 'dart:async';
 import 'package:proxypin/network/http/http.dart';
 import 'package:proxypin/network/util/logger.dart';
 
+/// 事件回调类型
+typedef EventCallback = void Function(dynamic data);
+
+/// 事件记录
+class EventRecord {
+  final String eventName;
+  final DateTime timestamp;
+  final dynamic data;
+  
+  EventRecord(this.eventName, this.data) : timestamp = DateTime.now();
+  
+  @override
+  String toString() => '[$timestamp] $eventName: $data';
+}
+
+/// 网络状态枚举
+enum NetworkStatus { connected, disconnected, wifi, mobile, weak }
+
+/// 代理状态枚举
+enum ProxyStatus { started, stopped, paused, resumed }
+
 /// MCP 事件触发自动化框架
 /// 支持监听网络请求事件、网络状态变化事件等
 /// @author wanghongen
@@ -33,21 +54,6 @@ class McpEventAutomation {
   // 事件历史记录（用于调试）
   final List<EventRecord> _eventHistory = [];
   static const int _maxHistorySize = 100;
-
-  /// 事件回调类型
-  typedef EventCallback = void Function(dynamic data);
-
-  /// 事件记录
-  class EventRecord {
-    final String eventName;
-    final DateTime timestamp;
-    final dynamic data;
-    
-    EventRecord(this.eventName, this.data) : timestamp = DateTime.now();
-    
-    @override
-    String toString() => '[$timestamp] $eventName: $data';
-  }
 
   /// 添加事件监听器
   void addListener(String eventName, EventCallback callback) {
@@ -119,7 +125,9 @@ class McpEventAutomation {
         final patternStr = eventName.substring('http_request:'.length);
         try {
           final pattern = RegExp(patternStr);
-          if (pattern.hasMatch(request.url)) {
+          // 修复：使用 request.requestUrl 替代 request.url
+          final url = request.requestUrl?.toString() ?? '';
+          if (pattern.hasMatch(url)) {
             for (final callback in callbacks) {
               callback(request);
             }
@@ -143,9 +151,6 @@ class McpEventAutomation {
 
   // ==================== 网络状态事件 ====================
 
-  /// 网络状态枚举
-  enum NetworkStatus { connected, disconnected, wifi, mobile, weak }
-
   /// 监听网络状态变化
   void onNetworkStatusChange(NetworkStatus status, EventCallback callback) {
     addListener('network_status:$status', callback);
@@ -157,9 +162,6 @@ class McpEventAutomation {
   }
 
   // ==================== 代理状态事件 ====================
-
-  /// 代理状态枚举
-  enum ProxyStatus { started, stopped, paused, resumed }
 
   /// 监听代理状态变化
   void onProxyStatusChange(ProxyStatus status, EventCallback callback) {
@@ -233,7 +235,9 @@ class McpEventAutomationExample {
     
     // 监听所有 /api/ 开头的请求
     automation.onApiRequest('/api/', (request) {
-      logger.i('检测到 API 请求：${request.url}');
+      // 修复：使用 request.requestUrl 替代 request.url
+      final url = (request as HttpRequest).requestUrl?.toString() ?? '';
+      logger.i('检测到 API 请求：$url');
       // 这里可以添加自动保存、转发等逻辑
     });
     
@@ -247,12 +251,12 @@ class McpEventAutomationExample {
   static void setupNetworkMonitor() {
     final automation = McpEventAutomation();
     
-    automation.onNetworkStatusChange(McpEventAutomation.NetworkStatus.disconnected, (_) {
+    automation.onNetworkStatusChange(NetworkStatus.disconnected, (_) {
       logger.w('网络断开，暂停抓包');
       // 自动暂停抓包
     });
     
-    automation.onNetworkStatusChange(McpEventAutomation.NetworkStatus.connected, (_) {
+    automation.onNetworkStatusChange(NetworkStatus.connected, (_) {
       logger.i('网络已连接，恢复抓包');
       // 自动恢复抓包
     });
@@ -272,11 +276,11 @@ class McpEventAutomationExample {
   static void setupProxyMonitor() {
     final automation = McpEventAutomation();
     
-    automation.onProxyStatusChange(McpEventAutomation.ProxyStatus.started, (_) {
+    automation.onProxyStatusChange(ProxyStatus.started, (_) {
       logger.i('代理已启动');
     });
     
-    automation.onProxyStatusChange(McpEventAutomation.ProxyStatus.stopped, (_) {
+    automation.onProxyStatusChange(ProxyStatus.stopped, (_) {
       logger.i('代理已停止');
     });
   }

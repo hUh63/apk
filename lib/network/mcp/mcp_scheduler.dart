@@ -17,6 +17,9 @@
 import 'dart:async';
 import 'package:proxypin/network/util/logger.dart';
 
+/// 无参数无返回值的回调类型
+typedef VoidCallback = void Function();
+
 /// MCP 定时任务调度器
 /// 支持一次性任务和每日重复任务
 class McpScheduler {
