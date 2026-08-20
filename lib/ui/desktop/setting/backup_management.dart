@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -294,7 +295,7 @@ class _DesktopBackupManagementState extends State<DesktopBackupManagement> {
     if (confirmed == true) {
       try {
         final content = await File(backup.path).readAsString();
-        await Configuration.importConfig(content);
+        await ConfigImportExport.importConfig(content);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('备份已恢复')),
@@ -357,17 +358,18 @@ class _DesktopBackupManagementState extends State<DesktopBackupManagement> {
   }
 
   Future<void> _exportBackup(BuildContext context, _BackupFile backup) async {
+    final content = await File(backup.path).readAsString();
     final result = await FilePicker.saveFile(
       dialogTitle: '导出备份文件',
       fileName: backup.name,
       type: FileType.custom,
       allowedExtensions: ['json'],
+      bytes: utf8.encode(content),
     );
 
     if (result != null) {
       try {
-        final content = await File(backup.path).readAsString();
-        await File(result).writeAsString(content);
+        await File(result).writeAsBytes(utf8.encode(content));
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('导出成功')),
