@@ -232,7 +232,7 @@ class SearchModel {
     
     // 响应头匹配 (40 分)
     if (searchOptions.contains(Option.responseHeader)) {
-      var respHeaders = request.response?.headers ?? {};
+      var respHeaders = (request.response?.headers as Map<String, dynamic>?) ?? {};
       for (var entry in respHeaders.entries) {
         final headerToCheck = caseSensitive.value 
             ? '${entry.key}: ${entry.value}' 
