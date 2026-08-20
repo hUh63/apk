@@ -129,7 +129,10 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
     setState(() {
       _mcpAutoStart = enabled;
     });
-    FlutterToastr.show(enabled ? '已开启自动启动' : '已关闭自动启动', context);
+    FlutterToastr.show(
+      enabled ? context.l10n.mcpAutoStartEnabled : context.l10n.mcpAutoStartDisabled,
+      context,
+    );
   }
 
   /// 切换单个工具启用状态
@@ -146,12 +149,12 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
   Future<void> _applyPort() async {
     final newPort = int.tryParse(_portController.text.trim());
     if (newPort == null || newPort < 1 || newPort > 65535) {
-      FlutterToastr.show('端口无效（1-65535）', context);
+      FlutterToastr.show(context.l10n.mcpPortInvalid, context);
       return;
     }
 
     if (newPort == _configuredPort) {
-      FlutterToastr.show('端口未变化', context);
+      FlutterToastr.show(context.l10n.mcpPortUnchanged, context);
       return;
     }
 
@@ -167,7 +170,7 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
     setState(() {
       _configuredPort = newPort;
     });
-    FlutterToastr.show('端口已应用：$newPort', context);
+    FlutterToastr.show(context.l10n.mcpPortApplied.replaceAll('{port}', newPort.toString()), context);
   }
 
   /// 复制文本到剪贴板
