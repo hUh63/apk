@@ -378,7 +378,7 @@ class _RequestRuleListState extends State<RequestRuleList> {
       list.add(json);
     }
 
-    await File(path).writeAsBytes(utf8.encode(jsonEncode(list)));
+    await File(path.toFilePath()).writeAsBytes(utf8.encode(jsonEncode(list)));
     if (mounted) FlutterToastr.show(localizations.exportSuccess, context);
   }
 

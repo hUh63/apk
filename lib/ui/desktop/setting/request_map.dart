@@ -402,7 +402,7 @@ class _RequestMapListState extends State<RequestMapList> {
       json.add(map);
     }
 
-    await File(path).writeAsBytes(utf8.encode(jsonEncode(json)));
+    await File(path.toFilePath()).writeAsBytes(utf8.encode(jsonEncode(json)));
 
     if (mounted) FlutterToastr.show(localizations.exportSuccess, context);
   }
