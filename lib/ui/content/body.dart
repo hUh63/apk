@@ -428,7 +428,7 @@ class HttpBodyState extends State<HttpBodyWidget> {
             return;
           }
 
-          String? path = await FilePicker.saveFile(fileName: fileName, bytes: bytes, type: FileType.image);
+          Uri? path = await FilePicker.saveFile(fileName: fileName, bytes: bytes, type: FileType.image);
           if (path != null && mounted) {
             FlutterToastr.show(localizations.saveSuccess, context, duration: 2, rootNavigator: true);
           }
