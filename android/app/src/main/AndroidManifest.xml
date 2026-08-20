@@ -12,6 +12,8 @@
 
     <!-- Shizuku permission - required for Shizuku to recognize and manage this app -->
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+    <!-- Dhizuku permission - required for Dhizuku to recognize and manage this app -->
+    <uses-permission android:name="me.bmax.dhizuku.permission.DHIZUKU_API" />
 
     <!-- Declare media/storage permissions. These are required if your app or
          plugins directly read media files. You still need to request these at

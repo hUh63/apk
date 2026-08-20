@@ -491,21 +491,27 @@ class McpPlugin : FlutterPlugin {
 
     /**
      * 请求 Dhizuku 授权
-     * Dhizuku 包名：com.rosan.dhizuku.api
+     * Dhizuku 包名：me.bmax.dhizuku
+     * 打开 Dhizuku 应用让用户进行授权
      */
     private fun requestDhizukuAuthorization(): Boolean {
         return try {
             val pm = context?.packageManager ?: return false
-            // 尝试打开 Dhizuku 授权页面
-            val intent = pm.getLaunchIntentForPackage("com.rosan.dhizuku.api")
+            // 统一使用 me.bmax.dhizuku 包名
+            val dhizukuPkg = "me.bmax.dhizuku"
+            
+            // 尝试打开 Dhizuku 应用
+            val intent = pm.getLaunchIntentForPackage(dhizukuPkg)
             if (intent != null) {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context?.startActivity(intent)
                 true
             } else {
-                // 尝试打开 Dhizuku 管理页面
-                val dhizukuIntent = Intent("com.rosan.dhizuku.action.OPEN")
-                dhizukuIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                // 尝试打开 Dhizuku 管理页面（备用 Action）
+                val dhizukuIntent = Intent("me.bmax.dhizuku.action.OPEN").apply {
+                    setPackage(dhizukuPkg)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
                 context?.startActivity(dhizukuIntent)
                 true
             }
@@ -516,15 +522,22 @@ class McpPlugin : FlutterPlugin {
 
     /**
      * 请求 Root 授权
-     * 通过执行 su 命令触发 Superuser 授权弹窗
+     * 通过执行 su 命令触发 Magisk/KernelSU/SuperSU 等授权弹窗
+     * 注意：需要应用有请求 Root 权限的意图
      */
     private fun requestRootAuthorization(): Boolean {
         return try {
-            // 执行 su 命令会触发 Magisk/KernelSU 等授权弹窗
+            // 执行简单的 su 命令会触发 Superuser 授权弹窗
+            // 使用 su -c "id" 是最常用的检测/请求方式
             val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
-            process.waitFor(3, TimeUnit.SECONDS)
+            // 等待授权完成（最多 10 秒）
+            val completed = process.waitFor(10, TimeUnit.SECONDS)
+            if (!completed) {
+                process.destroy()
+            }
             true
         } catch (e: Exception) {
+            // su 不可用或执行失败
             false
         }
     }
