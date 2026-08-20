@@ -148,7 +148,7 @@ class _RequestMapPageState extends State<RequestMapPage> {
       return;
     }
     try {
-      var json = jsonDecode(await File(path.toFilePath()).readAsString());
+      var json = jsonDecode(await File(path).readAsString());
       var manager = (await RequestMapManager.instance);
       if (json is List<dynamic>) {
         for (var item in json) {
@@ -402,7 +402,7 @@ class _RequestMapListState extends State<RequestMapList> {
       json.add(map);
     }
 
-    await File(path.toFilePath()).writeAsBytes(utf8.encode(jsonEncode(json)));
+    await File(path).writeAsBytes(utf8.encode(jsonEncode(json)));
 
     if (mounted) FlutterToastr.show(localizations.exportSuccess, context);
   }
