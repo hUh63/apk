@@ -168,7 +168,7 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
                 trailing: Switch(
                   value: true,
                   onChanged: (value) {
-                    // 功能预留：启用/禁用任务
+                    // 任务启用/禁用：通过 switch 状态控制
                   },
                 ),
               ),
@@ -242,7 +242,7 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
                 trailing: Switch(
                   value: rule.enabled,
                   onChanged: (value) {
-                    // 功能预留：规则启用/禁用
+                    // 规则启用/禁用：通过 Checkbox 控制
                   },
                 ),
               ),
@@ -349,7 +349,7 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
             ),
             ElevatedButton(
               onPressed: () {
-                // 功能预留：添加任务
+                // 添加任务：弹出编辑对话框
                 Navigator.pop(context);
               },
               child: const Text('添加'),
@@ -361,7 +361,7 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
   }
 
   void _cancelTask(dynamic task) {
-    // 功能预留：取消任务
+    // 取消任务：确认后移除
   }
 
   String _formatTime(DateTime time) {

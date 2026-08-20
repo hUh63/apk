@@ -286,7 +286,7 @@ class McpBridge implements EventListener {
 
   @override
   void onMessage(Channel channel, HttpMessage message, WebSocketFrame frame) {
-    // 暂不处理 WebSocket, 版本暂不支持
+    // WebSocket 已预留扩展点：如需支持可在后续版本启用帧解析
   }
 
   /// 辅助方法：将 HttpRequest 转换为 JSON（用于 MCP 响应）

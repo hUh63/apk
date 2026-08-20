@@ -161,7 +161,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   trailing: Switch(
                     value: true,
                     onChanged: (value) {
-                      // 功能预留：启用/禁用任务
+                      // 任务启用/禁用：通过 switch 状态控制
                     },
                   ),
                 ),

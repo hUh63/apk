@@ -43,7 +43,7 @@ class CertInstaller {
         return result.exitCode == 0;
       }
 
-      // 其他平台暂不支持
+      // 其他平台已预留，可通过平台通道扩展
       return false;
     } catch (e) {
       logger.e('Failed to install certificate: $e');

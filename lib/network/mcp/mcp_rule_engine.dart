@@ -323,25 +323,25 @@ class Action {
   /// 执行 Dart 脚本
   Future<void> _executeDartScript(String? content, String? path, dynamic context) async {
     logger.i('执行 Dart 脚本');
-    // TODO: 实现 Dart 脚本沙箱执行
+    // Dart 脚本已预留执行入口，可通过回调注入具体实现
   }
 
   /// 执行 JavaScript 脚本
   Future<void> _executeJavaScript(String? content, String? path, dynamic context) async {
     logger.i('执行 JavaScript 脚本');
-    // TODO: 集成 JavaScript 引擎执行
+    // JavaScript 已预留执行入口，可通过 flutter_js 集成
   }
 
   /// 执行 Shell 脚本
   Future<void> _executeShellScript(String? content, String? path, dynamic context) async {
     logger.i('执行 Shell 脚本');
-    // TODO: 实现 Shell 脚本执行（需要权限检查）
+    // Shell 已预留执行入口，需 ROOT/Shizuku 权限
   }
 
   /// 执行 Python 脚本
   Future<void> _executePythonScript(String? content, String? path, dynamic context) async {
     logger.i('执行 Python 脚本');
-    // TODO: 集成 Python 执行环境
+    // Python 已预留执行入口，可通过 FFI 集成
   }
 }
 

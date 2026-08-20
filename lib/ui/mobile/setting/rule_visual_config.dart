@@ -25,7 +25,9 @@ class _RuleVisualConfigState extends State<RuleVisualConfig> {
 
   Future<void> _loadRules() async {
     setState(() => _isLoading = true);
-    // TODO: 从存储加载规则
+    // 从规则引擎加载规则列表
+    _rules.clear();
+    _rules.addAll(_ruleEngine.rules);
     setState(() => _isLoading = false);
   }
 
@@ -136,15 +138,45 @@ class _RuleVisualConfigState extends State<RuleVisualConfig> {
   }
 
   void _showEditRuleDialog(Rule rule) {
-    // TODO: 实现规则编辑对话框
+    showDialog(
+      context: context,
+      builder: (context) => _RuleEditorDialog(rule: rule),
+    ).then((_) => _loadRules());
   }
 
   void _duplicateRule(Rule rule) {
-    // TODO: 实现规则复制
+    final newRule = rule.copyWith(name: '${rule.name ?? '规则'} (副本)');
+    setState(() => _rules.add(newRule));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已复制规则：${newRule.name}')),
+    );
   }
 
   void _deleteRule(Rule rule) {
-    // TODO: 实现规则删除
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除规则'),
+        content: Text('确定要删除规则「${rule.name ?? '未命名'}」吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              setState(() => _rules.remove(rule));
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('已删除规则：${rule.name ?? '未命名'}')),
+              );
+            },
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -306,7 +338,22 @@ class _RuleEditorDialogState extends State<_RuleEditorDialog> {
   }
 
   void _editCondition(int index) {
-    // TODO: 实现条件编辑
+    // 打开条件编辑器（预填当前值）
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('编辑条件'),
+        content: TextField(
+          decoration: const InputDecoration(labelText: '条件名称'),
+          initialValue: _conditions[index]['name'] as String?,
+          onChanged: (v) => _conditions[index]['name'] = v,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          ElevatedButton(onPressed: () { setState(() {}); Navigator.pop(context); }, child: const Text('保存')),
+        ],
+      ),
+    );
   }
 
   void _removeCondition(int index) {
@@ -318,7 +365,22 @@ class _RuleEditorDialogState extends State<_RuleEditorDialog> {
   }
 
   void _editAction(int index) {
-    // TODO: 实现动作编辑
+    // 打开动作编辑器（预填当前值）
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('编辑动作'),
+        content: TextField(
+          decoration: const InputDecoration(labelText: '动作名称'),
+          initialValue: _actions[index]['name'] as String?,
+          onChanged: (v) => _actions[index]['name'] = v,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          ElevatedButton(onPressed: () { setState(() {}); Navigator.pop(context); }, child: const Text('保存')),
+        ],
+      ),
+    );
   }
 
   void _removeAction(int index) {
@@ -326,8 +388,15 @@ class _RuleEditorDialogState extends State<_RuleEditorDialog> {
   }
 
   void _saveRule() {
-    // TODO: 保存规则到引擎
-    Navigator.pop(context);
+    // 保存规则到规则引擎
+    final rule = Rule(
+      name: _nameController.text.trim().isEmpty ? '未命名规则' : _nameController.text.trim(),
+      enabled: true,
+      conditions: _conditions,
+      actions: _actions,
+    );
+    McpRuleEngine().addRule(rule);
+    Navigator.pop(context, rule);
   }
 
   @override
