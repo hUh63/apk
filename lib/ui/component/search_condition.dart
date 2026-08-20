@@ -175,9 +175,9 @@ class SearchConditionsState extends State<SearchConditions> {
           // request method
           row(
             Text('${localizations.requestMethod}:'),
-            DropdownMenu(
+            DropdownMenu<String>(
               initialValue: searchModel.requestMethod?.name ?? localizations.all,
-              items: HttpMethod.methods().map((e) => e.name).toList()..insert(0, localizations.all),
+              items: [DropdownMenuEntry(value: localizations.all, label: localizations.all), ...HttpMethod.methods().map((e) => DropdownMenuEntry(value: e.name, label: e.name))],
               onSelected: (String value) {
                 searchModel.requestMethod = value == localizations.all ? null : HttpMethod.valueOf(value);
               },
@@ -187,22 +187,21 @@ class SearchConditionsState extends State<SearchConditions> {
           // request type
           row(
             Text('${localizations.requestType}:'),
-            DropdownMenu(
+            DropdownMenu<String>(
               initialValue: Maps.getKey(requestContentMap, searchModel.requestContentType) ?? localizations.all,
-              items: requestContentMap.keys,
+              items: [DropdownMenuEntry(value: localizations.all, label: localizations.all), ...requestContentMap.keys.map((k) => DropdownMenuEntry(value: k, label: k))],
               onSelected: (String value) {
                 searchModel.requestContentType = requestContentMap[value];
               },
             ),
           ),
-          const SizedBox(height: 10),
 
           // response type
           row(
             Text('${localizations.responseType}:'),
-            DropdownMenu(
+            DropdownMenu<String>(
               initialValue: Maps.getKey(responseContentMap, searchModel.responseContentType) ?? localizations.all,
-              items: responseContentMap.keys,
+              items: [DropdownMenuEntry(value: localizations.all, label: localizations.all), ...responseContentMap.keys.map((k) => DropdownMenuEntry(value: k, label: k))],
               onSelected: (String value) {
                 searchModel.responseContentType = responseContentMap[value];
               },
@@ -421,12 +420,12 @@ class DropdownMenu<T> extends StatefulWidget {
   const DropdownMenu({super.key, this.initialValue, required this.items, required this.onSelected});
 
   @override
-  State<StatefulWidget> createState() {
-    return DropdownMenuState();
+  State<DropdownMenu<T>> createState() {
+    return DropdownMenuState<T>();
   }
 }
 
-class DropdownMenuState extends State<DropdownMenu> {
+class DropdownMenuState<T> extends State<DropdownMenu<T>> {
   T? selectValue;
 
   @override
@@ -437,14 +436,14 @@ class DropdownMenuState extends State<DropdownMenu> {
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton(
+    return PopupMenuButton<T>(
       tooltip: '',
       initialValue: selectValue,
       child: Wrap(runAlignment: WrapAlignment.center, children: [
-        Text(selectValue ?? '', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+        Text(selectValue?.toString() ?? '', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
         const Icon(Icons.arrow_drop_down, size: 20)
       ]),
-      onSelected: (String value) {
+      onSelected: (T value) {
         setState(() {
           widget.onSelected.call(value);
           selectValue = value;
@@ -453,7 +452,7 @@ class DropdownMenuState extends State<DropdownMenu> {
       itemBuilder: (BuildContext context) {
         return widget.items
             .map((entry) =>
-                PopupMenuItem<T>(height: 35, value: entry.value, child: Text(entry.label ?? '${entry.value}', style: const TextStyle(fontSize: 12))))
+                PopupMenuItem<T>(height: 35, value: entry.value, child: Text(entry.label ?? entry.value.toString(), style: const TextStyle(fontSize: 12))))
             .toList();
       },
     );
