@@ -218,7 +218,7 @@ class ConfigImportExport {
       targetPath = '${home.path}${separator}proxypin_config_$timestamp.json';
     }
     
-    final file = File(targetPath);
+    final file = File(targetPath.toFilePath());
     await file.create(recursive: true);
     await file.writeAsString(jsonStr);
     logger.i('配置已导出到：$targetPath');
@@ -227,7 +227,7 @@ class ConfigImportExport {
 
   /// 从文件导入配置
   static Future<Configuration> importConfigFromFile(String filePath) async {
-    final file = File(filePath);
+    final file = File(filePath.toFilePath());
     if (!await file.exists()) {
       throw FileSystemException('配置文件不存在', filePath);
     }
@@ -255,7 +255,7 @@ class ConfigImportExport {
       }
       
       // 写入备份文件
-      final file = File(backupPath);
+      final file = File(backupPath.toFilePath());
       await file.create(recursive: true);
       await file.writeAsString(jsonStr);
       

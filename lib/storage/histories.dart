@@ -140,8 +140,8 @@ class HistoryStorage {
     if (history.requests == null) {
       final homePath = await _homePath();
       String path = '$homePath${Platform.pathSeparator}${Files.getName(history.path)}';
-      var file = File(path);
-      history.requests = await Har.readFile(file);
+      var file = File(path.toFilePath());
+      history.requests = await Har.readFile(file.toFilePath());
       history.requestLength = history.requests!.length;
       file.length().then((size) => history.fileSize = size);
     }
@@ -154,7 +154,7 @@ class HistoryStorage {
     logger.i("刷新历史记录 $history");
     final homePath = await _homePath();
     String path = '$homePath${Platform.pathSeparator}${Files.getName(history.path)}';
-    var file = File(path);
+    var file = File(path.toFilePath());
     for (int i = 0; i < requests.length; i++) {
       var request = requests[i];
       var har = Har.toHar(request);

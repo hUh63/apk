@@ -152,7 +152,7 @@ class _WebSocketRequestPageState extends State<WebSocketRequestPage> {
         path = file?.path;
       }
       if (path == null) return;
-      final file = File(path);
+      final file = File(path.toFilePath());
       final bytes = await file.readAsBytes();
       if (bytes.isEmpty) return;
       _socket?.add(bytes);

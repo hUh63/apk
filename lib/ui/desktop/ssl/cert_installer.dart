@@ -86,7 +86,7 @@ class CertInstaller {
           '/etc/ssl/certs/$certName',
         ];
         for (var p in paths) {
-          if (await File(p).exists()) return true;
+          if (await File(p.toFilePath()).exists()) return true;
         }
         return false;
       }

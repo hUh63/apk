@@ -102,7 +102,7 @@ class _JavaScriptState extends State<JavaScript> {
                         final path = result?.single.xFile.path;
 
                         if (path != null) {
-                          File file = File(path);
+                          File file = File(path.toFilePath());
                           String content = await file.readAsString();
                           code.text = content;
                           setState(() {});

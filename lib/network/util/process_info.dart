@@ -192,7 +192,7 @@ class ProcessInfo {
 
       if (Platform.isMacOS) {
         var macIcon = await _getMacIcon(path);
-        icon = await File(macIcon).readAsBytes();
+        icon = await File(macIcon.toFilePath()).readAsBytes();
       }
 
       icon = icon ?? Uint8List(0);

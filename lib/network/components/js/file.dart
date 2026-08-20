@@ -28,7 +28,7 @@ class FileBridge {
       return sendMessage('getApplicationSupportDirectory', JSON.stringify(''));
     }
     
-    function File(path) {
+    function File(path.toFilePath()) {
       return {
         path: path,
         readAsString: function() {
@@ -102,27 +102,27 @@ class FileBridge {
     });
 
     flutterJs.onMessage('file.readAsString', (path) {
-      return File(path).readAsString();
+      return File(path.toFilePath()).readAsString();
     });
 
     flutterJs.onMessage('file.readAsStringSync', (path) {
-      var readAsStringSync = File(path).readAsStringSync();
+      var readAsStringSync = File(path.toFilePath()).readAsStringSync();
       return readAsStringSync;
     });
 
     flutterJs.onMessage('file.readAsBytes', (path) {
-      return File(path).readAsBytes();
+      return File(path.toFilePath()).readAsBytes();
     });
 
     flutterJs.onMessage('file.readAsBytesSync', (path) {
-      return File(path).readAsBytesSync();
+      return File(path.toFilePath()).readAsBytesSync();
     });
 
     flutterJs.onMessage('file.writeAsString', (args) async {
       var path = args['path'];
       var content = args['content'];
       var append = args['append'] ?? false;
-      await File(path).writeAsString(content, mode: append ? FileMode.append : FileMode.write);
+      await File(path.toFilePath()).writeAsString(content, mode: append ? FileMode.append : FileMode.write);
     });
 
     flutterJs.onMessage('file.writeAsStringSync', (args) {
@@ -130,7 +130,7 @@ class FileBridge {
       var content = args['content'];
       var append = args['append'] ?? false;
 
-      File(path).writeAsStringSync(content, mode: append ? FileMode.append : FileMode.write);
+      File(path.toFilePath()).writeAsStringSync(content, mode: append ? FileMode.append : FileMode.write);
     });
 
     flutterJs.onMessage('file.writeAsBytes', (args) async {
@@ -138,7 +138,7 @@ class FileBridge {
       var bytes = List<int>.from(args['bytes']);
       var append = args['append'] ?? false;
 
-      await File(path).writeAsBytes(bytes, mode: append ? FileMode.append : FileMode.write);
+      await File(path.toFilePath()).writeAsBytes(bytes, mode: append ? FileMode.append : FileMode.write);
     });
 
     flutterJs.onMessage('file.writeAsBytesSync', (args) {
@@ -146,31 +146,31 @@ class FileBridge {
       var bytes = List<int>.from(args['bytes']);
       var append = args['append'] ?? false;
 
-      File(path).writeAsBytesSync(bytes, mode: append ? FileMode.append : FileMode.write);
+      File(path.toFilePath()).writeAsBytesSync(bytes, mode: append ? FileMode.append : FileMode.write);
     });
 
     flutterJs.onMessage('file.length', (path) {
-      return File(path).length();
+      return File(path.toFilePath()).length();
     });
 
     flutterJs.onMessage('file.lengthSync', (path) {
-      return File(path).lengthSync();
+      return File(path.toFilePath()).lengthSync();
     });
 
     // flutterJs.onMessage('file.delete', (path) {
-    //   return File(path).delete();
+    //   return File(path.toFilePath()).delete();
     // });
     //
     // flutterJs.onMessage('file.deleteSync', (path) {
-    //   return File(path).deleteSync();
+    //   return File(path.toFilePath()).deleteSync();
     // });
 
     flutterJs.onMessage('file.exists', (path) {
-      return File(path).exists();
+      return File(path.toFilePath()).exists();
     });
 
     flutterJs.onMessage('file.existsSync', (path) {
-      return File(path).existsSync();
+      return File(path.toFilePath()).existsSync();
     });
 
     flutterJs.onMessage('file.create', (args) {
@@ -178,20 +178,20 @@ class FileBridge {
       var path = args['path'];
       var recursive = args['recursive'] ?? false;
       var exclusive = args['exclusive'] ?? false;
-      File(path).create(recursive: recursive, exclusive: exclusive);
+      File(path.toFilePath()).create(recursive: recursive, exclusive: exclusive);
     });
 
     flutterJs.onMessage('file.createSync', (args) {
       var path = args['path'];
       var recursive = args['recursive'] ?? false;
       var exclusive = args['exclusive'] ?? false;
-      File(path).createSync(recursive: recursive, exclusive: exclusive);
+      File(path.toFilePath()).createSync(recursive: recursive, exclusive: exclusive);
     });
 
     flutterJs.onMessage('file.rename', (args) async {
       var path = args['path'];
       var newPath = args['newPath'];
-      await File(path).rename(newPath);
+      await File(path.toFilePath()).rename(newPath);
     });
   }
 }

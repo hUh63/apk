@@ -298,7 +298,7 @@ class _ConfigManagementState extends State<ConfigManagement> {
       }
 
       // 导入配置
-      final file = File(filePath);
+      final file = File(filePath.toFilePath());
       final jsonStr = await file.readAsString();
       final newConfig = await ConfigImportExport.importConfig(jsonStr);
 

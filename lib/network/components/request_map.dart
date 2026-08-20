@@ -92,7 +92,7 @@ class RequestMapInterceptor extends Interceptor {
     if (item.bodyType == MapBodyType.file.name) {
       final bodyFile = _renderEnv(item.bodyFile);
       if (bodyFile == null) return response;
-      response.body = await FileRead.readFile(bodyFile);
+      response.body = await FileRead.readFile(bodyFile.toFilePath());
     } else if (item.body != null) {
       final body = _renderEnv(item.body) ?? item.body!;
       response.body =
