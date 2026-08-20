@@ -200,7 +200,7 @@ class _ConfigManagementState extends State<ConfigManagement> {
       isExporting = true;
 
       // 使用 FilePicker v12+ API 保存文件 (直接传入 bytes)
-      String? outputPath = await FilePicker.saveFile(
+      Uri? outputPath = await FilePicker.saveFile(
         dialogTitle: '选择保存位置',
         fileName: defaultName,
         type: FileType.custom,
@@ -211,7 +211,7 @@ class _ConfigManagementState extends State<ConfigManagement> {
       // 更新进度
       exportProgress = 0.8;
 
-      if (outputPath == null || outputPath.isEmpty) {
+      if (outputPath == null) {
         // 用户取消
         if (context.mounted) Navigator.of(context).pop();
         return;
@@ -253,7 +253,7 @@ class _ConfigManagementState extends State<ConfigManagement> {
       BuildContext context, AppLocalizations localizations) async {
     try {
       // 选择文件 (v12+ API)
-      FilePickerResult? result = await FilePicker.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json'],
         allowMultiple: false,
@@ -264,7 +264,7 @@ class _ConfigManagementState extends State<ConfigManagement> {
         return;
       }
 
-      final filePath = result.files.first.path;
+      final filePath = result.files.first.xFile.path;
       if (filePath == null) {
         return;
       }

@@ -161,7 +161,7 @@ class _DomainFilterState extends State<DomainFilter> {
 
   //导入
   Future<void> import() async {
-    final FilePickerResult? result = await FilePicker.pickFiles(
+    final result = await FilePicker.pickFiles(
         allowedExtensions: ['config'], type: FileType.custom, initialDirectory: "/Downloads");
     var file = result?.files.single;
     if (file == null) {
@@ -329,7 +329,7 @@ class _DomainListState extends State<DomainList> {
       String rule = widget.hostList.list[index].pattern.replaceAll(".*", "*");
       list.add(rule);
     }
-    String? saveLocation = (await FilePicker.saveFile(fileName: fileName, bytes: utf8.encode(jsonEncode(list))));
+    Uri? saveLocation = (await FilePicker.saveFile(fileName: fileName, bytes: utf8.encode(jsonEncode(list))));
     if (saveLocation == null) {
       return;
     }
