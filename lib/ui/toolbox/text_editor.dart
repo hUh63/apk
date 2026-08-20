@@ -193,7 +193,7 @@ class _TextEditorPageState extends State<TextEditorPage> {
 
     if (path == null) return;
     try {
-      final content = await File(path.toFilePath()).readAsString();
+      final content = await File(path).readAsString();
       _controller.text = content;
       _autoDetectLanguage(path);
     } catch (e) {
