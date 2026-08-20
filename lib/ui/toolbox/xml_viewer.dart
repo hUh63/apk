@@ -117,11 +117,11 @@ class _XmlViewerPageState extends State<XmlViewerPage> {
     String? path;
     try {
       final result = await FilePicker.pickFiles(type: FileType.any);
-      path = result?.files.single.xFile.path;
+      path = result?.single.xFile.path;
     } catch (_) {
       // 某些平台（e.g. Linux）custom + extensions 可能抛错，回退到任意类型
       final result = await FilePicker.pickFiles();
-      path = result?.files.single.xFile.path;
+      path = result?.single.xFile.path;
     }
 
     if (path == null) return;

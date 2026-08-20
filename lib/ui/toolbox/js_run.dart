@@ -99,7 +99,7 @@ class _JavaScriptState extends State<JavaScript> {
                   ElevatedButton.icon(
                       onPressed: () async {
                         var result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['js']);
-                        final path = result?.files.single.xFile.path;
+                        final path = result?.single.xFile.path;
 
                         if (path != null) {
                           File file = File(path);

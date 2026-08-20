@@ -99,7 +99,7 @@ class _FavoritesState extends State<MobileFavorites> {
                   onPressed: () async {
                     final result = await FilePicker.pickFiles(
                         type: FileType.custom, allowedExtensions: ['json', 'har']);
-                    final file = result?.files.isNotEmpty == true ? result!.files.first : null;
+                    final file = result?.files.isNotEmpty == true ? result!.first : null;
                     if (file == null) return;
                     final path = await _materializePickedFile(file);
                     if (path == null) return;

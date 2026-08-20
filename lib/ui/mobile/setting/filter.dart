@@ -138,7 +138,7 @@ class _DomainFilterState extends State<DomainFilter> {
 
   //导入
   Future<void> import() async {
-    final var result = await FilePicker.pickFiles(type: FileType.any);
+    var result = await FilePicker.pickFiles(type: FileType.any);
     if (result == null || result.files.isEmpty) {
       return;
     }

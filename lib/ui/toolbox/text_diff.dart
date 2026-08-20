@@ -306,10 +306,10 @@ class _TextDiffPageState extends State<TextDiffPage> {
     String? path;
     try {
       final result = await FilePicker.pickFiles(type: FileType.any);
-      path = result?.files.single.xFile.path;
+      path = result?.single.xFile.path;
     } catch (_) {
       final result = await FilePicker.pickFiles();
-      path = result?.files.single.xFile.path;
+      path = result?.single.xFile.path;
     }
 
     if (path == null) return;
