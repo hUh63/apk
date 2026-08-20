@@ -379,12 +379,14 @@ class _DesktopMcpConnectionState extends State<DesktopMcpConnection> {
                         children: [
                           const Text('可用工具', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                           const SizedBox(height: 12),
-                          ...tools.entries.map((entry) {
+                          ...tools.map((tool) {
+                            final name = tool['name'] as String;
+                            final description = tool['description'] as String?;
                             return SwitchListTile(
-                              title: Text(entry.key),
-                              subtitle: Text(entry.value.description ?? ''),
-                              value: _toolsEnabled[entry.key] ?? true,
-                              onChanged: (value) => _toggleTool(entry.key, value),
+                              title: Text(name),
+                              subtitle: Text(description ?? ''),
+                              value: _toolsEnabled[name] ?? true,
+                              onChanged: (value) => _toggleTool(name, value),
                               dense: true,
                             );
                           }),

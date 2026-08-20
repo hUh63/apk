@@ -294,7 +294,7 @@ class _DesktopBackupManagementState extends State<DesktopBackupManagement> {
     if (confirmed == true) {
       try {
         final content = await File(backup.path).readAsString();
-        await widget.configuration.restoreFromString(content);
+        await Configuration.importConfig(content);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('备份已恢复')),
@@ -357,7 +357,7 @@ class _DesktopBackupManagementState extends State<DesktopBackupManagement> {
   }
 
   Future<void> _exportBackup(BuildContext context, _BackupFile backup) async {
-    final result = await FilePicker().saveFile(
+    final result = await FilePicker.saveFile(
       dialogTitle: '导出备份文件',
       fileName: backup.name,
       type: FileType.custom,

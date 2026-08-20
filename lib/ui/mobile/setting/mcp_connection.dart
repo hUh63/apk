@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_toastr/flutter_toastr.dart';
+import 'package:proxypin/l10n/app_localizations.dart';
 import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/network/mcp/mcp_server.dart';
 import 'package:proxypin/native/mcp_screen.dart';
@@ -129,8 +130,9 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
     setState(() {
       _mcpAutoStart = enabled;
     });
+    final loc = AppLocalizations.of(context)!;
     FlutterToastr.show(
-      enabled ? context.mcpAutoStartEnabled : context.mcpAutoStartDisabled,
+      enabled ? loc.mcpAutoStartEnabled : loc.mcpAutoStartDisabled,
       context,
     );
   }
@@ -149,12 +151,14 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
   Future<void> _applyPort() async {
     final newPort = int.tryParse(_portController.text.trim());
     if (newPort == null || newPort < 1 || newPort > 65535) {
-      FlutterToastr.show(context.mcpPortInvalid, context);
+      final loc = AppLocalizations.of(context)!;
+      FlutterToastr.show(loc.mcpPortInvalid, context);
       return;
     }
 
     if (newPort == _configuredPort) {
-      FlutterToastr.show(context.mcpPortUnchanged, context);
+      final loc = AppLocalizations.of(context)!;
+      FlutterToastr.show(loc.mcpPortUnchanged, context);
       return;
     }
 
@@ -170,7 +174,8 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
     setState(() {
       _configuredPort = newPort;
     });
-    FlutterToastr.show(context.mcpPortApplied.replaceAll('{port}', newPort.toString()), context);
+    final loc = AppLocalizations.of(context)!;
+    FlutterToastr.show(loc.mcpPortApplied.replaceAll('{port}', newPort.toString()), context);
   }
 
   /// 复制文本到剪贴板

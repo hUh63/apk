@@ -51,7 +51,7 @@ class DesktopThemeSetting extends StatelessWidget {
           },
           child: const Text('Material 3'),
         ),
-        MenuDivider(),
+        const Divider(),
         // 跟随系统
         MenuItemButton(
           leadingIcon: const Icon(Icons.cached),
