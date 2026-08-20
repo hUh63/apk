@@ -340,7 +340,7 @@ class _MobileRequestCryptoPageState extends State<MobileRequestCryptoPage> {
       var result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['json']);
       final path = result?.single.xFile.path;
       if (path == null) return;
-      final content = await File(path.toFilePath()).readAsString();
+      final content = await File(path).readAsString();
       final List list = jsonDecode(content);
       for (final item in list) {
         await manager.addRule(CryptoRule.fromJson(Map<String, dynamic>.from(item)));
