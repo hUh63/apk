@@ -218,7 +218,7 @@ class SearchModel {
     }
     
     // 请求头匹配 (40 分)
-    if (searchOptions.contains(Option.requestHeaders)) {
+    if (searchOptions.contains(Option.requestHeader)) {
       for (var entry in request.headers.entries) {
         final headerToCheck = caseSensitive.value 
             ? '${entry.key}: ${entry.value}' 
@@ -231,8 +231,9 @@ class SearchModel {
     }
     
     // 响应头匹配 (40 分)
-    if (searchOptions.contains(Option.responseHeaders)) {
-      for (var entry in (request.response?.headers ?? {}).entries) {
+    if (searchOptions.contains(Option.responseHeader)) {
+      var respHeaders = request.response?.headers ?? {};
+      for (var entry in respHeaders.entries) {
         final headerToCheck = caseSensitive.value 
             ? '${entry.key}: ${entry.value}' 
             : '${entry.key}: ${entry.value}'.toLowerCase();
