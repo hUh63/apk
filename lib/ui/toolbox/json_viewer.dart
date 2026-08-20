@@ -180,7 +180,7 @@ class _JsonViewerPageState extends State<JsonViewerPage> with SingleTickerProvid
 
     if (path == null) return;
     try {
-      final content = await File(path.toFilePath()).readAsString();
+      final content = await File(path).readAsString();
       _controller.text = content;
     } catch (e) {
       _toast('${localizations.fail}: $e');
