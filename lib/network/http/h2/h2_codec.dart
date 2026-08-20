@@ -237,6 +237,7 @@ abstract class Http2Codec<T extends HttpMessage> implements Codec<T, T> {
         // HTTP/2 错误码分类处理
         String errorCategory;
         bool shouldRetry = false;
+        bool shouldFallbackToHttp1 = false;
         switch (errorCode) {
           case 0: // NO_ERROR - 优雅关闭
             errorCategory = '优雅关闭';
@@ -244,6 +245,7 @@ abstract class Http2Codec<T extends HttpMessage> implements Codec<T, T> {
           case 1: // PROTOCOL_ERROR
             errorCategory = '协议错误';
             shouldRetry = true;
+            shouldFallbackToHttp1 = true; // 协议错误时降级到 HTTP/1.1
             break;
           case 2: // INTERNAL_ERROR
             errorCategory = '内部错误';
@@ -251,6 +253,7 @@ abstract class Http2Codec<T extends HttpMessage> implements Codec<T, T> {
             break;
           case 3: // FLOW_CONTROL_ERROR
             errorCategory = '流控错误';
+            shouldFallbackToHttp1 = true; // 流控错误时降级
             break;
           case 4: // SETTINGS_TIMEOUT
             errorCategory = '设置超时';
@@ -261,6 +264,7 @@ abstract class Http2Codec<T extends HttpMessage> implements Codec<T, T> {
             break;
           case 6: // FRAME_SIZE_ERROR
             errorCategory = '帧大小错误';
+            shouldFallbackToHttp1 = true;
             break;
           case 7: // REFUSED_STREAM
             errorCategory = '流被拒绝';
@@ -271,6 +275,7 @@ abstract class Http2Codec<T extends HttpMessage> implements Codec<T, T> {
             break;
           case 9: // COMPRESSION_ERROR
             errorCategory = '压缩错误';
+            shouldFallbackToHttp1 = true; // HPACK 压缩错误时降级
             break;
           case 10: // CONNECT_ERROR
             errorCategory = '连接错误';
@@ -278,15 +283,29 @@ abstract class Http2Codec<T extends HttpMessage> implements Codec<T, T> {
             break;
           case 11: // ENHANCE_YOUR_CALM
             errorCategory = '速率限制';
+            shouldFallbackToHttp1 = true; // 速率限制时降级
             break;
           case 12: // INADEQUATE_SECURITY
             errorCategory = '安全不足';
+            shouldFallbackToHttp1 = true; // TLS 版本不足时降级
             break;
           case 13: // HTTP_1_1_REQUIRED
             errorCategory = '需要 HTTP/1.1';
+            shouldFallbackToHttp1 = true;
             break;
           default:
             errorCategory = '未知错误 ($errorCode)';
+        }
+        
+        // 标记连接需要优雅降级或重连
+        if (shouldFallbackToHttp1) {
+          channelContext.putAttribute(AttributeKeys.h2FallbackToHttp1, true);
+          logger.w('[${channelContext.clientChannel?.id}] HTTP/2 连接需要降级到 HTTP/1.1: $errorCategory');
+        }
+        
+        if (shouldRetry) {
+          channelContext.putAttribute(AttributeKeys.h2ShouldRetry, true);
+          logger.i('[${channelContext.clientChannel?.id}] HTTP/2 连接将自动重试：$errorCategory');
         }
         
         logger.i(
@@ -295,7 +314,8 @@ abstract class Http2Codec<T extends HttpMessage> implements Codec<T, T> {
             "lastStreamId: $lastStreamId "
             "errorCode: $errorCode ($errorCategory) "
             "debugData: $debugText "
-            "shouldRetry: $shouldRetry");
+            "shouldRetry: $shouldRetry "
+            "fallbackToHttp1: $shouldFallbackToHttp1");
         
         result.forward = List.from(frameHeader.encode())..addAll(framePayload);
         return result;

@@ -76,6 +76,10 @@ class Configuration {
   //默认是否启动
   bool startup = false;
 
+  //自动备份配置
+  bool autoBackupEnabled = true; // 是否启用自动备份
+  int autoBackupIntervalHours = 24; // 自动备份间隔（小时）
+
   Configuration._();
 
   /// 单例
@@ -123,6 +127,8 @@ class Configuration {
     appBlacklist = config['appBlacklist'] == null ? null : List<String>.from(config['appBlacklist']);
     HostFilter.whitelist.load(config['whitelist']);
     HostFilter.blacklist.load(config['blacklist']);
+    autoBackupEnabled = config['autoBackupEnabled'] ?? true;
+    autoBackupIntervalHours = config['autoBackupIntervalHours'] ?? 24;
   }
 
   /// 配置文件
@@ -177,6 +183,8 @@ class Configuration {
       'mcpAutoStart': mcpAutoStart,
       'mcpToolsEnabled': mcpToolsEnabled,
       'enabledHttp2': enabledHttp2,
+      'autoBackupEnabled': autoBackupEnabled,
+      'autoBackupIntervalHours': autoBackupIntervalHours,
       'whitelist': HostFilter.whitelist.toJson(),
       'blacklist': HostFilter.blacklist.toJson(),
     };

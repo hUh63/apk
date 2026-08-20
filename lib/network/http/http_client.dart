@@ -29,6 +29,7 @@ import 'package:proxypin/network/util/byte_buf.dart';
 import 'package:proxypin/network/util/byte_utils.dart';
 import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/network/util/system_proxy.dart';
+import 'package:proxypin/network/util/attribute_keys.dart';
 import 'package:proxy_manager/proxy_manager.dart';
 
 import '../channel/channel.dart';
@@ -74,7 +75,16 @@ class HttpClients {
       await channel.startSecureSocket(channelContext,
           host: hostAndPort.host, supportedProtocols: request.protocolVersion == "HTTP/2" ? ["h2", "http/1.1"] : null);
       if (channelContext.serverChannel?.selectedProtocol == "h2") {
-        await Http2ClientHandler(handler).listen(channel, channelContext);
+        // 检查是否需要从 HTTP/2 降级到 HTTP/1.1 (#871)
+        final shouldFallback = channelContext.getAttribute<bool>(AttributeKeys.h2FallbackToHttp1) == true;
+        if (shouldFallback) {
+          logger.w('[${channel.id}] HTTP/2 连接降级到 HTTP/1.1');
+          channelContext.putAttribute(AttributeKeys.h2FallbackToHttp1, null); // 清除标记
+          request.protocolVersion = "HTTP/1.1";
+          channel.dispatcher.listen(channel, channelContext);
+        } else {
+          await Http2ClientHandler(handler).listen(channel, channelContext);
+        }
       } else {
         request.protocolVersion = "HTTP/1.1";
         channel.dispatcher.listen(channel, channelContext);
