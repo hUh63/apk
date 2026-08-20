@@ -165,7 +165,7 @@ class RequestRewriteState extends State<RequestRewriteWidget> {
     }
 
     try {
-      List json = jsonDecode(await File(path).readAsString());
+      List json = jsonDecode(await File(path.toFilePath()).readAsString());
       for (var item in json) {
         var rule = RequestRewriteRule.formJson(item);
         var items = (item['items'] as List).map((e) => RewriteItem.fromJson(e)).toList();
@@ -378,7 +378,7 @@ class _RequestRuleListState extends State<RequestRuleList> {
       list.add(json);
     }
 
-    await File(path).writeAsBytes(utf8.encode(jsonEncode(list)));
+    await File(path.toFilePath()).writeAsBytes(utf8.encode(jsonEncode(list)));
     if (mounted) FlutterToastr.show(localizations.exportSuccess, context);
   }
 
