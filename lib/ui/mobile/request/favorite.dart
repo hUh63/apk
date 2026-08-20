@@ -101,10 +101,10 @@ class _FavoritesState extends State<MobileFavorites> {
                         type: FileType.custom, allowedExtensions: ['json', 'har']);
                     final file = result?.isNotEmpty == true ? result!.first : null;
                     if (file == null) return;
-                    final path = await _materializePickedFile(file.toFilePath());
+                    final path = await _materializePickedFile(file);
                     if (path == null) return;
                     try {
-                      await FavoriteStorage.importFromFile(path.toFilePath());
+                      await FavoriteStorage.importFromFile(path);
                       if (context.mounted) FlutterToastr.show(localizations.importSuccess, context);
                       setState(() {});
                     } catch (e) {

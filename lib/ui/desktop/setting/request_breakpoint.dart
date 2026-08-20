@@ -51,7 +51,7 @@ class _RequestBreakpointPageState extends State<RequestBreakpointPage> {
     var result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['json']);
     final path = result?.single.xFile.path;
     if (path == null) return;
-    File file = File(path.toFilePath());
+    File file = File(path);
     try {
       String content = await file.readAsString();
       List<dynamic> list = jsonDecode(content);

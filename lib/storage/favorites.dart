@@ -99,19 +99,19 @@ class FavoriteStorage {
   static Future<void> exportToFile(String path) async {
     var current = await favorites;
     var content = toJson(current);
-    await File(path.toFilePath()).writeAsString(content, flush: true);
+    await File(path).writeAsString(content, flush: true);
   }
 
   /// Export all favorites as HAR to a given file path
   static Future<void> exportToHarFile(String path, {String title = 'Favorites'}) async {
     var current = await favorites;
     final requests = current.map((f) => f.request).toList(growable: false);
-    await Har.writeFile(requests, File(path.toFilePath()), title: title);
+    await Har.writeFile(requests, File(path), title: title);
   }
 
   /// Import favorites from a JSON or HAR file (merges with current list, de-duping by requestId)
   static Future<void> importFromFile(String path) async {
-    final file = File(path.toFilePath());
+    final file = File(path);
     if (!await file.exists()) {
       throw Exception('File not found');
     }
@@ -120,7 +120,7 @@ class FavoriteStorage {
     List<Favorite> imported;
     if (lower.endsWith('.har')) {
       // HAR import
-      final requests = await Har.readFile(file.toFilePath());
+      final requests = await Har.readFile(file);
       imported = requests.map((r) => Favorite(r)).toList(growable: false);
     } else {
       // JSON import (old format)

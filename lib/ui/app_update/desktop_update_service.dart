@@ -237,8 +237,8 @@ class DesktopUpdateService {
     try {
       if (_isInPlaceZip(asset)) {
         final started = Platform.isMacOS
-            ? await MacosZipUpdater.install(version.version, File(filePath.toFilePath()))
-            : await WindowsZipUpdater.install(version.version, File(filePath.toFilePath()));
+            ? await MacosZipUpdater.install(version.version, File(filePath))
+            : await WindowsZipUpdater.install(version.version, File(filePath));
         if (!started) {
           state.value = state.value.copyWith(
             phase: DesktopUpdatePhase.failed,
@@ -304,7 +304,7 @@ class DesktopUpdateService {
   Future<void> _deleteFile(String? filePath) async {
     if (filePath == null || filePath.isEmpty) return;
     try {
-      final file = File(filePath.toFilePath());
+      final file = File(filePath);
       if (await file.exists()) {
         await file.delete();
       }

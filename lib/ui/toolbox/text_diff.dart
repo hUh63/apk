@@ -314,7 +314,7 @@ class _TextDiffPageState extends State<TextDiffPage> {
 
     if (path == null) return;
     try {
-      final content = await File(path.toFilePath()).readAsString();
+      final content = await File(path).readAsString();
       target.text = content;
     } catch (e) {
       _toast('${localizations.fail}: $e');

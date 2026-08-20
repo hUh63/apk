@@ -156,7 +156,7 @@ class WindowsZipUpdater {
         if (outputPath == null) continue;
 
         if (file.isFile) {
-          await File(outputPath.toFilePath()).parent.create(recursive: true);
+          await File(outputPath).parent.create(recursive: true);
           final output = OutputFileStream(outputPath);
           file.writeContent(output);
           await output.close();

@@ -23,12 +23,12 @@ class FileRead {
 
   static Future<String> readAsString(String file) async {
     return rootBundle.loadString(file);
-    // return File(file.toFilePath()).readAsString();
+    // return File(file).readAsString();
   }
 
   static Future<Uint8List> read(String file) async {
     return rootBundle.load(file).then((bateData) => bateData.buffer.asUint8List());
-    // return File(file.toFilePath()).readAsBytes();
+    // return File(file).readAsBytes();
   }
 
   static String? _uuid;
@@ -52,6 +52,6 @@ class FileRead {
       path = path.replaceAll(uuidPattern, '/Application/$uuid/');
     }
 
-    return File(path.toFilePath()).readAsBytes();
+    return File(path).readAsBytes();
   }
 }

@@ -47,7 +47,7 @@ class MacosZipUpdater {
 
       final stagedApp = await _findStagedApp(extractDir);
       await _validateStagedApp(stagedApp);
-      await _deleteFile(zipFile.toFilePath());
+      await _deleteFile(zipFile);
 
       final helper = await _writeHelperScript(stagingDir: stagingDir);
       final helperArgs = [

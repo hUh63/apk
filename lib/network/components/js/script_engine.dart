@@ -106,7 +106,7 @@ class JavaScriptEngine {
       channelCallbacks!["ConsoleLog"] = consoleLog;
     }
     Md5Bridge.registerMd5(flutterJs);
-    FileBridge.registerFile(flutterJs.toFilePath());
+    FileBridge.registerFile(flutterJs);
 
     flutterJs.enableFetch2();
     return flutterJs;
