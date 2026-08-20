@@ -23,6 +23,7 @@ import 'package:proxypin/ui/desktop/toolbar/phone_connect.dart';
 import 'package:proxypin/ui/desktop/toolbar/environment_switcher.dart';
 import 'package:proxypin/ui/desktop/toolbar/weak_network_indicator.dart';
 import 'package:proxypin/ui/desktop/setting/setting.dart';
+import 'package:proxypin/ui/desktop/setting/theme.dart';
 import 'package:proxypin/ui/desktop/ssl/ssl.dart';
 import 'package:proxypin/ui/configuration.dart';
 import 'package:proxypin/ui/launch/launch.dart';
@@ -121,6 +122,8 @@ class _ToolbarState extends State<Toolbar> {
       const Padding(padding: EdgeInsets.only(left: 18)),
       const EnvironmentSwitcher(), // 环境变量切换器
       const Padding(padding: EdgeInsets.only(left: 10)),
+      // 主题设置按钮
+      DesktopThemeSetting(appConfiguration: AppConfiguration.current!),
     ]);
   }
 

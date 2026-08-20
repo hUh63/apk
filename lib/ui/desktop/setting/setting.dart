@@ -25,9 +25,12 @@ import 'package:proxypin/ui/component/multi_window.dart';
 import 'package:proxypin/ui/component/proxy_port_setting.dart';
 import 'package:proxypin/ui/component/widgets.dart';
 import 'package:proxypin/ui/desktop/setting/about.dart';
+import 'package:proxypin/ui/desktop/setting/backup_management.dart';
 import 'package:proxypin/ui/desktop/setting/external_proxy.dart';
 import 'package:proxypin/ui/desktop/setting/hosts.dart';
+import 'package:proxypin/ui/desktop/setting/mcp_connection.dart';
 import 'package:proxypin/ui/desktop/setting/request_block.dart';
+import 'package:proxypin/ui/desktop/setting/theme.dart';
 import 'package:proxypin/ui/desktop/setting/weak_network.dart';
 
 import 'filter.dart';
@@ -83,13 +86,20 @@ class _SettingState extends State<Setting> {
         item(localizations.breakpoint, onPressed: requestBreakpoint),
         item(localizations.weakNetwork, onPressed: showWeakNetwork),
         item(localizations.externalProxy, onPressed: setExternalProxy),
-        item(localizations.about, onPressed: showAbout),
+        const MenuDivider(),
+        item('MCP 连接', onPressed: showMcpConnection, leadingIcon: Icons.cloud),
+        item('MCP 自动化', onPressed: showMcpAutomation, leadingIcon: Icons.auto_awesome),
+        item('备份管理', onPressed: showBackupManagement, leadingIcon: Icons.backup),
+        item('主题设置', onPressed: showThemeSetting, leadingIcon: Icons.palette),
+        const MenuDivider(),
+        item(localizations.about, onPressed: showAbout, leadingIcon: Icons.info),
       ],
     );
   }
 
-  Widget item(String text, {VoidCallback? onPressed}) {
+  Widget item(String text, {VoidCallback? onPressed, IconData? leadingIcon}) {
     return MenuItemButton(
+        leadingIcon: leadingIcon != null ? Icon(leadingIcon, size: 18) : null,
         trailingIcon: const Icon(Icons.arrow_right),
         onPressed: onPressed,
         child: Padding(
@@ -99,6 +109,50 @@ class _SettingState extends State<Setting> {
 
   void showAbout() {
     showDialog(context: context, builder: (context) => DesktopAbout());
+  }
+
+  /// 显示 MCP 连接设置
+  void showMcpConnection() {
+    showDialog(
+        barrierDismissible: false,
+        context: context,
+        builder: (context) {
+          return Dialog(
+            child: SizedBox(
+              width: 800,
+              height: 700,
+              child: DesktopMcpConnection(configuration: configuration),
+            ),
+          );
+        });
+  }
+
+  /// 显示 MCP 自动化设置
+  void showMcpAutomation() {
+    MultiWindow.openWindow('MCP 自动化', 'McpAutomationWidget', size: const Size(900, 700));
+  }
+
+  /// 显示备份管理
+  void showBackupManagement() {
+    showDialog(
+        barrierDismissible: false,
+        context: context,
+        builder: (context) {
+          return Dialog(
+            child: SizedBox(
+              width: 700,
+              height: 600,
+              child: DesktopBackupManagement(configuration: configuration),
+            ),
+          );
+        });
+  }
+
+  /// 显示主题设置（在顶部工具栏已有独立入口）
+  void showThemeSetting() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('主题设置在顶部工具栏，点击太阳/月亮图标即可切换')),
+    );
   }
 
   ///设置外部代理地址
