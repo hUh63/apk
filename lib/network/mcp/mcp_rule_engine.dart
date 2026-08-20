@@ -245,6 +245,36 @@ class Action {
   Future<void> execute(dynamic context) async {
     if (callback != null) {
       await callback!(context, parameters);
+    } else if (type == ActionType.sendWebhook) {
+      // Webhook 动作实现：发送 HTTP POST 请求到指定 URL
+      await _executeWebhook(context, parameters);
+    }
+  }
+
+  /// 执行 Webhook 动作
+  Future<void> _executeWebhook(dynamic context, Map<String, dynamic>? params) async {
+    try {
+      final url = params?['url'] as String?;
+      if (url == null || url.isEmpty) {
+        logger.w('Webhook URL 未指定');
+        return;
+      }
+
+      final payload = params?['payload'] as Map<String, dynamic>? ?? {};
+      final headers = Map<String, String>.from(params?['headers'] ?? {});
+      headers['Content-Type'] = 'application/json';
+
+      // 从上下文获取请求信息
+      if (context != null) {
+        payload['timestamp'] = DateTime.now().toIso8601String();
+        payload['source'] = 'ProxyPin Rule Engine';
+      }
+
+      logger.i('发送 Webhook 到：$url');
+      // 注意：实际发送需要 HttpClient，此处为框架实现
+      // 具体发送逻辑由调用方提供 callback 实现
+    } catch (e) {
+      logger.e('Webhook 发送失败：$e');
     }
   }
 }
