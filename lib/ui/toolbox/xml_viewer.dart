@@ -126,7 +126,7 @@ class _XmlViewerPageState extends State<XmlViewerPage> {
 
     if (path == null) return;
     try {
-      final content = await File(path.toFilePath()).readAsString();
+      final content = await File(path).readAsString();
       _controller.text = content;
     } catch (e) {
       _toast('${localizations.fail}: $e');
