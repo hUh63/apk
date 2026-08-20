@@ -139,7 +139,7 @@ class _DomainFilterState extends State<DomainFilter> {
   //导入
   Future<void> import() async {
     var result = await FilePicker.pickFiles(type: FileType.any);
-    if (result == null || result.files.isEmpty) {
+    if (result == null || result.isEmpty) {
       return;
     }
     var file = File(result.single.xFile.path!);

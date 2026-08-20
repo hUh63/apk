@@ -402,7 +402,7 @@ class _AndroidCaInstallState extends State<AndroidCaInstall> with SingleTickerPr
 
   void _downloadCert(String name) async {
     var caFile = await CertificateManager.certificateFile();
-    String? outputFile = await FilePicker.saveFile(
+    Uri? outputFile = await FilePicker.saveFile(
         dialogTitle: 'Please select the path to save:', fileName: name, bytes: await caFile.readAsBytes());
 
     if (outputFile != null && mounted) {

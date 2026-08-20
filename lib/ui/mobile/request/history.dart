@@ -211,7 +211,7 @@ class _MobileHistoryState extends State<MobileHistory> {
   //导入har
   Future<void> import(HistoryStorage storage) async {
     var result = await FilePicker.pickFiles(type: FileType.any);
-    if (result == null || result.files.isEmpty) {
+    if (result == null || result.isEmpty) {
       return;
     }
 

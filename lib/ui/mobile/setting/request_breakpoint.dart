@@ -204,7 +204,7 @@ class _RequestBreakpointPageState extends State<MobileRequestBreakpointPage> {
   Future<void> _import() async {
     try {
       var result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['json']);
-      if (result == null || result.files.isEmpty) return;
+      if (result == null || result.isEmpty) return;
       File file = File(result.single.xFile.path!);
       String content = await file.readAsString();
       List<dynamic> list = jsonDecode(content);

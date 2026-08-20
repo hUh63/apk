@@ -108,6 +108,9 @@ class McpEventAutomation {
     return _eventHistory.sublist(start);
   }
 
+  /// 获取所有监听器（只读）
+  Map<String, List<EventCallback>> get listeners => Map.unmodifiable(_listeners);
+
   // ==================== HTTP 请求事件 ====================
 
   /// 监听 HTTP 请求事件

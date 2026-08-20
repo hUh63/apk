@@ -92,7 +92,7 @@ class _MobileRequestRewriteState extends State<MobileRequestRewrite> {
   //导入
   Future<void> import() async {
     var result = await FilePicker.pickFiles(type: FileType.any);
-    if (result == null || result.files.isEmpty) {
+    if (result == null || result.isEmpty) {
       return;
     }
     var file = result.single.xFile;

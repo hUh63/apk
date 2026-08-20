@@ -332,6 +332,9 @@ class McpRuleEngine {
   /// 获取所有规则
   List<Rule> getRules() => List.unmodifiable(_rules);
 
+  /// 获取规则列表（只读）
+  List<Rule> get rules => List.unmodifiable(_rules);
+
   /// 清除所有规则
   void clearRules() {
     _rules.clear();
