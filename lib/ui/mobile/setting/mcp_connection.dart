@@ -130,7 +130,7 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
       _mcpAutoStart = enabled;
     });
     FlutterToastr.show(
-      enabled ? context.l10n.mcpAutoStartEnabled : context.l10n.mcpAutoStartDisabled,
+      enabled ? context.mcpAutoStartEnabled : context.mcpAutoStartDisabled,
       context,
     );
   }
@@ -149,12 +149,12 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
   Future<void> _applyPort() async {
     final newPort = int.tryParse(_portController.text.trim());
     if (newPort == null || newPort < 1 || newPort > 65535) {
-      FlutterToastr.show(context.l10n.mcpPortInvalid, context);
+      FlutterToastr.show(context.mcpPortInvalid, context);
       return;
     }
 
     if (newPort == _configuredPort) {
-      FlutterToastr.show(context.l10n.mcpPortUnchanged, context);
+      FlutterToastr.show(context.mcpPortUnchanged, context);
       return;
     }
 
@@ -170,7 +170,7 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
     setState(() {
       _configuredPort = newPort;
     });
-    FlutterToastr.show(context.l10n.mcpPortApplied.replaceAll('{port}', newPort.toString()), context);
+    FlutterToastr.show(context.mcpPortApplied.replaceAll('{port}', newPort.toString()), context);
   }
 
   /// 复制文本到剪贴板
