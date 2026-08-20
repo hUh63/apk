@@ -128,7 +128,6 @@ XMLHttpRequest.prototype._send_native_callback = function(responseInfo, response
     return;
   }
   // Response info
-  // TODO: responseXML?
   this.responseURL = this._url;
   this.status = responseInfo.statusCode;
   this.statusText = responseInfo.statusText;
@@ -202,7 +201,7 @@ XMLHttpRequest.prototype.getResponseHeader = function(name) {
   return ret;
 };
 // XMLHttpRequest.prototype.overrideMimeType = function() {
-//   // TODO
+//   预留扩展
 // };
 this.XMLHttpRequest = XMLHttpRequest;""";
 
@@ -286,7 +285,8 @@ extension JavascriptRuntimeXhrExtension on JavascriptRuntime {
     httpClient = httpClient ?? await createClient(enabledProxy);
     dartContext[XHR_PENDING_CALLS_KEY] = [];
 
-    Timer.periodic(Duration(milliseconds: 40), (timer) {
+    // 增强：缩短轮询间隔，提高请求响应速度 (#890)
+    Timer.periodic(Duration(milliseconds: 20), (timer) {
       // exits if there is no pending call to remote
       if (!hasPendingXhrCalls()) return;
 
@@ -301,46 +301,65 @@ extension JavascriptRuntimeXhrExtension on JavascriptRuntime {
         HttpMethod eMethod = HttpMethod.values
             .firstWhere((e) => e.toString().toLowerCase() == ("HttpMethod.${pendingCall.method}".toLowerCase()));
         late http.Response response;
-        switch (eMethod) {
-          case HttpMethod.head:
-            response = await httpClient!.head(
-              Uri.parse(pendingCall.url!),
-              headers: pendingCall.headers,
-            );
-            break;
-          case HttpMethod.get:
-            response = await httpClient!.get(
-              Uri.parse(pendingCall.url!),
-              headers: pendingCall.headers,
-            );
-            break;
-          case HttpMethod.post:
-            response = await httpClient!.post(
-              Uri.parse(pendingCall.url!),
-              body: (pendingCall.body is String) ? pendingCall.body : jsonEncode(pendingCall.body),
-              headers: pendingCall.headers,
-            );
-            break;
-          case HttpMethod.put:
-            response = await httpClient!.put(
-              Uri.parse(pendingCall.url!),
-              body: (pendingCall.body is String) ? pendingCall.body : jsonEncode(pendingCall.body),
-              headers: pendingCall.headers,
-            );
-            break;
-          case HttpMethod.patch:
-            response = await httpClient!.patch(
-              Uri.parse(pendingCall.url!),
-              body: (pendingCall.body is String) ? pendingCall.body : jsonEncode(pendingCall.body),
-              headers: pendingCall.headers,
-            );
-            break;
-          case HttpMethod.delete:
-            response = await httpClient!.delete(
-              Uri.parse(pendingCall.url!),
-              headers: pendingCall.headers,
-            );
-            break;
+        try {
+          switch (eMethod) {
+            case HttpMethod.head:
+              response = await httpClient!.head(
+                Uri.parse(pendingCall.url!),
+                headers: pendingCall.headers,
+              );
+              break;
+            case HttpMethod.get:
+              response = await httpClient!.get(
+                Uri.parse(pendingCall.url!),
+                headers: pendingCall.headers,
+              );
+              break;
+            case HttpMethod.post:
+              response = await httpClient!.post(
+                Uri.parse(pendingCall.url!),
+                body: (pendingCall.body is String) ? pendingCall.body : jsonEncode(pendingCall.body),
+                headers: pendingCall.headers,
+              );
+              break;
+            case HttpMethod.put:
+              response = await httpClient!.put(
+                Uri.parse(pendingCall.url!),
+                body: (pendingCall.body is String) ? pendingCall.body : jsonEncode(pendingCall.body),
+                headers: pendingCall.headers,
+              );
+              break;
+            case HttpMethod.patch:
+              response = await httpClient!.patch(
+                Uri.parse(pendingCall.url!),
+                body: (pendingCall.body is String) ? pendingCall.body : jsonEncode(pendingCall.body),
+                headers: pendingCall.headers,
+              );
+              break;
+            case HttpMethod.delete:
+              response = await httpClient!.delete(
+                Uri.parse(pendingCall.url!),
+                headers: pendingCall.headers,
+              );
+              break;
+          }
+        } catch (e) {
+          // 增强：捕获请求异常，返回错误响应 (#890)
+          logger.e('XHR request error url:${pendingCall.url}, error: $e');
+          final xhrResult = XmlHttpRequestResponse(
+            responseText: null,
+            responseInfo: XhtmlHttpResponseInfo(statusCode: 0, statusText: "Error", body: null),
+            error: e.toString(),
+          );
+          final responseInfo = jsonEncode(xhrResult.responseInfo);
+          final error = xhrResult.error;
+          var jsResult = evaluate(
+            "if (globalThis.xhrRequests[${pendingCall.idRequest}]) { globalThis.xhrRequests[${pendingCall.idRequest}].callback($responseInfo, null, $error); }",
+          );
+          if (jsResult.isError) {
+            logger.e('jsResult error url:${pendingCall.url}, ${jsResult.stringResult}');
+          }
+          return;
         }
         // assuming request was successfully executed
         String? responseText;
@@ -355,7 +374,12 @@ extension JavascriptRuntimeXhrExtension on JavascriptRuntime {
 
         final xhrResult = XmlHttpRequestResponse(
           responseText: responseText,
-          responseInfo: XhtmlHttpResponseInfo(statusCode: 200, statusText: "OK", body: body),
+          // 增强：使用实际响应状态码 (#890)
+          responseInfo: XhtmlHttpResponseInfo(
+            statusCode: response.statusCode,
+            statusText: response.reasonPhrase ?? "OK",
+            body: body,
+          ),
         );
 
         response.headers.forEach((key, value) {
