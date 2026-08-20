@@ -189,25 +189,27 @@ class Condition {
   dynamic _getHttpRequestField(HttpRequest request, String field) {
     switch (field) {
       case 'url':
-        return request.url;
+        return request.requestUrl;
       case 'method':
-        return request.method;
+        return request.method.name;
       case 'statusCode':
-        return request.statusCode;
+        return request.response?.status.code;
       case 'duration':
-        return request.response?.duration?.inMilliseconds ?? 0;
+        return request.response != null 
+            ? request.response!.responseTime.difference(request.requestTime).inMilliseconds 
+            : 0;
       case 'requestSize':
-        return request.requestContentLength;
+        return request.contentLength;
       case 'responseSize':
-        return request.response?.responseContentLength ?? 0;
+        return request.response?.contentLength ?? 0;
       case 'host':
-        return request.host;
+        return request.hostAndPort?.host ?? request.requestUri?.host;
       case 'path':
         return request.path;
       case 'contentType':
-        return request.requestContentType;
+        return request.headers.contentType;
       case 'responseContentType':
-        return request.response?.responseContentType;
+        return request.response?.headers.contentType;
       default:
         return null;
     }
@@ -585,9 +587,9 @@ class McpRuleEngineExample {
           type: ActionType.custom,
           callback: (context, params) async {
             if (context is HttpRequest) {
-              final size = context.response?.responseContentLength ?? 0;
+              final size = context.response?.contentLength ?? 0;
               if (size > 100 * 1024 * 1024) { // 100MB
-                logger.w('拦截大文件下载：${context.url}');
+                logger.w('拦截大文件下载：${context.requestUrl}');
               }
             }
           },

@@ -176,7 +176,10 @@ class MobileMapLocaleState extends State<MobileMapLocal> {
           FilledButton(
               onPressed: () async {
                 final result = await FilePicker.pickFiles();
-                String? path = result?.files.single.xFile.path;
+                if (result == null || result.isEmpty) {
+                  return;
+                }
+                String? path = result.single.xFile.path;
 
                 if (path == null) {
                   return;

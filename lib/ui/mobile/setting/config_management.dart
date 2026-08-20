@@ -259,12 +259,12 @@ class _ConfigManagementState extends State<ConfigManagement> {
         allowMultiple: false,
       );
 
-      if (result == null || result.files.isEmpty) {
+      if (result == null || result.isEmpty) {
         // 用户取消
         return;
       }
 
-      final filePath = result.files.first.xFile.path;
+      final filePath = result.first.xFile.path;
       if (filePath == null) {
         return;
       }
