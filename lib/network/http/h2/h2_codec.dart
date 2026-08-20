@@ -26,6 +26,7 @@ import 'package:proxypin/network/http/http.dart';
 import 'package:proxypin/network/http/http_headers.dart';
 import 'package:proxypin/network/util/byte_buf.dart';
 import 'package:proxypin/network/util/logger.dart';
+import 'package:proxypin/network/util/attribute_keys.dart';
 import 'package:proxypin/network/http/sse.dart';
 import 'package:proxypin/network/http/websocket.dart';
 
