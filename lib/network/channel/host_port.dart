@@ -15,7 +15,7 @@
  */
 
 import 'package:proxypin/network/http/http.dart';
-import '../config/network_constants.dart';
+import '../../config/network_constants.dart';
 import 'package:proxypin/network/http/http_headers.dart';
 
 /// 获取主机和端口

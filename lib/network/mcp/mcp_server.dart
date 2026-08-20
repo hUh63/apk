@@ -1,5 +1,5 @@
 import 'dart:async';
-import '../config/network_constants.dart';
+import '../../config/network_constants.dart';
 import 'dart:convert';
 import 'dart:io' as io;
 import 'dart:math' as math;

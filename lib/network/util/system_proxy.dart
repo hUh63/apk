@@ -15,7 +15,7 @@
  */
 
 import 'dart:io';
-import '../config/network_constants.dart';
+import '../../config/network_constants.dart';
 
 import 'package:proxypin/network/channel/host_port.dart';
 import 'package:proxypin/network/util/logger.dart';

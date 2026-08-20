@@ -1,5 +1,5 @@
 import 'dart:convert';
-import '../config/network_constants.dart';
+import '../../config/network_constants.dart';
 
 import 'package:proxypin/network/bin/listener.dart';
 import 'package:proxypin/network/channel/channel.dart';

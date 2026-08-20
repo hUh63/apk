@@ -15,7 +15,7 @@
  */
 
 import 'dart:async';
-import '../config/network_constants.dart';
+import '../../config/network_constants.dart';
 import 'dart:io';
 
 import 'package:proxypin/network/bin/configuration.dart';

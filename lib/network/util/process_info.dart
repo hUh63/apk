@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 import 'dart:convert';
-import '../config/network_constants.dart';
+import '../../config/network_constants.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
