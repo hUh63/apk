@@ -490,7 +490,7 @@ class _RequestWidgetState extends State<RequestWidget> {
 
   void onRepeat(HttpRequest httpRequest) {
     var request = httpRequest.copy(uri: httpRequest.requestUrl);
-    var proxyInfo = widget.proxyServer.isRunning ? ProxyInfo.of("127.0.0.1", widget.proxyServer.port) : null;
+    var proxyInfo = widget.proxyServer.isRunning ? ProxyInfo.of("$localhostIP", widget.proxyServer.port) : null;
     HttpClients.proxyRequest(request, proxyInfo: proxyInfo);
     FlutterToastr.show(localizations.reSendRequest, context, rootNavigator: true);
   }

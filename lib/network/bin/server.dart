@@ -15,6 +15,7 @@
  */
 
 import 'dart:async';
+import '../config/network_constants.dart';
 import 'dart:io';
 
 import 'package:proxypin/network/bin/configuration.dart';
@@ -153,7 +154,7 @@ class ProxyServer {
   ///检查是否监听端口 没有监听则启动
   Future<void> retryBind() async {
     try {
-      await Socket.connect('127.0.0.1', port, timeout: const Duration(milliseconds: 350));
+      await Socket.connect(localhostIP, port, timeout: const Duration(milliseconds: 350));
     } catch (e) {
       logger.d('端口未被占用，尝试重新绑定 $port');
       await restart();

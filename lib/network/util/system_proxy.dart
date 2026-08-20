@@ -15,6 +15,7 @@
  */
 
 import 'dart:io';
+import '../config/network_constants.dart';
 
 import 'package:proxypin/network/channel/host_port.dart';
 import 'package:proxypin/network/util/logger.dart';
@@ -53,7 +54,7 @@ class SystemProxy {
     }
 
     if (Platform.isAndroid) {
-      return 'localhost;127.0.0.1;10.0.0.0/8;172.16.0.0/12;192.168.0.0/16';
+      return proxyBypassList;
     }
     if (Platform.isIOS) {
       return '';
@@ -105,7 +106,7 @@ class SystemProxy {
   ///设置系统代理
   Future<void> _setSystemProxy(int port, bool sslSetting, String proxyPassDomains) async {
     ProxyManager manager = ProxyManager();
-    await manager.setAsSystemProxy(sslSetting ? ProxyTypes.https : ProxyTypes.http, "127.0.0.1", port);
+    await manager.setAsSystemProxy(sslSetting ? ProxyTypes.https : ProxyTypes.http, "$localhostIP", port);
     setProxyPassDomains(proxyPassDomains);
   }
 
@@ -375,8 +376,8 @@ class LinuxSystemProxy extends SystemProxy {
   Future<void> _setSystemProxy(int port, bool sslSetting, String proxyPassDomains) async {
     ProxyManager manager = ProxyManager();
 
-    await manager.setAsSystemProxy(ProxyTypes.http, "127.0.0.1", port);
-    if (sslSetting) await manager.setAsSystemProxy(ProxyTypes.https, "127.0.0.1", port);
+    await manager.setAsSystemProxy(ProxyTypes.http, "$localhostIP", port);
+    if (sslSetting) await manager.setAsSystemProxy(ProxyTypes.https, "$localhostIP", port);
 
     SystemProxy.setProxyPassDomains(proxyPassDomains);
   }
@@ -409,5 +410,5 @@ void main() async {
   // single instance
   ProxyManager manager = ProxyManager();
 // set a http proxy
-  await manager.setAsSystemProxy(ProxyTypes.http, "127.0.0.1", 1087);
+  await manager.setAsSystemProxy(ProxyTypes.http, "$localhostIP", 1087);
 }

@@ -350,7 +350,7 @@ class _HistoryListState extends State<_HistoryListWidget> {
 
     for (var request in requests) {
       var httpRequest = request.copy(uri: request.requestUrl);
-      var proxyInfo = proxyServer.isRunning ? ProxyInfo.of("127.0.0.1", proxyServer.port) : null;
+      var proxyInfo = proxyServer.isRunning ? ProxyInfo.of("$localhostIP", proxyServer.port) : null;
       try {
         await HttpClients.proxyRequest(httpRequest, proxyInfo: proxyInfo, timeout: const Duration(seconds: 3));
         if (mounted) {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../config/network_constants.dart';
 import 'dart:convert';
 import 'dart:io' as io;
 import 'dart:math' as math;
@@ -110,10 +111,10 @@ class McpServer {
 
       _port = config.mcpPort;
 
-      // 绑定 0.0.0.0 允许局域网访问
+      // 绑定 $anyIP 允许局域网访问
       _server = await io.HttpServer.bind(io.InternetAddress.anyIPv4, _port!);
       _lastError = null; // 清除之前的错误
-      logger.i('MCP Server listening on http://0.0.0.0:$_port');
+      logger.i('MCP Server listening on http://$anyIP:$_port');
 
       _server!.listen((request) {
         // CORS 处理

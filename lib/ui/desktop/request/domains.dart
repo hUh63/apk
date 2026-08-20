@@ -627,7 +627,7 @@ class _DomainRequestsState extends State<DomainRequests> {
     var list = widget.body.toList().reversed;
     for (var requestWidget in list) {
       var request = requestWidget.request.copy(uri: requestWidget.request.requestUrl);
-      var proxyInfo = widget.proxyServer.isRunning ? ProxyInfo.of("127.0.0.1", widget.proxyServer.port) : null;
+      var proxyInfo = widget.proxyServer.isRunning ? ProxyInfo.of("$localhostIP", widget.proxyServer.port) : null;
       try {
         await HttpClients.proxyRequest(request, proxyInfo: proxyInfo, timeout: const Duration(seconds: 3));
         if (mounted) FlutterToastr.show(localizations.reSendRequest, rootNavigator: true, context);

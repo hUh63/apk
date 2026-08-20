@@ -235,7 +235,7 @@ class _FavoriteItemState extends State<_FavoriteItem> {
     }
 
     var proxyInfo =
-        widget.panel.proxyServer!.isRunning ? ProxyInfo.of("127.0.0.1", widget.panel.proxyServer!.port) : null;
+        widget.panel.proxyServer!.isRunning ? ProxyInfo.of("$localhostIP", widget.panel.proxyServer!.port) : null;
     HttpClients.proxyRequest(httpRequest, proxyInfo: proxyInfo);
 
     if (mounted) {

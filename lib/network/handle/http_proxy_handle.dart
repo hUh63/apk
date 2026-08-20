@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../config/network_constants.dart';
 
 import 'package:proxypin/network/bin/listener.dart';
 import 'package:proxypin/network/channel/channel.dart';
@@ -29,12 +30,12 @@ class HttpProxyChannelHandler extends ChannelHandler<HttpRequest> {
   @override
   Future<void> channelRead(ChannelContext channelContext, Channel channel, HttpRequest msg) async {
     //下载证书
-    if (msg.uri == 'http://proxy.pin/ssl' || msg.requestUrl == 'http://127.0.0.1:${channel.socket.port}/ssl') {
+    if (msg.uri == 'http://proxy.pin/ssl' || msg.requestUrl == 'http://$localhostIP:${channel.socket.port}/ssl') {
       ProxyHelper.crtDownload(channelContext, channel, msg);
       return;
     }
     //请求本服务
-    if (((await localIps()).contains(msg.hostAndPort?.host) || '127.0.0.1' == msg.hostAndPort?.host) &&
+    if (((await localIps()).contains(msg.hostAndPort?.host) || localhostIP == msg.hostAndPort?.host) &&
         msg.hostAndPort?.port == channel.socket.port) {
       ProxyHelper.localRequest(channelContext, msg, channel, listener: listener);
       return;

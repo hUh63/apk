@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 import 'dart:convert';
+import '../config/network_constants.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -58,7 +59,7 @@ class ProcessInfoUtils {
         if (app != null) {
           return app;
         }
-        if (socketAddress.host == '127.0.0.1') {
+        if (socketAddress.host == localhostIP) {
           return ProcessInfo('com.network.proxy', "ProxyPin", '', os: Platform.operatingSystem);
         }
         return null;

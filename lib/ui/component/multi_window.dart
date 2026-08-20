@@ -19,6 +19,7 @@ import 'dart:io';
 
 import 'package:proxypin/ui/component/multi_window_compat.dart';
 import 'package:flutter/material.dart';
+import '../../config/network_constants.dart';
 import 'package:proxypin/l10n/app_localizations.dart';
 import 'package:proxypin/network/bin/server.dart';
 import 'package:proxypin/network/components/manager/request_crypto_manager.dart';

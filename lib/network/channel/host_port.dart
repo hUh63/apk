@@ -15,6 +15,7 @@
  */
 
 import 'package:proxypin/network/http/http.dart';
+import '../config/network_constants.dart';
 import 'package:proxypin/network/http/http_headers.dart';
 
 /// 获取主机和端口
@@ -153,7 +154,7 @@ class ProxyInfo {
 
   //是否展示抓包
   bool capturePacket = true;
-  String host = '127.0.0.1';
+  String host = localhostIP;
   int? port;
 
   //authorization

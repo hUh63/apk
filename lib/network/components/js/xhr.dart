@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../config/network_constants.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -265,7 +266,7 @@ extension JavascriptRuntimeXhrExtension on JavascriptRuntime {
       proxy = "${proxyResult['host']}:${proxyResult['port']}";
     } else {
       if (ProxyServer.current?.isRunning == true) {
-        proxy = "127.0.0.1:${ProxyServer.current!.port}";
+        proxy = "$localhostIP:${ProxyServer.current!.port}";
       } else {
         return http.Client();
       }
