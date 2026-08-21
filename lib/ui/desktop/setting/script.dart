@@ -1010,12 +1010,20 @@ class _ScriptListState extends State<ScriptList> {
 
 /// 打开脚本控制台窗口
 void openScriptConsoleWindow() async {
-  final window = await DesktopMultiWindow.createWindow(jsonEncode({'name': 'ScriptConsoleWidget'}));
-  window..setTitle('脚本控制台').setSize(const Size(800, 600)).center().show();
+  await DesktopMultiWindow.createWindow(jsonEncode({
+    'name': 'ScriptConsoleWidget',
+    'title': '脚本控制台',
+    'width': 800,
+    'height': 600,
+  }));
 }
 
 /// 打开工作流管理器窗口
 void openWorkflowManagerWindow() async {
-  final window = await DesktopMultiWindow.createWindow(jsonEncode({'name': 'ScriptWorkflowManagerPage'}));
-  window..setTitle('脚本工作流管理').setSize(const Size(1200, 800)).center().show();
+  await DesktopMultiWindow.createWindow(jsonEncode({
+    'name': 'ScriptWorkflowManagerPage',
+    'title': '脚本工作流管理',
+    'width': 1200,
+    'height': 800,
+  }));
 }
