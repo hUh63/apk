@@ -4,7 +4,7 @@ import 'package:flutter_toastr/flutter_toastr.dart';
 import 'package:proxypin/l10n/app_localizations.dart';
 import 'package:proxypin/network/mcp/mcp_scheduler.dart';
 import 'package:proxypin/network/mcp/mcp_event_automation.dart';
-import 'package:proxypin/network/mcp/mcp_rule_engine.dart';
+import 'package:proxypin/network/mcp/mcp_rule_engine.dart' hide Action, Condition, Rule;
 import 'package:proxypin/network/mcp/mcp_server.dart';
 import 'package:proxypin/network/util/logger.dart';
 

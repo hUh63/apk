@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
 
-import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart' show FilePicker, FilePickerResult, FileType;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_toastr/flutter_toastr.dart';
@@ -233,7 +233,7 @@ class _DesktopConfigManagementState extends State<DesktopConfigManagement> {
       }
 
       final jsonStr = utf8.decode(file.bytes!);
-      final newConfig = await Configuration.importConfig(jsonStr);
+      final newConfig = await ConfigImportExport.importConfig(jsonStr);
 
       // 应用新配置
       configuration.port = newConfig.port;
