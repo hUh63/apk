@@ -656,6 +656,9 @@ class McpServer {
             'capabilities': {
               'tools': {'listChanged': false},
               'resources': {},
+              'prompts': {'listChanged': false},
+              'roots': {'listChanged': false},
+              'completions': {},
             },
             'serverInfo': {'name': 'ProxyPin MCP', 'version': '1.3.1'},
           });
@@ -754,6 +757,44 @@ class McpServer {
         case 'ping':
           return response({});
 
+        // MCP 2026-07-28: Prompts 支持
+        case 'prompts/list':
+          return response({
+            'prompts': _getPromptsList(),
+          });
+
+        case 'prompts/get':
+          final promptParams = request['params'] as Map<String, dynamic>?;
+          if (promptParams == null) {
+            return error(-32602, 'Missing params');
+          }
+          final promptName = promptParams['name'] as String?;
+          if (promptName == null) {
+            return error(-32602, 'Missing prompt name');
+          }
+          final prompt = _getPrompt(promptName);
+          if (prompt == null) {
+            return error(-32602, 'Prompt not found: $promptName');
+          }
+          return response(prompt);
+
+        // MCP 2026-07-28: Roots 支持
+        case 'roots/list':
+          return response({
+            'roots': _getRootsList(),
+          });
+
+        // MCP 2026-07-28: Completions 支持
+        case 'completion/complete':
+          final completionParams = request['params'] as Map<String, dynamic>?;
+          if (completionParams == null) {
+            return error(-32602, 'Missing params');
+          }
+          final ref = completionParams['ref'] as Map<String, dynamic>?;
+          final argument = completionParams['argument'] as Map<String, dynamic>?;
+          final result = await _handleCompletion(ref, argument);
+          return response(result);
+
         default:
           return error(-32601, 'Method not found: $method');
       }
@@ -765,6 +806,202 @@ class McpServer {
 
   /// 获取全部可用工具列表（供 UI 页面展示，不经过启用过滤）
   List<Map<String, dynamic>> getTools() => _getToolsList();
+
+  // ==================== MCP 2026-07-28: Prompts 支持 ====================
+
+  /// 获取可用提示模板列表
+  List<Map<String, dynamic>> _getPromptsList() {
+    return [
+      {
+        'name': 'api_security_check',
+        'description': 'Analyze API security (auth, sensitive data, encryption)',
+        'arguments': [
+          {
+            'name': 'request_id',
+            'description': 'Request ID to analyze',
+            'required': true,
+          },
+        ],
+      },
+      {
+        'name': 'performance_analysis',
+        'description': 'Analyze request performance and suggest optimizations',
+        'arguments': [
+          {
+            'name': 'domain',
+            'description': 'Domain to analyze',
+            'required': false,
+          },
+          {
+            'name': 'threshold_ms',
+            'description': 'Performance threshold in milliseconds',
+            'required': false,
+          },
+        ],
+      },
+      {
+        'name': 'traffic_summary',
+        'description': 'Generate traffic summary for a time period',
+        'arguments': [
+          {
+            'name': 'minutes',
+            'description': 'Time range in minutes',
+            'required': false,
+          },
+        ],
+      },
+    ];
+  }
+
+  /// 获取具体提示模板
+  Map<String, dynamic>? _getPrompt(String name) {
+    final prompts = _getPromptsList();
+    final prompt = prompts.firstWhere((p) => p['name'] == name,
+        orElse: () => {'name': ''});
+    if (prompt['name']!.isEmpty) return null;
+
+    // 返回完整的 prompt 消息结构
+    return {
+      'name': name,
+      'description': prompt['description'],
+      'messages': [
+        {
+          'role': 'user',
+          'content': {
+            'type': 'text',
+            'text': 'Please help me ${prompt['description']}. '
+                'I will provide the necessary data.',
+          },
+        },
+      ],
+      'arguments': prompt['arguments'],
+    };
+  }
+
+  // ==================== MCP 2026-07-28: Roots 支持 ====================
+
+  /// 获取项目根目录列表
+  List<Map<String, dynamic>> _getRootsList() {
+    return [
+      {
+        'uri': 'proxypin://workspace',
+        'name': 'ProxyPin Workspace',
+      },
+      {
+        'uri': 'proxypin://captures',
+        'name': 'Capture Files',
+      },
+      {
+        'uri': 'proxypin://scripts',
+        'name': 'Script Files',
+      },
+    ];
+  }
+
+  // ==================== MCP 2026-07-28: Completions 支持 ====================
+
+  /// 处理自动完成请求
+  Future<Map<String, dynamic>> _handleCompletion(
+    Map<String, dynamic>? ref,
+    Map<String, dynamic>? argument,
+  ) async {
+    final completions = <Map<String, dynamic>>[];
+
+    // 根据 ref 类型提供不同的完成建议
+    if (ref != null) {
+      final refType = ref['type'] as String?;
+      final refName = ref['name'] as String?;
+
+      if (refType == 'ref/tool' && refName == 'tools/call') {
+        // 工具调用时的参数完成
+        final toolName = argument?['name'] as String?;
+        if (toolName != null) {
+          final tools = _getToolsList();
+          final tool = tools.firstWhere((t) => t['name'] == toolName,
+              orElse: () => {'name': ''});
+          if (tool['name']!.isNotEmpty) {
+            final schema = tool['inputSchema'] as Map<String, dynamic>?;
+            final properties = schema?['properties'] as Map<String, dynamic>?;
+            if (properties != null) {
+              for (var prop in properties.keys) {
+                completions.add({
+                  'value': prop,
+                  'description': 'Parameter: $prop',
+                });
+              }
+            }
+          }
+        }
+      } else if (refType == 'ref/resource' && refName == 'resources/read') {
+        // 资源读取时的 URI 完成
+        final resources = [
+          'proxypin://requests/latest',
+          'proxypin://config/current',
+          'proxypin://breakpoints/rules',
+          'proxypin://network/conditions',
+          'proxypin://environments/list',
+        ];
+        for (var uri in resources) {
+          completions.add({'value': uri, 'description': 'Resource URI'});
+        }
+      }
+    }
+
+    // 根据 argument 名称提供完成建议
+    if (argument != null) {
+      final argName = argument['name'] as String?;
+      final argValue = argument['value'] as String?;
+
+      switch (argName) {
+        case 'domain':
+          // 从最近请求中提取域名建议
+          final recentDomains = McpBridge().getRecentRequests(limit: 50)
+              .map((r) {
+                try {
+                  return Uri.parse(r.requestUrl).host;
+                } catch (_) {
+                  return null;
+                }
+              })
+              .where((h) => h != null && h!.isNotEmpty)
+              .toSet()
+              .take(10);
+          for (var domain in recentDomains) {
+            completions.add({'value': domain!, 'description': 'Recent domain'});
+          }
+          break;
+
+        case 'method':
+          final methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
+          for (var method in methods) {
+            if (argValue == null || method.startsWith(argValue)) {
+              completions.add({'value': method, 'description': 'HTTP method'});
+            }
+          }
+          break;
+
+        case 'url_pattern':
+          // 从最近请求中提取 URL 模式建议
+          final recentUrls = McpBridge().getRecentRequests(limit: 20)
+              .map((r) => r.requestUrl)
+              .toSet()
+              .take(10);
+          for (var url in recentUrls) {
+            completions.add({'value': url, 'description': 'Recent URL'});
+          }
+          break;
+      }
+    }
+
+    return {
+      'completion': {
+        'values': completions.map((c) => c['value'] as String).toList(),
+        'total': completions.length,
+        'hasMore': completions.length > 10,
+      },
+      'details': completions,
+    };
+  }
 
   List<Map<String, dynamic>> _getToolsList() {
     return [
