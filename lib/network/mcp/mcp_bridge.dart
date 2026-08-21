@@ -10,6 +10,7 @@ import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/utils/listenable_list.dart';
 import 'package:proxypin/network/util/cache.dart';
+import 'package:proxypin/network/rules/websocket_rule_manager.dart';
 
 /// MCP 数据桥接，负责从 ProxyPin 收集流量并提供给 MCP Server
 class McpBridge implements EventListener {
@@ -288,29 +289,19 @@ class McpBridge implements EventListener {
 
   @override
   void onMessage(Channel channel, HttpMessage message, WebSocketFrame frame) {
-    // 如果未启用拦截，直接放行
-    if (!_webSocketInterceptEnabled) return;
-    
-    // 自动暂停所有 WebSocket 消息
+    // 使用规则管理器检查是否应该拦截
     final url = message.requestUrl?.toString() ?? 'unknown';
     final isOutgoing = message is HttpRequest;
+    final decision = WebSocketRuleManager().shouldIntercept(url, isOutgoing);
+    
+    if (!decision.shouldIntercept) return;
+    
+    // 匹配规则，暂停消息
     pauseWebSocketMessage(frame, url, isOutgoing);
   }
 
   // ==================== WebSocket Message Interception (v1.6.0+) ====================
-  // 全局 WebSocket 拦截开关
-  bool _webSocketInterceptEnabled = false;
-  
-  /// 是否启用 WebSocket 拦截
-  bool get webSocketInterceptEnabled => _webSocketInterceptEnabled;
-  set webSocketInterceptEnabled(bool value) {
-    _webSocketInterceptEnabled = value;
-  }
-  
-  /// 启用/禁用 WebSocket 拦截
-  void setWebSocketInterceptEnabled(bool enabled) {
-    _webSocketInterceptEnabled = enabled;
-  }
+  // 使用 WebSocketRuleManager 管理规则和全局开关
   
   // 存储暂停的 WebSocket 帧：frameId -> PausedWebSocketFrame
   final Map<String, PausedWebSocketFrame> _pausedWebSocketDetails = {};
