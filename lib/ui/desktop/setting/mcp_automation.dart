@@ -236,19 +236,54 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
           ...rules.map((rule) {
             return Card(
               margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
+              child: ExpansionTile(
                 leading: CircleAvatar(
-                  backgroundColor: rule.enabled ? Colors.green : Colors.grey,
+                  backgroundColor: _getRulePriorityColor(rule.priority),
                   child: Icon(Icons.rule, color: Colors.white, size: 20),
                 ),
                 title: Text(rule.name),
-                subtitle: Text(rule.description ?? ''),
+                subtitle: Text(
+                  '${rule.conditions.length} 个条件 • ${rule.actions.length} 个操作 • ${rule.enabled ? '已启用' : '已禁用'}',
+                ),
                 trailing: Switch(
                   value: rule.enabled,
                   onChanged: (value) {
-                    // 规则启用/禁用：通过 Checkbox 控制
+                    if (value) {
+                      _ruleEngine.enableRule(rule.id);
+                    } else {
+                      _ruleEngine.disableRule(rule.id);
+                    }
+                    setState(() {});
+                    FlutterToastr.show(
+                      value ? '规则已启用' : '规则已禁用',
+                      context,
+                      duration: 2,
+                      backgroundColor: Colors.green,
+                    );
                   },
                 ),
+                children: [
+                  const Divider(),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('条件:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ...rule.conditions.map((c) => Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text('• ${_formatCondition(c)}'),
+                        )),
+                        const SizedBox(height: 12),
+                        const Text('操作:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ...rule.actions.map((a) => Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text('• ${_formatAction(a)}'),
+                        )),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             );
           }),
@@ -538,6 +573,80 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
         return Icons.terminal;
       default:
         return Icons.description;
+    }
+  }
+
+  Color _getRulePriorityColor(RulePriority priority) {
+    switch (priority) {
+      case RulePriority.high:
+      case RulePriority.critical:
+        return Colors.red;
+      case RulePriority.normal:
+        return Colors.orange;
+      case RulePriority.low:
+        return Colors.green;
+    }
+  }
+
+  String _formatCondition(Condition condition) {
+    return '${condition.field} ${_formatOperator(condition.operator)} ${condition.value}';
+  }
+
+  String _formatOperator(Operator operator) {
+    switch (operator) {
+      case Operator.equals:
+        return '=';
+      case Operator.notEquals:
+        return '≠';
+      case Operator.greaterThan:
+        return '>';
+      case Operator.lessThan:
+        return '<';
+      case Operator.greaterThanOrEqual:
+        return '≥';
+      case Operator.lessThanOrEqual:
+        return '≤';
+      case Operator.contains:
+        return '包含';
+      case Operator.startsWith:
+        return '始于';
+      case Operator.endsWith:
+        return '终于';
+      case Operator.matches:
+        return '匹配';
+      case Operator.inList:
+        return '在...中';
+      case Operator.notInList:
+        return '不在...中';
+      case Operator.exists:
+        return '存在';
+      case Operator.notExists:
+        return '不存在';
+    }
+  }
+
+  String _formatAction(Action action) {
+    return '${_formatActionType(action.type)}: ${action.target ?? action.parameters}';
+  }
+
+  String _formatActionType(ActionType type) {
+    switch (type) {
+      case ActionType.log:
+        return '记录';
+      case ActionType.notify:
+        return '通知';
+      case ActionType.stopCapture:
+        return '停止抓包';
+      case ActionType.startCapture:
+        return '开始抓包';
+      case ActionType.exportData:
+        return '导出数据';
+      case ActionType.executeScript:
+        return '执行脚本';
+      case ActionType.sendWebhook:
+        return '发送 Webhook';
+      case ActionType.custom:
+        return '自定义';
     }
   }
 }
