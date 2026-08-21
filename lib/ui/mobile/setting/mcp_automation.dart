@@ -594,7 +594,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
       case 'shell':
         return Icons.terminal;
       default:
-        return Icons.script;
+        return Icons.description;
     }
   }
 }
