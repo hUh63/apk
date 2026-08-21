@@ -1,4 +1,5 @@
 import 'package:logger/logger.dart';
+export 'package:logger/logger.dart' show Logger, PrettyPrinter, Level;
 
 final logger = Logger(
     printer: PrettyPrinter(
