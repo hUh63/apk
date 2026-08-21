@@ -314,7 +314,7 @@ class McpBridge implements EventListener {
     );
     
     _pausedWebSocketDetails[frameId] = paused;
-    _pausedWebSockets.put(frameId, paused);
+    _pausedWebSockets.set(frameId, paused);
     
     logger.i('WebSocket message paused: $frameId (${isOutgoing ? "outgoing" : "incoming"})');
     
