@@ -159,16 +159,211 @@ class _MCPTaskManagerPageState extends State<MCPTaskManagerPage> {
   }
 
   Future<void> _showTaskDialog([MCPAutomationTask? task]) async {
-    // TODO: 实现添加/编辑任务对话框
+    final isEdit = task != null;
+    final nameController = TextEditingController(text: task?.name ?? '');
+    final descController = TextEditingController(text: task?.description ?? '');
+    AutomationTriggerType selectedTrigger = task?.triggerType ?? AutomationTriggerType.onRequest;
+    List<AutomationActionType> selectedActions = task?.actions ?? [];
+    String urlPattern = task?.conditions['urlPattern'] as String? ?? '';
+    
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(isEdit ? '编辑任务' : '添加任务'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: '任务名称', prefixIcon: Icon(Icons.label)),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: descController,
+                  decoration: const InputDecoration(labelText: '描述', prefixIcon: Icon(Icons.description)),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 16),
+                const Text('触发器类型', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<AutomationTriggerType>(
+                  value: selectedTrigger,
+                  decoration: const InputDecoration(border: OutlineInputBorder()),
+                  items: AutomationTriggerType.values.map((t) => DropdownMenuItem(value: t, child: Text(t.label))).toList(),
+                  onChanged: (v) => setDialogState(() => selectedTrigger = v!),
+                ),
+                if (selectedTrigger == AutomationTriggerType.onRequest || selectedTrigger == AutomationTriggerType.onResponse) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    decoration: const InputDecoration(labelText: 'URL 匹配模式', prefixIcon: Icon(Icons.link), hintText: '例如：api.example.com'),
+                    onChanged: (v) => urlPattern = v,
+                  ),
+                ],
+                const SizedBox(height: 16),
+                const Text('动作类型', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                ...AutomationActionType.values.map((action) => CheckboxListTile(
+                  title: Text(action.label),
+                  value: selectedActions.contains(action),
+                  onChanged: (checked) => setDialogState(() {
+                    if (checked == true) {
+                      selectedActions = [...selectedActions, action];
+                    } else {
+                      selectedActions = selectedActions.where((a) => a != action).toList();
+                    }
+                  }),
+                )),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+            FilledButton(
+              onPressed: () async {
+                if (nameController.text.isEmpty) return;
+                if (isEdit) {
+                  final updated = task!.copyWith(
+                    name: nameController.text,
+                    description: descController.text,
+                    triggerType: selectedTrigger,
+                    actions: selectedActions,
+                    conditions: urlPattern.isNotEmpty ? {'urlPattern': urlPattern} : {},
+                  );
+                  await _manager.updateTask(task.id, updated);
+                } else {
+                  await _manager.addTask(
+                    name: nameController.text,
+                    description: descController.text,
+                    triggerType: selectedTrigger,
+                    actions: selectedActions,
+                    conditions: urlPattern.isNotEmpty ? {'urlPattern': urlPattern} : {},
+                  );
+                }
+                Navigator.pop(context);
+                await _loadTasks();
+              },
+              child: Text(isEdit ? '保存' : '添加'),
+            ),
+          ],
+        ),
+      ),
+    );
+    
+    nameController.dispose();
+    descController.dispose();
   }
 
   void _showTaskDetails(MCPAutomationTask task) {
-    // TODO: 实现任务详情对话框
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(task.name),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDetailRow('描述', task.description.isEmpty ? '无' : task.description),
+              _buildDetailRow('触发器', task.triggerType.label),
+              _buildDetailRow('动作', task.actions.map((a) => a.label).join(', ')),
+              _buildDetailRow('状态', task.enabled ? '✅ 已启用' : '❌ 已禁用'),
+              _buildDetailRow('执行次数', '${task.executionCount} 次'),
+              if (task.lastExecutedAt != null) _buildDetailRow('最后执行', _formatDate(task.lastExecutedAt!)),
+              _buildDetailRow('创建时间', _formatDate(task.createdAt)),
+              _buildDetailRow('更新时间', _formatDate(task.updatedAt)),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭')),
+        ],
+      ),
+    );
   }
 
   void _showTaskOptions(MCPAutomationTask task) {
-    // TODO: 实现任务操作菜单
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit),
+              title: const Text('编辑任务'),
+              onTap: () {
+                Navigator.pop(context);
+                _showTaskDialog(task);
+              },
+            ),
+            ListTile(
+              leading: Icon(task.enabled ? Icons.pause : Icons.play_arrow),
+              title: Text(task.enabled ? '禁用任务' : '启用任务'),
+              onTap: () async {
+                await _toggleTask(task);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.info),
+              title: const Text('查看详情'),
+              onTap: () {
+                Navigator.pop(context);
+                _showTaskDetails(task);
+              },
+            ),
+            if (task.triggerType == AutomationTriggerType.manual)
+              ListTile(
+                leading: const Icon(Icons.play_arrow),
+                title: const Text('手动执行'),
+                onTap: () async {
+                  await _manager.executeTask(task.id);
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('任务已触发')));
+                    await _loadTasks();
+                  }
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('删除任务', style: TextStyle(color: Colors.red)),
+              onTap: () async {
+                Navigator.pop(context);
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (c) => AlertDialog(
+                    title: const Text('确认删除'),
+                    content: Text('确定要删除任务 "${task.name}" 吗？'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+                      FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('删除')),
+                    ],
+                  ),
+                );
+                if (confirmed == true) {
+                  await _manager.deleteTask(task.id);
+                  await _loadTasks();
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
+
+  String _buildDetailRow(String label, String value) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SizedBox(width: 80, child: Text('$label:', style: const TextStyle(fontWeight: FontWeight.bold))),
+      Expanded(child: Text(value)),
+    ]),
+  );
+
+  String _formatDate(DateTime dt) => '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
 
   Future<void> _toggleTask(MCPAutomationTask task) async {
     await _manager.toggleTask(task.id);

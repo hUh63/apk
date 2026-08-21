@@ -15,6 +15,7 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:proxypin/l10n/app_localizations.dart';
 import 'package:proxypin/network/scripts/script_templates.dart';
 import 'package:proxypin/ui/component/app_dialog.dart';
@@ -301,8 +302,8 @@ class _ScriptTemplateManagerPageState extends State<ScriptTemplateManagerPage> w
                           const Spacer(),
                           IconButton(
                             icon: const Icon(Icons.copy, size: 18),
-                            onPressed: () {
-                              // TODO: 复制代码到剪贴板
+                            onPressed: () async {
+                              await Clipboard.setData(ClipboardData(text: template.code));
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('代码已复制到剪贴板')),
                               );
@@ -346,7 +347,15 @@ class _ScriptTemplateManagerPageState extends State<ScriptTemplateManagerPage> w
                     child: OutlinedButton.icon(
                       onPressed: () {
                         Navigator.pop(context);
-                        // TODO: 打开编辑器并加载模板
+                        // 打开代码编辑器并加载模板
+                        showDialog(
+                          context: context,
+                          builder: (context) => CodeEditorDialog(
+                            title: '使用模板 - ${template.name}',
+                            initialCode: template.code,
+                            language: template.language,
+                          ),
+                        );
                       },
                       icon: const Icon(Icons.edit),
                       label: const Text('使用此模板'),
@@ -355,8 +364,8 @@ class _ScriptTemplateManagerPageState extends State<ScriptTemplateManagerPage> w
                   const SizedBox(width: 12),
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: () {
-                        // TODO: 复制代码
+                      onPressed: () async {
+                        await Clipboard.setData(ClipboardData(text: template.code));
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('代码已复制')),
                         );

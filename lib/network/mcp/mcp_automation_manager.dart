@@ -332,6 +332,16 @@ class MCPAutomationManager {
     return true;
   }
 
+  /// 手动执行任务
+  Future<bool> executeTask(String taskId) async {
+    final index = _tasks.indexWhere((t) => t.id == taskId);
+    if (index == -1) return false;
+    
+    final task = _tasks[index];
+    await _executeTask(task, {'manual': true});
+    return true;
+  }
+
   /// 检查请求匹配并执行自动化任务
   Future<List<String>> onRequest(Map<String, dynamic> request) async {
     final executedActions = <String>[];

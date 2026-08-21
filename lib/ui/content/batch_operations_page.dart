@@ -263,24 +263,126 @@ class _BatchOperationsPageState extends State<BatchOperationsPage> {
   }
 
   Future<void> _exportHar() async {
-    // TODO: 实现文件选择对话框
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('HAR 导出功能开发中...')),
-    );
+    if (_selectedIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先选择要导出的请求')));
+      return;
+    }
+    
+    final selectedRequests = widget.requests.where((r) => _selectedIds.contains(r.id)).toList();
+    final result = await _batchManager.batchExportHar(selectedRequests);
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.success ? 'HAR 导出成功：${result.message}' : '导出失败：${result.message}'),
+          backgroundColor: result.success ? Colors.green : Colors.orange,
+        ),
+      );
+    }
   }
 
   Future<void> _exportJson() async {
-    // TODO: 实现文件选择对话框
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('JSON 导出功能开发中...')),
-    );
+    if (_selectedIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先选择要导出的请求')));
+      return;
+    }
+    
+    final selectedRequests = widget.requests.where((r) => _selectedIds.contains(r.id)).toList();
+    final result = await _batchManager.batchExportJson(selectedRequests);
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.success ? 'JSON 导出成功：${result.message}' : '导出失败：${result.message}'),
+          backgroundColor: result.success ? Colors.green : Colors.orange,
+        ),
+      );
+    }
   }
 
   Future<void> _modifyHeaders() async {
-    // TODO: 实现修改请求头对话框
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('修改请求头功能开发中...')),
+    if (_selectedIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先选择要修改的请求')));
+      return;
+    }
+    
+    final headerNameController = TextEditingController();
+    final headerValueController = TextEditingController();
+    bool isAdd = true;
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('批量修改请求头'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RadioListTile<bool>(
+                title: const Text('添加/更新请求头'),
+                value: true,
+                groupValue: isAdd,
+                onChanged: (v) => isAdd = v!,
+              ),
+              RadioListTile<bool>(
+                title: const Text('删除请求头'),
+                value: false,
+                groupValue: isAdd,
+                onChanged: (v) => isAdd = v!,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: headerNameController,
+                decoration: const InputDecoration(labelText: 'Header 名称', prefixIcon: Icon(Icons.label), hintText: '例如：X-Custom-Header'),
+              ),
+              if (isAdd) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: headerValueController,
+                  decoration: const InputDecoration(labelText: 'Header 值', prefixIcon: Icon(Icons.value), hintText: '例如：custom-value'),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+          FilledButton(
+            onPressed: () {
+              if (headerNameController.text.isEmpty) return;
+              Navigator.pop(context, true);
+            },
+            child: const Text('确认'),
+          ),
+        ],
+      ),
     );
+    
+    if (confirmed != true) return;
+    
+    final selectedRequests = widget.requests.where((r) => _selectedIds.contains(r.id)).toList();
+    final headerName = headerNameController.text;
+    
+    BatchOperationResult result;
+    if (isAdd) {
+      result = await _batchManager.batchModifyHeaders(selectedRequests, headers: {headerName: headerValueController.text});
+    } else {
+      // 删除头部：传入空值标记删除
+      result = await _batchManager.batchModifyHeaders(selectedRequests, headers: {headerName: ''}, overwrite: true);
+    }
+    
+    headerNameController.dispose();
+    headerValueController.dispose();
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.success ? '修改完成：成功 ${result.success}/${result.total}' : '操作失败：${result.errors.join(', ')}'),
+          backgroundColor: result.failed == 0 ? Colors.green : Colors.orange,
+        ),
+      );
+      setState(() => _selectedIds.clear());
+    }
   }
 
   Future<void> _batchReplay() async {
