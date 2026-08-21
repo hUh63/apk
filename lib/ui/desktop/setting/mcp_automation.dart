@@ -16,7 +16,7 @@
 import 'package:flutter/material.dart';
 import 'package:proxypin/network/mcp/mcp_scheduler.dart';
 import 'package:proxypin/network/mcp/mcp_event_automation.dart';
-import 'package:proxypin/network/mcp/mcp_rule_engine.dart';
+import 'package:proxypin/network/mcp/mcp_rule_engine.dart' as mcp;
 import 'package:flutter_toastr/flutter_toastr.dart';
 
 /// 桌面端 MCP 自动化配置页面
@@ -588,7 +588,7 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
     }
   }
 
-  String _formatCondition(Condition condition) {
+  String _formatCondition(mcp.Condition condition) {
     return '${condition.field} ${_formatOperator(condition.operator)} ${condition.value}';
   }
 
@@ -625,7 +625,7 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
     }
   }
 
-  String _formatAction(Action action) {
+  String _formatAction(mcp.Action action) {
     return '${_formatActionType(action.type)}: ${action.target ?? action.parameters}';
   }
 

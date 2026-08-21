@@ -216,7 +216,7 @@ class _DesktopConfigManagementState extends State<DesktopConfigManagement> {
   /// 导入配置
   Future<void> _importConfig(BuildContext context) async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      FilePickerResult? result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json'],
         withData: true,
