@@ -27,11 +27,11 @@ class RequestBreakpointInterceptor extends Interceptor {
 
   RequestBreakpointInterceptor._() {
     _pausedRequests = ExpiringCache(
-      Duration(minutes: 10),
+      duration: Duration(minutes: 10),
       onExpire: (id, _) => _pausedRequestDetails.remove(id),
     );
     _pausedResponses = ExpiringCache(
-      Duration(minutes: 10),
+      duration: Duration(minutes: 10),
       onExpire: (id, _) => _pausedResponseDetails.remove(id),
     );
   }

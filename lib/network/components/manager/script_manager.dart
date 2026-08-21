@@ -62,7 +62,7 @@ async function onResponse(context, request, response) {
   bool enabled = true;
   List<ScriptItem> list = [];
 
-  final ExpiringCache<ScriptItem, String> _scriptMap = ExpiringCache<ScriptItem, String>(Duration(minutes: 15));
+  final ExpiringCache<ScriptItem, String> _scriptMap = ExpiringCache<ScriptItem, String>(duration: Duration(minutes: 15));
 
   static late JavaScriptRuntimePool flutterJsPool;
 

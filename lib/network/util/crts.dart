@@ -44,11 +44,11 @@ enum StartState { uninitialized, initializing, initialized }
 class CertificateManager {
   /// 证书缓存
   static final ExpiringCache<String, SecurityContext> _certificateMap =
-      ExpiringCache<String, SecurityContext>(const Duration(minutes: 30));
+      ExpiringCache<String, SecurityContext>(duration: const Duration(minutes: 30));
 
   /// 远程服务器真实证书缓存(ssl验证失败时拉取, 用于生成更贴近真实证书的叶子证书)
   static final ExpiringCache<String, X509CertificateData> _remoteCertMap =
-      ExpiringCache<String, X509CertificateData>(const Duration(minutes: 15));
+      ExpiringCache<String, X509CertificateData>(duration: const Duration(minutes: 15));
 
   /// 服务端密钥
   static AsymmetricKeyPair _serverKeyPair = CryptoUtils.generateRSAKeyPair();

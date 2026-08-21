@@ -75,7 +75,7 @@ class RequestRow extends StatefulWidget {
 }
 
 class RequestRowState extends State<RequestRow> {
-  static ExpiringCache<String, Image> imageCache = ExpiringCache<String, Image>(const Duration(minutes: 5));
+  static ExpiringCache<String, Image> imageCache = ExpiringCache<String, Image>(duration: const Duration(minutes: 5));
   static const int maxAutoReadEntries = 5000;
   static LruCacheSet<String> autoReadRequests = LruCacheSet<String>(5000);
 

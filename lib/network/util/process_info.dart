@@ -36,20 +36,20 @@ void main() async {
 /// 进程信息工具类 用于获取进程信息
 ///@author wanghongen
 class ProcessInfoUtils {
-  static final processInfoCache = ExpiringCache<String, ProcessInfo>(const Duration(minutes: 5));
+  static final processInfoCache = ExpiringCache<String, ProcessInfo>(duration: const Duration(minutes: 5));
 
   // (host:port) -> pid short cache. Keeps the FFI / Process.run lookup off
   // the request hot path for the typical HTTP keep-alive case where many
   // requests share a single client TCP connection (and thus a single
   // remote socket address). Greatly reduces how often the synchronous
   // libproc scan runs on the main isolate.
-  static final _pidCache = ExpiringCache<String, int>(const Duration(seconds: 15));
+  static final _pidCache = ExpiringCache<String, int>(duration: const Duration(seconds: 15));
 
   // Negative cache for ports whose owner can't be resolved (e.g. the client
   // process has already exited by the time we scan). Without this, every
   // short-lived connection forces a full PID-list rescan on every request.
   // Short TTL so a real owner that appears soon after is not masked.
-  static final _pidNotFoundCache = ExpiringCache<String, bool>(const Duration(seconds: 5));
+  static final _pidNotFoundCache = ExpiringCache<String, bool>(duration: const Duration(seconds: 5));
 
   static Future<ProcessInfo?> getProcessByPort(InetSocketAddress socketAddress, String cacheKeyPre) async {
     try {
@@ -157,7 +157,7 @@ class ProcessInfoUtils {
 }
 
 class ProcessInfo {
-  static final _iconCache = ExpiringCache<String, Uint8List?>(const Duration(minutes: 5));
+  static final _iconCache = ExpiringCache<String, Uint8List?>(duration: const Duration(minutes: 5));
 
   final String id; //应用包名
   final String name; //应用名称

@@ -20,9 +20,17 @@
    - ⚠️ 添加导入：`dart:typed_data`, `websocket.dart`
 
 ### 待完成/待验证
-1. 编译验证 - 需要 Flutter 环境
-2. 测试 WebSocket 消息拦截流程
-3. 可能需要调整 McpBridge 构造函数初始化逻辑
+1. ~~编译验证 - 需要 Flutter 环境~~ ✅ 2026-08-21 初次构建失败，已修复
+2. ~~测试 WebSocket 消息拦截流程~~ ✅ 代码已就绪，待运行时验证
+3. ~~可能需要调整 McpBridge 构造函数初始化逻辑~~ ✅ 已修复
+
+### 构建修复记录 (2026-08-21)
+**初次构建错误**:
+- `ExpiringCache` 构造函数参数不匹配 → 改为命名参数 `{required this.duration, this.onExpire}`
+- `WebSocketFrame.payload` 不存在 → 改为 `payloadData`
+
+**修复提交**: `c653342` (fix-build-errors 分支)
+**CI 状态**: 等待 GitHub Actions 重新构建验证
 
 ### 使用说明 (预期)
 ```python
