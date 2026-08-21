@@ -1348,14 +1348,14 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     }
   }
 
-  Color _getRulePriorityColor(RulePriority priority) {
+  Color _getRulePriorityColor(mcp.RulePriority priority) {
     switch (priority) {
-      case RulePriority.high:
-      case RulePriority.critical:
+      case mcp.RulePriority.high:
+      case mcp.RulePriority.critical:
         return Colors.red;
-      case RulePriority.normal:
+      case mcp.RulePriority.normal:
         return Colors.orange;
-      case RulePriority.low:
+      case mcp.RulePriority.low:
         return Colors.green;
     }
   }
