@@ -1,41 +1,58 @@
 # ProxyPin v1.6.0 功能实现进度
 
-## 功能 1: WebSocket 消息修改支持 ✅ (部分完成)
+## 功能 1: WebSocket 消息修改支持 ✅ (完成)
 
-### 已完成
-1. **mcp_bridge.dart** - WebSocket 断点基础设施
-   - ✅ 添加 `dart:async` 和 `ExpiringCache` 导入
-   - ✅ 添加 `_pausedWebSocketDetails` Map 存储暂停的帧
-   - ✅ 添加 `_pausedWebSockets` ExpiringCache 管理等待中的帧
-   - ✅ 添加 `onWebSocketMessage` 回调
-   - ✅ 实现 `pauseWebSocketMessage()` 方法
-   - ✅ 实现 `resumeWebSocketMessage()` 方法
-   - ✅ 实现 `abortWebSocketMessage()` 方法
-   - ✅ 实现 `getPausedWebSocketMessages()` 方法
-   - ✅ 添加 getter: `pendingWebSocketCount`, `isWebSocketPaused()`, `getPausedWebSocket()`
+### 已完成 - 后端
+1. **websocket.dart** - PausedWebSocketFrame 类
+   - ✅ frameId, url, isOutgoing, payload, opcode, pausedAt 字段
+   - ✅ payloadPreview getter (智能预览文本/二进制)
+   - ✅ toJson() 方法
 
-2. **mcp_server.dart** - MCP 工具定义 (需要验证)
-   - ⚠️ 添加工具定义：`get_paused_websocket_messages`, `resume_websocket_message`, `abort_websocket_message`
-   - ⚠️ 添加执行逻辑 case 语句
-   - ⚠️ 添加导入：`dart:typed_data`, `websocket.dart`
+2. **mcp_bridge.dart** - WebSocket 拦截核心
+   - ✅ webSocketInterceptEnabled 开关 (启用/禁用拦截)
+   - ✅ _pausedWebSocketDetails Map 存储暂停的帧
+   - ✅ _pausedWebSockets ExpiringCache 管理 (10 分钟超时)
+   - ✅ pauseWebSocketMessage() 方法
+   - ✅ resumeWebSocketMessage() 方法 (支持修改 payload)
+   - ✅ abortWebSocketMessage() 方法 (支持原因)
+   - ✅ getPausedWebSocketMessages() 方法
+   - ✅ onMessage 自动拦截 (当开关启用时)
 
-### 待完成/待验证
-1. ~~编译验证 - 需要 Flutter 环境~~ ✅ 2026-08-21 初次构建失败，已修复
-2. ~~测试 WebSocket 消息拦截流程~~ ✅ 代码已就绪，待运行时验证
-3. ~~可能需要调整 McpBridge 构造函数初始化逻辑~~ ✅ 已修复
+3. **mcp_server.dart** - MCP 工具定义
+   - ✅ get_paused_websocket_messages
+   - ✅ resume_websocket_message
+   - ✅ abort_websocket_message
 
-### 构建修复记录 (2026-08-21)
-**初次构建错误**:
-- `ExpiringCache` 构造函数参数不匹配 → 改为命名参数 `{required this.duration, this.onExpire}`
-- `WebSocketFrame.payload` 不存在 → 改为 `payloadData`
+### 已完成 - UI
+4. **websocket_intercept_manager.dart** - 拦截管理界面
+   - ✅ 顶部控制栏 (开关 + 状态 + 计数)
+   - ✅ 暂停消息列表 (卡片式布局)
+   - ✅ 消息方向标识 (OUT/IN)
+   - ✅ Opcode 显示 (Text/Binary/Close/Ping/Pong)
+   - ✅ 暂停时长显示
+   - ✅ URL 和 payload 预览
+   - ✅ 三个操作按钮：修改、恢复、中止
+   - ✅ Payload 修改对话框 (Text/JSON/HEX 三视图)
 
-**修复提交**: `c653342` (fix-build-errors 分支)
-**CI 状态**: 等待 GitHub Actions 重新构建验证
+### 构建修复记录
+| 时间 | 问题 | 修复 | 提交 |
+|------|------|------|------|
+| 2026-08-21 09:14 | ExpiringCache 构造函数参数 | 改为命名参数 | c653342 |
+| 2026-08-21 09:14 | WebSocketFrame.payload | 改为 payloadData | c653342 |
+| 2026-08-21 09:23 | ExpiringCache 多处调用 | 批量修复 7 个文件 | 378c3ac |
+| 2026-08-21 09:29 | ExpiringCache.put 不存在 | 改为 set | 8111e83 |
+| 2026-08-21 09:35 | UI 功能集成 | 新增 UI 组件 | 96618b4 |
 
-### 使用说明 (预期)
+### 使用说明
+#### App 内使用 (推荐)
+1. 打开 ProxyPin App
+2. 进入 WebSocket 拦截管理界面
+3. 启用拦截开关
+4. 捕获 WebSocket 消息
+5. 对暂停的消息执行：修改/恢复/中止
+
+#### MCP 客户端使用 (开发者)
 ```python
-# MCP 客户端可以调用以下工具：
-
 # 1. 获取暂停的 WebSocket 消息
 get_paused_websocket_messages()
 # 返回：{'messages': [...], 'count': N}
@@ -49,19 +66,22 @@ abort_websocket_message(frame_id='ws_xxx', reason='Testing')
 # 返回：{'status': 'aborted', 'id': 'ws_xxx', 'reason': 'Testing'}
 ```
 
-### 注意事项
-- WebSocket 消息默认不暂停（避免影响性能）
-- 需要外部触发暂停机制（未来可通过规则或手动方式）
-- 超时时间：10 分钟
+### 技术细节
+- **默认行为**: 拦截开关关闭时，消息直接放行 (不影响性能)
+- **超时机制**: 10 分钟自动清理
+- **数据结构**: Map + ExpiringCache 双重存储
+- **UI 刷新**: 操作后自动重新加载列表
 
 ---
 
-## 后续功能 (v1.6.0 计划)
-2. 规则保存/加载到 SharedPreferences
-3. 脚本模板库
-4. 多环境配置 (dev/staging/prod)
-5. MCP 自动化任务实际逻辑
-6. 请求批量操作
+## 后续功能 (v1.7.0 计划)
+| 功能 | 描述 | 预计工作量 |
+|------|------|-----------|
+| Feature 2 | 规则保存/加载到 SharedPreferences | ~1h |
+| Feature 3 | 脚本模板库 (JS/Dart/Shell) | ~0.5h |
+| Feature 4 | 多环境配置 (dev/staging/prod) | ~0.5h |
+| Feature 5 | MCP 自动化任务逻辑完善 | ~1h |
+| Feature 6 | 请求批量操作 (删除/导出/修改) | ~1h |
 
 ---
-*更新时间：2026-08-21*
+*更新时间：2026-08-21 09:35 | 版本：v1.6.0 (96618b4) | 状态：✅ 功能 1 完整*
