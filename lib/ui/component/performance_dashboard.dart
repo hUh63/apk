@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../../network/http/connection_pool.dart';
-import '../../network/manager/request_manager.dart';
 
 /// 性能监控仪表盘 - 显示连接池和请求性能统计
 class PerformanceDashboard extends StatefulWidget {

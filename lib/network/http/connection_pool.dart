@@ -110,6 +110,15 @@ class _PooledConnection {
 
 /// 高性能连接池
 class ConnectionPool {
+  static final ConnectionPool instance = ConnectionPool();
+
+  /// 获取连接池统计信息
+  Map<String, dynamic> getStats() {
+    _stats.activeConnections = _totalActive;
+    _stats.idleConnections = _pools.values.fold<int>(0, (sum, q) => sum + q.length);
+    return _stats.toJson();
+  }
+
   final ConnectionConfig _config;
   final Logger _logger = Logger('ConnectionPool');
   final ConnectionStats _stats = ConnectionStats();
@@ -207,7 +216,6 @@ class ConnectionPool {
       final request = await client.openUrl(method, url);
       
       // 设置超时
-      request.timeout = _config.connectionTimeout;
       
       // 添加请求头
       if (headers != null) {

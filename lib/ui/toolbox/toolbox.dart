@@ -15,7 +15,6 @@ import 'cert_hash.dart';
 import 'encoder.dart';
 import 'js_run.dart';
 import 'json_viewer.dart';
-import 'performance_dashboard.dart';
 import 'text_diff.dart';
 import 'text_editor.dart';
 import 'websocket_request.dart';
