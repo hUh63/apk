@@ -7,6 +7,7 @@ import 'package:proxypin/ui/mobile/setting/mcp_connection.dart';
 import 'package:proxypin/ui/toolbox/qr_code_page.dart';
 import 'package:proxypin/ui/toolbox/regexp.dart';
 import 'package:proxypin/ui/toolbox/timestamp.dart';
+import 'package:proxypin/ui/component/performance_dashboard.dart';
 import 'package:proxypin/utils/platform.dart';
 
 import 'aes_page.dart';
@@ -14,6 +15,7 @@ import 'cert_hash.dart';
 import 'encoder.dart';
 import 'js_run.dart';
 import 'json_viewer.dart';
+import 'performance_dashboard.dart';
 import 'text_diff.dart';
 import 'text_editor.dart';
 import 'websocket_request.dart';
@@ -241,6 +243,17 @@ class _ToolboxState extends State<Toolbox> {
                       icon: Icons.cast_connected,
                       text: 'MCP',
                       tooltip: 'MCP Server 设置'),
+                  IconText(
+                      onTap: () async {
+                        if (Platforms.isMobile()) {
+                          Navigator.of(context).push(MaterialPageRoute(builder: (context) => const PerformanceDashboard()));
+                          return;
+                        }
+                        MultiWindow.openWindow('性能监控', 'PerformanceDashboard', size: const Size(900, 700));
+                      },
+                      icon: Icons.speed,
+                      text: '性能监控',
+                      tooltip: '性能监控仪表盘'),
                 ],
               ),
             ],
