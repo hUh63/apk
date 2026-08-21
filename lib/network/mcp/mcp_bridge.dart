@@ -308,7 +308,7 @@ class McpBridge implements EventListener {
       frameId: frameId,
       url: url,
       isOutgoing: isOutgoing,
-      payload: frame.payload,
+      payload: frame.payloadData,
       opcode: frame.opcode,
       pausedAt: DateTime.now(),
     );

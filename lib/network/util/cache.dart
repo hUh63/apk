@@ -26,7 +26,7 @@ class ExpiringCache<K, V> {
   final _expirationTimes = <K, Timer>{};
   final void Function(K key, V value)? onExpire;
 
-  ExpiringCache(this.duration, {this.onExpire});
+  ExpiringCache({required this.duration, this.onExpire});
 
   /// 当前缓存条目数
   int get length => _cache.length;
