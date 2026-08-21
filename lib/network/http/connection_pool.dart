@@ -120,7 +120,6 @@ class ConnectionPool {
   }
 
   final ConnectionConfig _config;
-  final Logger _logger = Logger('ConnectionPool');
   final ConnectionStats _stats = ConnectionStats();
 
   // 连接池存储
@@ -156,7 +155,7 @@ class ConnectionPool {
       return response;
     } catch (e) {
       _stats.failedRequests++;
-      _logger.e('请求失败：$method ${url.host}${url.path} - $e');
+      logger.e('请求失败：$method ${url.host}${url.path} - $e');
       rethrow;
     }
   }
@@ -181,7 +180,7 @@ class ConnectionPool {
           
           if (attempt < _config.retryCount) {
             final delay = _config.retryDelay * (attempt + 1);
-            _logger.w('第${attempt + 1}次重试，延迟${delay.inMilliseconds}ms');
+            logger.w('第${attempt + 1}次重试，延迟${delay.inMilliseconds}ms');
             await Future.delayed(delay);
             continue;
           }
@@ -194,7 +193,7 @@ class ConnectionPool {
         if (attempt < _config.retryCount) {
           _stats.retryCount++;
           final delay = _config.retryDelay * (attempt + 1);
-          _logger.w('第${attempt + 1}次重试，延迟${delay.inMilliseconds}ms - $e');
+          logger.w('第${attempt + 1}次重试，延迟${delay.inMilliseconds}ms - $e');
           await Future.delayed(delay);
         }
       }
@@ -380,7 +379,7 @@ class ConnectionPool {
       _activePerHost.clear();
       _totalActive = 0;
       _updateStats();
-      _logger.i('连接池已清空');
+      logger.i('连接池已清空');
     } finally {
       _mutex.release();
     }
@@ -389,7 +388,7 @@ class ConnectionPool {
   /// 关闭连接池
   Future<void> dispose() async {
     await clear();
-    _logger.i('连接池已关闭');
+    logger.i('连接池已关闭');
   }
 }
 
