@@ -847,11 +847,6 @@ class _McpAutomationPageState extends State<McpAutomationPage>
         duration: 1, backgroundColor: Colors.green);
   }
 
-  void _showAddRuleDialog(BuildContext context) {
-    // TODO: 实现添加规则对话框
-    FlutterToastr.show('功能开发中', context, duration: 1);
-  }
-
   void _editRule(dynamic rule) {
     // TODO: 实现编辑规则对话框
     FlutterToastr.show('功能开发中', context, duration: 1);

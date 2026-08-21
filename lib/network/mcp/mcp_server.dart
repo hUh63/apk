@@ -807,6 +807,9 @@ class McpServer {
   /// 获取全部可用工具列表（供 UI 页面展示，不经过启用过滤）
   List<Map<String, dynamic>> getTools() => _getToolsList();
 
+  /// 获取全部可用工具列表（别名，供 UI 页面调用）
+  List<Map<String, dynamic>> getToolList() => _getToolsList();
+
   /// 供 UI 调用的 MCP 请求方法（直接调用内部处理逻辑）
   Future<Map<String, dynamic>?> sendRequest(String method, [Map<String, dynamic>? params]) async {
     try {

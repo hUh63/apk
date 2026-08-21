@@ -287,10 +287,6 @@ class _ConfigManagementState extends State<ConfigManagement> {
         );
       }
     }
-  }Color: Colors.red,
-        );
-      }
-    }
   }
 
   /// 导入配置

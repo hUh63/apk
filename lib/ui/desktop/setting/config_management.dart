@@ -232,11 +232,31 @@ class _DesktopConfigManagementState extends State<DesktopConfigManagement> {
       }
 
       final jsonStr = utf8.decode(file.bytes!);
-      configuration.importConfig(jsonStr);
+      final newConfig = await Configuration.importConfig(jsonStr);
+
+      // 应用新配置
+      configuration.port = newConfig.port;
+      configuration.enableSsl = newConfig.enableSsl;
+      configuration.startup = newConfig.startup;
+      configuration.enableSystemProxy = newConfig.enableSystemProxy;
+      configuration.enableSocks5 = newConfig.enableSocks5;
+      configuration.proxyPassDomains = newConfig.proxyPassDomains;
+      configuration.externalProxy = newConfig.externalProxy;
+      configuration.appWhitelist = newConfig.appWhitelist;
+      configuration.appWhitelistEnabled = newConfig.appWhitelistEnabled;
+      configuration.appBlacklist = newConfig.appBlacklist;
+      configuration.historyCacheTime = newConfig.historyCacheTime;
+      configuration.mcpPort = newConfig.mcpPort;
+      configuration.mcpEnabled = newConfig.mcpEnabled;
+      configuration.mcpAutoStart = newConfig.mcpAutoStart;
+      configuration.mcpToolsEnabled = newConfig.mcpToolsEnabled;
+      configuration.enabledHttp2 = newConfig.enabledHttp2;
+      configuration.flushConfig();
 
       if (mounted) {
-        FlutterToastr.show('配置已导入', context, duration: 2, backgroundColor: Colors.green);
+        FlutterToastr.show('配置导入成功，部分设置可能需要重启应用后生效', context, duration: 3, backgroundColor: Colors.green);
         logger.i('配置已导入');
+        setState(() {});
       }
     } catch (e) {
       logger.e('导入配置失败', error: e, stackTrace: StackTrace.current);

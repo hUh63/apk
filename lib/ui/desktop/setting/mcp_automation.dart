@@ -824,13 +824,6 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
     );
   }
 
-  void _showAddRuleDialog(BuildContext context) {
-    // TODO: 实现添加规则对话框
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('功能开发中')),
-    );
-  }
-
   void _editRule(dynamic rule) {
     // TODO: 实现编辑规则对话框
     ScaffoldMessenger.of(context).showSnackBar(

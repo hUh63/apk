@@ -82,7 +82,7 @@ class Rule {
   final List<Condition> conditions;
   final List<Action> actions;
   final RulePriority priority;
-  final bool enabled;
+  bool enabled;
   final DateTime? expiresAt;
 
   Rule({
