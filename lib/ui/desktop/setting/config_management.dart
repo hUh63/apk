@@ -216,23 +216,25 @@ class _DesktopConfigManagementState extends State<DesktopConfigManagement> {
   /// 导入配置
   Future<void> _importConfig(BuildContext context) async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      // file_picker 12.x API: 直接使用 FilePicker.pickFiles() 而非 FilePicker.platform.pickFiles()
+      final files = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json'],
-        withData: true,
       );
 
-      if (result == null || result.files.isEmpty) {
+      if (files == null || files.isEmpty) {
         return;
       }
 
-      final file = result.files.first;
-      if (file.bytes == null) {
+      final file = files.first;
+      // file_picker 12.x: 使用 readAsBytes() 而非直接访问 bytes 属性
+      final bytes = await file.readAsBytes();
+      if (bytes == null) {
         FlutterToastr.show('无法读取文件', context, duration: 2, backgroundColor: Colors.red);
         return;
       }
 
-      final jsonStr = utf8.decode(file.bytes!);
+      final jsonStr = utf8.decode(bytes);
       final newConfig = await ConfigImportExport.importConfig(jsonStr);
 
       // 应用新配置
