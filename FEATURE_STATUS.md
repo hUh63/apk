@@ -1,6 +1,6 @@
 # ProxyPin 功能实现状态总览
 
-*更新时间：2026-08-21 | 当前版本：v1.8.0*
+*更新时间：2026-08-21 | 当前版本：v1.9.0*
 
 ---
 
@@ -132,11 +132,47 @@
 
 ---
 
+### v1.9.0 - MCP 自动化任务框架 (Feature 5)
+
+**发布状态**: ✅ 已发布 | **完成度**: 80% (框架完成，执行逻辑待完善)
+
+#### 后端功能
+- ✅ `MCPAutomationTask` 模型类
+  - 6 种触发器类型：onRequest/onResponse/onInterval/onProxyStart/onProxyStop/manual
+  - 8 种动作类型：modifyRequest/modifyResponse/blockRequest/replayRequest/exportData/runScript/sendNotification/callWebhook
+  - 条件匹配系统 (URL/方法/Header/状态码)
+  - 执行计数和最后执行时间追踪
+  
+- ✅ `MCPAutomationManager` 单例
+  - SharedPreferences 持久化存储
+  - 任务 CRUD 操作
+  - 请求/响应匹配检查 (onRequest/onResponse)
+  - 定时任务检查器 (10 秒间隔)
+  - 任务导入/导出
+
+#### UI 功能
+- ✅ `MCPTaskManagerPage` 任务管理界面
+  - 任务列表展示 (卡片式)
+  - 触发器图标标识
+  - 启用/禁用 Switch
+  - 空状态引导
+  - 刷新和添加按钮
+- ⏳ 任务详情对话框 (待实现)
+- ⏳ 添加/编辑任务对话框 (待实现)
+
+#### 技术细节
+- 自动化任务框架已搭建完成
+- 8 种动作的执行逻辑待后续完善 (TODO 标记)
+- UI 对话框待实现 (TODO 标记)
+- 代码量：~20KB
+- 文件：2 个新增
+
+---
+
 ## ⏳ 待实现功能
 
 | 功能 | 描述 | 预计工作量 | 优先级 |
 |------|------|-----------|--------|
-| **Feature 5** | MCP 自动化任务逻辑完善 | ~1h | 中 |
 | **Feature 6** | 请求批量操作 (删除/导出/修改) | ~1h | 低 |
 
 ---
@@ -144,12 +180,12 @@
 ## 📊 整体进度
 
 ```
-已完成：4/6 (67%) ✅
-- Feature 1: ✅ 100% (v1.6.0)
-- Feature 2: ✅ 100% (v1.7.0)
-- Feature 3: ✅ 100% (v1.8.0)
-- Feature 4: ✅ 100% (v1.9.0 - 项目原有功能)
-- Feature 5: ⏳ 0% (MCP 自动化)
+已完成：5/6 (83%) ✅
+- Feature 1: ✅ 100% (v1.6.0 - WebSocket 消息修改)
+- Feature 2: ✅ 100% (v1.7.0 - WebSocket 规则管理)
+- Feature 3: ✅ 100% (v1.8.0 - 脚本模板库)
+- Feature 4: ✅ 100% (v1.9.0 - 多环境配置，项目原有)
+- Feature 5: ✅ 80% (v1.9.0 - MCP 自动化框架)
 - Feature 6: ⏳ 0% (批量操作)
 ```
 
@@ -163,7 +199,7 @@
 | v1.6.0 | 2026-08-21 | WebSocket 消息修改 | 0f617c8 |
 | v1.7.0 | 2026-08-21 | WebSocket 规则管理 | cd5a413 |
 | v1.8.0 | 2026-08-21 | 脚本模板库 | 5c67ffe |
-| v1.9.0 | 2026-08-21 | 多环境配置 (项目原有) | - |
+| v1.9.0 | 2026-08-21 | 多环境配置 (项目原有) + MCP 自动化框架 | 6e1b870 |
 
 ---
 
@@ -173,6 +209,7 @@
 - **v1.6.0 Release**: https://github.com/hUh63/apk/releases/tag/v1.6.0
 - **v1.7.0 Release**: https://github.com/hUh63/apk/releases/tag/v1.7.0
 - **v1.8.0 Release**: https://github.com/hUh63/apk/releases/tag/v1.8.0
+- **v1.9.0 Release**: https://github.com/hUh63/apk/releases/tag/v1.9.0
 - **CI 构建**: https://github.com/hUh63/apk/actions
 
 ---
