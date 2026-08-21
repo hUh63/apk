@@ -31,7 +31,7 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
   late TabController _tabController;
   final McpScheduler _scheduler = McpScheduler();
   final McpEventAutomation _eventAutomation = McpEventAutomation();
-  final McpRuleEngine _ruleEngine = McpRuleEngine();
+  final mcp.McpRuleEngine _ruleEngine = mcp.McpRuleEngine();
   final List<Map<String, dynamic>> _workflows = [];
 
   @override
@@ -576,14 +576,14 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
     }
   }
 
-  Color _getRulePriorityColor(RulePriority priority) {
+  Color _getRulePriorityColor(mcp.RulePriority priority) {
     switch (priority) {
-      case RulePriority.high:
-      case RulePriority.critical:
+      case mcp.RulePriority.high:
+      case mcp.RulePriority.critical:
         return Colors.red;
-      case RulePriority.normal:
+      case mcp.RulePriority.normal:
         return Colors.orange;
-      case RulePriority.low:
+      case mcp.RulePriority.low:
         return Colors.green;
     }
   }
@@ -592,35 +592,35 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
     return '${condition.field} ${_formatOperator(condition.operator)} ${condition.value}';
   }
 
-  String _formatOperator(Operator operator) {
+  String _formatOperator(mcp.Operator operator) {
     switch (operator) {
-      case Operator.equals:
+      case mcp.Operator.equals:
         return '=';
-      case Operator.notEquals:
+      case mcp.Operator.notEquals:
         return '≠';
-      case Operator.greaterThan:
+      case mcp.Operator.greaterThan:
         return '>';
-      case Operator.lessThan:
+      case mcp.Operator.lessThan:
         return '<';
-      case Operator.greaterThanOrEqual:
+      case mcp.Operator.greaterThanOrEqual:
         return '≥';
-      case Operator.lessThanOrEqual:
+      case mcp.Operator.lessThanOrEqual:
         return '≤';
-      case Operator.contains:
+      case mcp.Operator.contains:
         return '包含';
-      case Operator.startsWith:
+      case mcp.Operator.startsWith:
         return '始于';
-      case Operator.endsWith:
+      case mcp.Operator.endsWith:
         return '终于';
-      case Operator.matches:
+      case mcp.Operator.matches:
         return '匹配';
-      case Operator.inList:
+      case mcp.Operator.inList:
         return '在...中';
-      case Operator.notInList:
+      case mcp.Operator.notInList:
         return '不在...中';
-      case Operator.exists:
+      case mcp.Operator.exists:
         return '存在';
-      case Operator.notExists:
+      case mcp.Operator.notExists:
         return '不存在';
     }
   }
@@ -629,23 +629,23 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
     return '${_formatActionType(action.type)}: ${action.target ?? action.parameters}';
   }
 
-  String _formatActionType(ActionType type) {
+  String _formatActionType(mcp.ActionType type) {
     switch (type) {
-      case ActionType.log:
+      case mcp.ActionType.log:
         return '记录';
-      case ActionType.notify:
+      case mcp.ActionType.notify:
         return '通知';
-      case ActionType.stopCapture:
+      case mcp.ActionType.stopCapture:
         return '停止抓包';
-      case ActionType.startCapture:
+      case mcp.ActionType.startCapture:
         return '开始抓包';
-      case ActionType.exportData:
+      case mcp.ActionType.exportData:
         return '导出数据';
-      case ActionType.executeScript:
+      case mcp.ActionType.executeScript:
         return '执行脚本';
-      case ActionType.sendWebhook:
+      case mcp.ActionType.sendWebhook:
         return '发送 Webhook';
-      case ActionType.custom:
+      case mcp.ActionType.custom:
         return '自定义';
     }
   }
