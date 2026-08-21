@@ -288,11 +288,30 @@ class McpBridge implements EventListener {
 
   @override
   void onMessage(Channel channel, HttpMessage message, WebSocketFrame frame) {
-    // 默认直接放行，不暂停（避免影响性能）
-    // 如需拦截，MCP 客户端可调用 pauseWebSocketMessage 工具
+    // 如果未启用拦截，直接放行
+    if (!_webSocketInterceptEnabled) return;
+    
+    // 自动暂停所有 WebSocket 消息
+    final url = message.request?.url?.toString() ?? 'unknown';
+    final isOutgoing = message is HttpRequest;
+    pauseWebSocketMessage(frame, url, isOutgoing);
   }
 
   // ==================== WebSocket Message Interception (v1.6.0+) ====================
+  // 全局 WebSocket 拦截开关
+  bool _webSocketInterceptEnabled = false;
+  
+  /// 是否启用 WebSocket 拦截
+  bool get webSocketInterceptEnabled => _webSocketInterceptEnabled;
+  set webSocketInterceptEnabled(bool value) {
+    _webSocketInterceptEnabled = value;
+  }
+  
+  /// 启用/禁用 WebSocket 拦截
+  void setWebSocketInterceptEnabled(bool enabled) {
+    _webSocketInterceptEnabled = enabled;
+  }
+  
   // 存储暂停的 WebSocket 帧：frameId -> PausedWebSocketFrame
   final Map<String, PausedWebSocketFrame> _pausedWebSocketDetails = {};
   
