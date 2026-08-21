@@ -794,9 +794,6 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                     }
                   },
                   repeatDaily: repeatDaily,
-                  taskType: selectedTaskType,
-                  toolName: selectedToolName,
-                  scriptPath: selectedScriptPath,
                 );
 
                 Navigator.pop(context);
@@ -1135,17 +1132,26 @@ class _McpAutomationPageState extends State<McpAutomationPage>
               }
 
               // 添加规则到规则引擎
-              _ruleEngine.addRule({
-                'name': nameController.text,
-                'enabled': true,
-                'priority': 1,
-                'conditions': [
-                  {'type': conditionType, 'value': conditionValueController.text},
+              _ruleEngine.addRule(Rule(
+                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                name: nameController.text,
+                conditions: [
+                  Condition(
+                    type: ConditionType.custom,
+                    field: 'request.url',
+                    operator: Operator.contains,
+                    value: conditionValueController.text,
+                  ),
                 ],
-                'actions': [
-                  {'type': actionType, 'value': actionValueController.text},
+                actions: [
+                  Action(
+                    type: ActionType.custom,
+                    target: actionValueController.text,
+                  ),
                 ],
-              });
+                priority: RulePriority.normal,
+                enabled: true,
+              ));
 
               Navigator.pop(context);
               FlutterToastr.show('规则已添加', context, duration: 2);

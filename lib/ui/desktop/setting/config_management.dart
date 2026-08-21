@@ -219,6 +219,7 @@ class _DesktopConfigManagementState extends State<DesktopConfigManagement> {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json'],
+        withData: true,
       );
 
       if (result == null || result.files.isEmpty) {

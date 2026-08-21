@@ -777,9 +777,6 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
                     }
                   },
                   repeatDaily: repeatDaily,
-                  taskType: selectedTaskType,
-                  toolName: selectedToolName,
-                  scriptPath: selectedScriptPath,
                 );
 
                 Navigator.pop(context);
@@ -1128,17 +1125,26 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
                 return;
               }
 
-              _ruleEngine.addRule({
-                'name': nameController.text,
-                'enabled': true,
-                'priority': 1,
-                'conditions': [
-                  {'type': conditionType, 'value': conditionValueController.text},
+              _ruleEngine.addRule(Rule(
+                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                name: nameController.text,
+                conditions: [
+                  Condition(
+                    type: ConditionType.custom,
+                    field: 'request.url',
+                    operator: Operator.contains,
+                    value: conditionValueController.text,
+                  ),
                 ],
-                'actions': [
-                  {'type': actionType, 'value': actionValueController.text},
+                actions: [
+                  Action(
+                    type: ActionType.custom,
+                    target: actionValueController.text,
+                  ),
                 ],
-              });
+                priority: RulePriority.normal,
+                enabled: true,
+              ));
 
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
