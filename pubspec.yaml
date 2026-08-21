@@ -46,6 +46,7 @@ dependencies:
   tray_manager: ^0.5.3
   code_forge: ^10.8.0
   archive: ^4.0.0
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:
