@@ -807,6 +807,32 @@ class McpServer {
   /// 获取全部可用工具列表（供 UI 页面展示，不经过启用过滤）
   List<Map<String, dynamic>> getTools() => _getToolsList();
 
+  /// 供 UI 调用的 MCP 请求方法（直接调用内部处理逻辑）
+  Future<Map<String, dynamic>?> sendRequest(String method, [Map<String, dynamic>? params]) async {
+    try {
+      final request = {
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': method,
+        if (params != null) 'params': params,
+      };
+      final result = await _processJsonRpc(request);
+      if (result is Map<String, dynamic>) {
+        return result['result'] as Map<String, dynamic>?;
+      }
+      return null;
+    } catch (e) {
+      logger.e('MCP sendRequest error: $method', error: e);
+      return null;
+    }
+  }
+
+  /// 获取 Prompts 列表（供 UI 调用）
+  List<Map<String, dynamic>> getPrompts() => _getPromptsList();
+
+  /// 获取 Roots 列表（供 UI 调用）
+  List<Map<String, dynamic>> getRoots() => _getRootsList();
+
   // ==================== MCP 2026-07-28: Prompts 支持 ====================
 
   /// 获取可用提示模板列表

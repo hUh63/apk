@@ -26,6 +26,7 @@ import 'package:proxypin/ui/component/proxy_port_setting.dart';
 import 'package:proxypin/ui/component/widgets.dart';
 import 'package:proxypin/ui/desktop/setting/about.dart';
 import 'package:proxypin/ui/desktop/setting/backup_management.dart';
+import 'package:proxypin/ui/desktop/setting/config_management.dart';
 import 'package:proxypin/ui/desktop/setting/external_proxy.dart';
 import 'package:proxypin/ui/desktop/setting/hosts.dart';
 import 'package:proxypin/ui/desktop/setting/mcp_connection.dart';
@@ -89,6 +90,7 @@ class _SettingState extends State<Setting> {
         const Divider(),
         item('MCP 连接', onPressed: showMcpConnection, leadingIcon: Icons.cloud),
         item('MCP 自动化', onPressed: showMcpAutomation, leadingIcon: Icons.auto_awesome),
+        item('配置管理', onPressed: showConfigManagement, leadingIcon: Icons.settings_suggest),
         item('备份管理', onPressed: showBackupManagement, leadingIcon: Icons.backup),
         item('主题设置', onPressed: showThemeSetting, leadingIcon: Icons.palette),
         const Divider(),
@@ -143,6 +145,22 @@ class _SettingState extends State<Setting> {
               width: 700,
               height: 600,
               child: DesktopBackupManagement(configuration: configuration),
+            ),
+          );
+        });
+  }
+
+  /// 显示配置管理
+  void showConfigManagement() {
+    showDialog(
+        barrierDismissible: false,
+        context: context,
+        builder: (context) {
+          return Dialog(
+            child: SizedBox(
+              width: 700,
+              height: 600,
+              child: DesktopConfigManagement(proxyServer: widget.proxyServer),
             ),
           );
         });

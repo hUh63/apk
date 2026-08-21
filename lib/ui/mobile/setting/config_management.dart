@@ -142,50 +142,57 @@ class _ConfigManagementState extends State<ConfigManagement> {
       BuildContext context, AppLocalizations localizations) async {
     double exportProgress = 0.0;
     bool isExporting = false;
+    BuildContext? dialogContext;
 
     try {
       // 显示进度对话框
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Row(
-                children: [
-                  CircularProgressIndicator(strokeWidth: 2, value: null),
-                  SizedBox(width: 12),
-                  Text('正在导出配置'),
+        builder: (ctx) {
+          dialogContext = ctx;
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                title: const Row(
+                  children: [
+                    CircularProgressIndicator(strokeWidth: 2, value: null),
+                    SizedBox(width: 12),
+                    Text('正在导出配置'),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('请稍候，正在准备导出文件...'),
+                    const SizedBox(height: 16),
+                    LinearProgressIndicator(
+                      value: exportProgress > 0 ? exportProgress : null,
+                      minHeight: 6,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      exportProgress > 0 ? '${(exportProgress * 100).toInt()}%' : '准备中...',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+                actions: [
+                  if (!isExporting)
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('关闭'),
+                    ),
                 ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('请稍候，正在准备导出文件...'),
-                  const SizedBox(height: 16),
-                  LinearProgressIndicator(
-                    value: exportProgress > 0 ? exportProgress : null,
-                    minHeight: 6,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    exportProgress > 0 ? '${(exportProgress * 100).toInt()}%' : '准备中...',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-              actions: [
-                if (!isExporting)
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('关闭'),
-                  ),
-              ],
-            );
-          },
-        ),
+              );
+            },
+          );
+        },
       );
+
+      // 等待对话框显示
+      await Future.delayed(const Duration(milliseconds: 100));
 
       // 生成默认文件名
       final timestamp = DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
@@ -195,8 +202,43 @@ class _ConfigManagementState extends State<ConfigManagement> {
       final jsonStr = configuration.exportConfig();
       final bytes = Uint8List.fromList(utf8.encode(jsonStr));
 
-      // 更新进度
-      exportProgress = 0.3;
+      // 更新进度 - 使用 setDialogState 刷新 UI
+      if (dialogContext != null) {
+        await Future.delayed(const Duration(milliseconds: 200));
+        // 注意：这里无法直接调用 setDialogState，因为它是 StatefulBuilder 的局部变量
+        // 解决方案：关闭旧对话框，重新显示新进度的对话框
+        if (dialogContext!.mounted) Navigator.of(dialogContext!).pop();
+      }
+      
+      // 重新显示 30% 进度对话框
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          dialogContext = ctx;
+          return AlertDialog(
+            title: const Row(
+              children: [
+                CircularProgressIndicator(strokeWidth: 2, value: 0.3),
+                SizedBox(width: 12),
+                Text('正在导出配置'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('正在保存文件...'),
+                const SizedBox(height: 16),
+                const LinearProgressIndicator(value: 0.3, minHeight: 6),
+                const SizedBox(height: 8),
+                const Text('30%', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
+          );
+        },
+      );
+
       isExporting = true;
 
       // 使用 FilePicker v12+ API 保存文件 (直接传入 bytes)
@@ -208,41 +250,44 @@ class _ConfigManagementState extends State<ConfigManagement> {
         bytes: bytes,
       );
 
-      // 更新进度
-      exportProgress = 0.8;
-
+      // 用户取消保存
       if (outputPath == null) {
-        // 用户取消
-        if (context.mounted) Navigator.of(context).pop();
+        if (dialogContext != null && dialogContext!.mounted) {
+          Navigator.of(dialogContext!).pop();
+        }
         return;
       }
 
-      // 完成
-      exportProgress = 1.0;
-      
-      // 延迟关闭对话框
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (context.mounted) Navigator.of(context).pop();
+      // 关闭进度对话框
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.of(dialogContext!).pop();
+      }
 
       if (mounted) {
         FlutterToastr.show(
-          '配置已导出到：$outputPath',
+          '配置已导出到：${outputPath.path}',
           context,
           duration: 3,
           backgroundColor: Colors.green,
         );
-        logger.i('配置已导出到：$outputPath');
+        logger.i('配置已导出到：${outputPath.path}');
       }
     } catch (e) {
       logger.e('导出配置失败', error: e, stackTrace: StackTrace.current);
       // 关闭进度对话框
-      if (context.mounted) Navigator.of(context).pop();
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.of(dialogContext!).pop();
+      }
       if (mounted) {
         FlutterToastr.show(
           '导出失败：${e.toString()}',
           context,
           duration: 3,
           backgroundColor: Colors.red,
+        );
+      }
+    }
+  }Color: Colors.red,
         );
       }
     }

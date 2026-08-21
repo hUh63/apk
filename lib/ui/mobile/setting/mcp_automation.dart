@@ -5,9 +5,10 @@ import 'package:proxypin/l10n/app_localizations.dart';
 import 'package:proxypin/network/mcp/mcp_scheduler.dart';
 import 'package:proxypin/network/mcp/mcp_event_automation.dart';
 import 'package:proxypin/network/mcp/mcp_rule_engine.dart';
+import 'package:proxypin/network/mcp/mcp_server.dart';
 import 'package:proxypin/network/util/logger.dart';
 
-/// MCP 自动化配置页面 - 定时任务、事件规则管理
+/// MCP 自动化配置页面 - 定时任务、事件规则、Prompts、Roots 管理
 class McpAutomationPage extends StatefulWidget {
   const McpAutomationPage({super.key});
 
@@ -21,12 +22,39 @@ class _McpAutomationPageState extends State<McpAutomationPage>
   final McpScheduler _scheduler = McpScheduler();
   final McpEventAutomation _eventAutomation = McpEventAutomation();
   final McpRuleEngine _ruleEngine = McpRuleEngine();
-  final List<Map<String, dynamic>> _workflows = [];
+  final McpServer _mcpServer = McpServer();
+  
+  // Prompts 相关状态
+  List<Map<String, dynamic>> _prompts = [];
+  bool _isLoadingPrompts = false;
+  
+  // Roots 相关状态
+  List<Map<String, dynamic>> _roots = [];
+  
+  // 工作流列表
+  final List<Map<String, dynamic>> _workflows = [
+    {
+      'name': 'API 安全扫描',
+      'description': '自动检测 API 请求中的敏感数据泄露',
+      'enabled': true,
+      'triggers': ['http_request'],
+      'actions': ['analyze', 'notify'],
+    },
+    {
+      'name': '性能监控',
+      'description': '监控慢请求并生成报告',
+      'enabled': false,
+      'triggers': ['response_received'],
+      'actions': ['log', 'report'],
+    },
+  ];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
+    _loadPrompts();
+    _loadRoots();
   }
 
   @override
@@ -35,10 +63,44 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     super.dispose();
   }
 
+  Future<void> _loadPrompts() async {
+    setState(() => _isLoadingPrompts = true);
+    try {
+      // 从 MCP 服务器获取 Prompts 列表
+      final prompts = _mcpServer.getPrompts();
+      setState(() {
+        _prompts = prompts;
+        _isLoadingPrompts = false;
+      });
+    } catch (e) {
+      logger.e('加载 Prompts 失败', error: e);
+      setState(() => _isLoadingPrompts = false);
+    }
+  }
+
+  void _loadRoots() {
+    // 内置 Roots 配置
+    _roots = [
+      {
+        'name': 'workspace',
+        'uri': 'proxypin://workspace',
+        'description': '工作空间目录',
+      },
+      {
+        'name': 'captures',
+        'uri': 'proxypin://captures',
+        'description': '抓包文件目录',
+      },
+      {
+        'name': 'scripts',
+        'uri': 'proxypin://scripts',
+        'description': '脚本目录',
+      },
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
-    AppLocalizations localizations = AppLocalizations.of(context)!;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -48,13 +110,28 @@ class _McpAutomationPageState extends State<McpAutomationPage>
         centerTitle: true,
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           tabs: const [
             Tab(text: '定时任务', icon: Icon(Icons.schedule)),
             Tab(text: '事件监听', icon: Icon(Icons.event)),
             Tab(text: '规则引擎', icon: Icon(Icons.rule)),
             Tab(text: '工作流', icon: Icon(Icons.auto_awesome)),
+            Tab(text: 'Prompts', icon: Icon(Icons.lightbulb_outline)),
+            Tab(text: 'Roots', icon: Icon(Icons.folder)),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              _loadPrompts();
+              _loadRoots();
+              setState(() {});
+              FlutterToastr.show('已刷新', context, duration: 1);
+            },
+            tooltip: '刷新',
+          ),
+        ],
       ),
       body: TabBarView(
         controller: _tabController,
@@ -63,10 +140,12 @@ class _McpAutomationPageState extends State<McpAutomationPage>
           _buildEventListenersTab(),
           _buildRuleEngineTab(),
           _buildWorkflowTab(),
+          _buildPromptsTab(),
+          _buildRootsTab(),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddTaskDialog(context),
+        onPressed: () => _handleFabPress(context),
         child: const Icon(Icons.add),
       ),
     );
@@ -117,9 +196,26 @@ class _McpAutomationPageState extends State<McpAutomationPage>
               '${task.repeatDaily ? '每天' : '一次性'} • ${_formatTime(task.executeAt)}${task.lastExecuted != null ? ' • 上次：${_formatTime(task.lastExecuted!)}' : ''}',
               style: const TextStyle(fontSize: 12),
             ),
-            trailing: IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => _cancelTask(task),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Switch(
+                  value: !task.isCancelled,
+                  onChanged: (value) {
+                    task.isCancelled = !value;
+                    setState(() {});
+                    FlutterToastr.show(
+                      value ? '任务已启用' : '任务已禁用',
+                      context,
+                      duration: 1,
+                    );
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () => _cancelTask(task, index),
+                ),
+              ],
             ),
           ),
         );
@@ -144,6 +240,11 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   '暂无事件监听器',
                   style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  '事件监听器由规则引擎和工作流自动注册',
+                  style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                ),
               ],
             ),
           )
@@ -152,25 +253,33 @@ class _McpAutomationPageState extends State<McpAutomationPage>
             final eventName = entry.key;
             final callbacks = entry.value;
             return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: _getEventTypeColor(eventName),
-                    child: Icon(_getEventTypeIcon(eventName),
-                        color: Colors.white, size: 20),
-                  ),
-                  title: Text(_getEventTypeName(eventName)),
-                  subtitle: Text('${callbacks.length} 个回调函数已注册'),
-                  trailing: Switch(
-                    value: true,
-                    onChanged: (value) {
-                      // 任务启用/禁用：通过 switch 状态控制
-                    },
-                  ),
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: _getEventTypeColor(eventName),
+                  child: Icon(_getEventTypeIcon(eventName),
+                      color: Colors.white, size: 20),
                 ),
-              );
+                title: Text(_getEventTypeName(eventName)),
+                subtitle: Text('${callbacks.length} 个回调函数已注册'),
+                trailing: Switch(
+                  value: true,
+                  onChanged: (value) {
+                    if (!value) {
+                      _eventAutomation.removeAllListeners(eventName);
+                    }
+                    setState(() {});
+                    FlutterToastr.show(
+                      value ? '监听器已启用' : '监听器已禁用',
+                      context,
+                      duration: 1,
+                    );
+                  },
+                ),
+              ),
+            );
           }),
-        const SizedBox(height: 60),
+        const SizedBox(height: 16),
         Card(
           color: Colors.blue.withValues(alpha: 0.1),
           child: Padding(
@@ -192,12 +301,17 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   ],
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  '• HTTP 请求事件：监听新的 HTTP 请求\n'
-                  '• 网络状态事件：监听网络连接/断开\n'
-                  '• 代理状态事件：监听代理启动/停止',
-                  style: TextStyle(fontSize: 12, color: Colors.black87),
-                ),
+                _buildEventDesc('capture_start', '抓包开始', Icons.play_arrow),
+                const SizedBox(height: 8),
+                _buildEventDesc('capture_stop', '抓包停止', Icons.stop),
+                const SizedBox(height: 8),
+                _buildEventDesc('http_request:*', 'HTTP 请求', Icons.http),
+                const SizedBox(height: 8),
+                _buildEventDesc('response_received', '收到响应', Icons.http),
+                const SizedBox(height: 8),
+                _buildEventDesc('network_status:*', '网络状态变化', Icons.wifi),
+                const SizedBox(height: 8),
+                _buildEventDesc('proxy_status:*', '代理状态变化', Icons.security),
               ],
             ),
           ),
@@ -227,6 +341,12 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                 Text(
                   '规则可根据条件自动执行操作',
                   style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: () => _showAddRuleDialog(context),
+                  icon: const Icon(Icons.add),
+                  label: const Text('添加规则'),
                 ),
               ],
             ),
@@ -267,13 +387,29 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                                 padding: const EdgeInsets.only(top: 4),
                                 child: Text('• ${_formatAction(a)}'),
                               )),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton.icon(
+                                onPressed: () => _editRule(rule),
+                                icon: const Icon(Icons.edit, size: 16),
+                                label: const Text('编辑'),
+                              ),
+                              TextButton.icon(
+                                onPressed: () => _deleteRule(rule),
+                                icon: const Icon(Icons.delete, size: 16, color: Colors.red),
+                                label: const Text('删除', style: TextStyle(color: Colors.red)),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
                   ],
                 ),
               )),
-        const SizedBox(height: 60),
+        const SizedBox(height: 16),
         Card(
           color: Colors.purple.withValues(alpha: 0.1),
           child: Padding(
@@ -309,10 +445,192 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     );
   }
 
+  Widget _buildWorkflowTab() {
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        ..._workflows.map((workflow) => Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: workflow['enabled'] ? Colors.green : Colors.grey,
+                  child: Icon(Icons.auto_awesome, color: Colors.white, size: 20),
+                ),
+                title: Text(workflow['name']),
+                subtitle: Text(workflow['description']),
+                trailing: Switch(
+                  value: workflow['enabled'],
+                  onChanged: (value) {
+                    workflow['enabled'] = value;
+                    setState(() {});
+                    FlutterToastr.show(
+                      value ? '工作流已启用' : '工作流已禁用',
+                      context,
+                      duration: 1,
+                    );
+                  },
+                ),
+                onTap: () => _showWorkflowDetail(workflow),
+              ),
+            )),
+        const SizedBox(height: 16),
+        Card(
+          color: Colors.orange.withValues(alpha: 0.1),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.orange, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      '工作流说明',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  '工作流是预定义的自动化脚本，可根据触发条件自动执行一系列操作\n'
+                  '• 触发器：HTTP 请求、响应、定时等\n'
+                  '• 操作：分析、记录、通知、修改等',
+                  style: TextStyle(fontSize: 12, color: Colors.black87),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPromptsTab() {
+    if (_isLoadingPrompts) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_prompts.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.lightbulb_outline, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              '暂无 Prompts 模板',
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Prompts 是预定义的 AI 提示模板',
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: _prompts.length,
+      itemBuilder: (context, index) {
+        final prompt = _prompts[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ExpansionTile(
+            leading: CircleAvatar(
+              backgroundColor: Colors.amber,
+              child: Icon(Icons.lightbulb_outline, color: Colors.white, size: 20),
+            ),
+            title: Text(prompt['name']),
+            subtitle: Text(prompt['description']),
+            children: [
+              const Divider(),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('参数:',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    if (prompt['arguments'] == null || (prompt['arguments'] as List).isEmpty)
+                      const Text('无参数')
+                    else
+                      ...(prompt['arguments'] as List).map((arg) => Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  arg['required'] == true
+                                      ? Icons.star
+                                      : Icons.star_border,
+                                  size: 16,
+                                  color: arg['required'] == true
+                                      ? Colors.amber
+                                      : Colors.grey,
+                                ),
+                                const SizedBox(width: 8),
+                                Text('${arg['name']}: ${arg['description']}'),
+                              ],
+                            ),
+                          )),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: () => _usePrompt(prompt),
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('使用此模板'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRootsTab() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: _roots.length,
+      itemBuilder: (context, index) {
+        final root = _roots[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: Colors.teal,
+              child: Icon(Icons.folder, color: Colors.white, size: 20),
+            ),
+            title: Text(root['name']),
+            subtitle: Text('${root['uri']}\n${root['description']}'),
+            trailing: IconButton(
+              icon: const Icon(Icons.open_in_new),
+              onPressed: () => _openRoot(root),
+            ),
+            onTap: () => _copyRootUri(root),
+          ),
+        );
+      },
+    );
+  }
+
   void _showAddTaskDialog(BuildContext context) {
     final nameController = TextEditingController();
-    DateTime selectedTime = DateTime.now().add(const Duration(minutes: 1));
+    DateTime selectedDate = DateTime.now().add(const Duration(minutes: 1));
     bool repeatDaily = false;
+    String selectedTaskType = 'mcp_tool';
+    String? selectedToolName;
+    String? selectedScriptPath;
+
+    // MCP 工具列表
+    final mcpTools = _mcpServer.getToolList();
 
     showDialog(
       context: context,
@@ -332,31 +650,91 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text('执行时间:'),
+                const Text('任务类型:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: selectedTaskType,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'mcp_tool', child: Text('MCP 工具调用')),
+                    DropdownMenuItem(value: 'script', child: Text('脚本执行')),
+                    DropdownMenuItem(value: 'notification', child: Text('系统通知')),
+                  ],
+                  onChanged: (value) {
+                    setDialogState(() {
+                      selectedTaskType = value ?? 'mcp_tool';
+                      selectedToolName = null;
+                      selectedScriptPath = null;
+                    });
+                  },
+                ),
+                if (selectedTaskType == 'mcp_tool') ...[
+                  const SizedBox(height: 16),
+                  const Text('选择 MCP 工具:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: selectedToolName,
+                    decoration: const InputDecoration(
+                      labelText: '工具名称',
+                      border: OutlineInputBorder(),
+                    ),
+                    hint: const Text('请选择要调用的工具'),
+                    items: mcpTools.map((tool) => DropdownMenuItem(
+                      value: tool['name'] as String,
+                      child: Text(tool['name'] as String),
+                    )).toList(),
+                    onChanged: (value) {
+                      setDialogState(() => selectedToolName = value);
+                    },
+                  ),
+                ],
+                if (selectedTaskType == 'script') ...[
+                  const SizedBox(height: 16),
+                  const Text('脚本路径:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  TextField(
+                    decoration: const InputDecoration(
+                      labelText: '脚本路径',
+                      hintText: '例如：/workspace/scripts/monitor.dart',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) => selectedScriptPath = value,
+                  ),
+                ],
+                const SizedBox(height: 16),
+                const Text('执行时间:', style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 ElevatedButton.icon(
                   onPressed: () async {
-                    final picked = await showTimePicker(
+                    final picked = await showDatePicker(
                       context: context,
-                      initialTime: TimeOfDay.fromDateTime(selectedTime),
+                      initialDate: selectedDate,
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
                     );
                     if (picked != null) {
-                      setDialogState(() {
-                        selectedTime = DateTime(
-                          selectedTime.year,
-                          selectedTime.month,
-                          selectedTime.day,
-                          picked.hour,
-                          picked.minute,
-                        );
-                        if (selectedTime.isBefore(DateTime.now())) {
-                          selectedTime = selectedTime.add(const Duration(days: 1));
-                        }
-                      });
+                      final time = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.fromDateTime(selectedDate),
+                      );
+                      if (time != null) {
+                        setDialogState(() {
+                          selectedDate = DateTime(
+                            picked.year,
+                            picked.month,
+                            picked.day,
+                            time.hour,
+                            time.minute,
+                          );
+                        });
+                      }
                     }
                   },
                   icon: const Icon(Icons.access_time),
-                  label: Text('${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}'),
+                  label: Text(_formatDateTime(selectedDate)),
                 ),
                 const SizedBox(height: 16),
                 Row(
@@ -385,14 +763,40 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                       duration: 2, backgroundColor: Colors.red);
                   return;
                 }
+                if (selectedTaskType == 'mcp_tool' && selectedToolName == null) {
+                  FlutterToastr.show('请选择 MCP 工具', context,
+                      duration: 2, backgroundColor: Colors.red);
+                  return;
+                }
+                if (selectedTaskType == 'script' && (selectedScriptPath == null || selectedScriptPath!.isEmpty)) {
+                  FlutterToastr.show('请输入脚本路径', context,
+                      duration: 2, backgroundColor: Colors.red);
+                  return;
+                }
 
                 _scheduler.scheduleTask(
                   name: nameController.text,
-                  executeAt: selectedTime,
+                  executeAt: selectedDate,
                   action: () {
                     logger.i('执行定时任务：${nameController.text}');
+                    // 根据任务类型执行不同动作
+                    switch (selectedTaskType) {
+                      case 'mcp_tool':
+                        logger.i('调用 MCP 工具：$selectedToolName');
+                        // _mcpServer.callTool(selectedToolName!, {});
+                        break;
+                      case 'script':
+                        logger.i('执行脚本：$selectedScriptPath');
+                        break;
+                      case 'notification':
+                        logger.i('发送系统通知');
+                        break;
+                    }
                   },
                   repeatDaily: repeatDaily,
+                  taskType: selectedTaskType,
+                  toolName: selectedToolName,
+                  scriptPath: selectedScriptPath,
                 );
 
                 Navigator.pop(context);
@@ -408,12 +812,31 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     );
   }
 
-  void _cancelTask(dynamic task) {
-    task.isCancelled = true;
-    _scheduler.cancelAll();
-    setState(() {});
-    FlutterToastr.show('任务已取消', context,
-        duration: 2, backgroundColor: Colors.green);
+  void _cancelTask(dynamic task, int index) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认删除'),
+        content: Text('确定要删除任务 "${task.name}" 吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              _scheduler.tasks.removeAt(index);
+              Navigator.pop(context);
+              FlutterToastr.show('任务已删除', context,
+                  duration: 1, backgroundColor: Colors.green);
+              setState(() {});
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('删除', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _toggleRule(dynamic rule) {
@@ -421,17 +844,464 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     setState(() {});
     FlutterToastr.show(
         rule.enabled ? '规则已启用' : '规则已禁用', context,
-        duration: 2, backgroundColor: Colors.green);
+        duration: 1, backgroundColor: Colors.green);
+  }
+
+  void _showAddRuleDialog(BuildContext context) {
+    // TODO: 实现添加规则对话框
+    FlutterToastr.show('功能开发中', context, duration: 1);
+  }
+
+  void _editRule(dynamic rule) {
+    // TODO: 实现编辑规则对话框
+    FlutterToastr.show('功能开发中', context, duration: 1);
+  }
+
+  void _deleteRule(dynamic rule) {
+    // TODO: 实现删除规则
+    FlutterToastr.show('功能开发中', context, duration: 1);
+  }
+
+  void _showWorkflowDetail(Map<String, dynamic> workflow) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(workflow['name']),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(workflow['description']),
+              const SizedBox(height: 16),
+              const Text('触发器:', style: TextStyle(fontWeight: FontWeight.bold)),
+              ...workflow['triggers'].map((t) => Text('• $t')),
+              const SizedBox(height: 12),
+              const Text('操作:', style: TextStyle(fontWeight: FontWeight.bold)),
+              ...workflow['actions'].map((a) => Text('• $a')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _usePrompt(Map<String, dynamic> prompt) {
+    // TODO: 实现使用 Prompt 模板
+    FlutterToastr.show('使用模板：${prompt['name']}', context, duration: 1);
+  }
+
+  void _openRoot(Map<String, dynamic> root) {
+    // TODO: 实现打开 Root 目录
+    FlutterToastr.show('打开目录：${root['name']}', context, duration: 1);
+  }
+
+  void _copyRootUri(Map<String, dynamic> root) {
+    // TODO: 复制 URI 到剪贴板
+    FlutterToastr.show('已复制：${root['uri']}', context, duration: 1);
+  }
+
+  /// 根据当前标签页处理 FAB 点击
+  void _handleFabPress(BuildContext context) {
+    switch (_tabController.index) {
+      case 0: // 定时任务
+        _showAddTaskDialog(context);
+        break;
+      case 1: // 事件监听
+        _showAddEventListenerDialog(context);
+        break;
+      case 2: // 规则引擎
+        _showAddRuleDialog(context);
+        break;
+      case 3: // 工作流
+        _showAddWorkflowDialog(context);
+        break;
+      case 4: // Prompts
+        FlutterToastr.show('Prompts 模板由 MCP 服务器提供', context, duration: 1);
+        break;
+      case 5: // Roots
+        FlutterToastr.show('Roots 目录为内置配置', context, duration: 1);
+        break;
+    }
+  }
+
+  /// 添加事件监听器对话框
+  void _showAddEventListenerDialog(BuildContext context) {
+    final nameController = TextEditingController();
+    String selectedEvent = 'http_request:*';
+    final callbackNameController = TextEditingController();
+
+    final eventTypes = [
+      {'value': 'http_request:*', 'label': 'HTTP 请求'},
+      {'value': 'response_received', 'label': '收到响应'},
+      {'value': 'capture_start', 'label': '抓包开始'},
+      {'value': 'capture_stop', 'label': '抓包停止'},
+      {'value': 'network_status:*', 'label': '网络状态变化'},
+      {'value': 'proxy_status:*', 'label': '代理状态变化'},
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('添加事件监听器'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: '监听器名称',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('监听事件:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: selectedEvent,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                ),
+                items: eventTypes.map((e) => DropdownMenuItem(
+                  value: e['value'] as String,
+                  child: Text(e['label'] as String),
+                )).toList(),
+                onChanged: (value) {
+                  selectedEvent = value ?? selectedEvent;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: callbackNameController,
+                decoration: const InputDecoration(
+                  labelText: '回调函数名称',
+                  hintText: '例如：onRequestReceived',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '回调函数将在事件触发时执行，可使用 MCP 工具进行自动化操作',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (nameController.text.isEmpty) {
+                FlutterToastr.show('请输入监听器名称', context, duration: 2);
+                return;
+              }
+              if (callbackNameController.text.isEmpty) {
+                FlutterToastr.show('请输入回调函数名称', context, duration: 2);
+                return;
+              }
+
+              // 注册事件监听器
+              _eventAutomation.addListener(selectedEvent, (eventData) {
+                logger.i('事件 $selectedEvent 触发，监听器：${nameController.text}');
+                // 执行回调逻辑
+              });
+
+              Navigator.pop(context);
+              FlutterToastr.show('事件监听器已添加', context, duration: 2);
+              setState(() {});
+            },
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 添加规则对话框
+  void _showAddRuleDialog(BuildContext context) {
+    final nameController = TextEditingController();
+    String conditionType = 'url_contains';
+    final conditionValueController = TextEditingController();
+    String actionType = 'redirect';
+    final actionValueController = TextEditingController();
+
+    final conditionTypes = [
+      {'value': 'url_contains', 'label': 'URL 包含'},
+      {'value': 'url_matches', 'label': 'URL 正则匹配'},
+      {'value': 'method_equals', 'label': '请求方法等于'},
+      {'value': 'status_code_equals', 'label': '状态码等于'},
+      {'value': 'header_contains', 'label': '请求头包含'},
+      {'value': 'body_contains', 'label': '请求体包含'},
+    ];
+
+    final actionTypes = [
+      {'value': 'redirect', 'label': '重定向'},
+      {'value': 'modify_header', 'label': '修改请求头'},
+      {'value': 'modify_body', 'label': '修改请求体'},
+      {'value': 'block', 'label': '阻止请求'},
+      {'value': 'log', 'label': '记录日志'},
+      {'value': 'notify', 'label': '发送通知'},
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('添加自动化规则'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: '规则名称',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('触发条件:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: conditionType,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                ),
+                items: conditionTypes.map((c) => DropdownMenuItem(
+                  value: c['value'] as String,
+                  child: Text(c['label'] as String),
+                )).toList(),
+                onChanged: (value) {
+                  conditionType = value ?? conditionType;
+                },
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: conditionValueController,
+                decoration: const InputDecoration(
+                  labelText: '条件值',
+                  hintText: '例如：api.example.com',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('执行操作:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: actionType,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                ),
+                items: actionTypes.map((a) => DropdownMenuItem(
+                  value: a['value'] as String,
+                  child: Text(a['label'] as String),
+                )).toList(),
+                onChanged: (value) {
+                  actionType = value ?? actionType;
+                },
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: actionValueController,
+                decoration: const InputDecoration(
+                  labelText: '操作值',
+                  hintText: '例如：https://new-url.com',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (nameController.text.isEmpty) {
+                FlutterToastr.show('请输入规则名称', context, duration: 2);
+                return;
+              }
+              if (conditionValueController.text.isEmpty) {
+                FlutterToastr.show('请输入条件值', context, duration: 2);
+                return;
+              }
+
+              // 添加规则到规则引擎
+              _ruleEngine.addRule({
+                'name': nameController.text,
+                'enabled': true,
+                'priority': 1,
+                'conditions': [
+                  {'type': conditionType, 'value': conditionValueController.text},
+                ],
+                'actions': [
+                  {'type': actionType, 'value': actionValueController.text},
+                ],
+              });
+
+              Navigator.pop(context);
+              FlutterToastr.show('规则已添加', context, duration: 2);
+              setState(() {});
+            },
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 添加工作流对话框
+  void _showAddWorkflowDialog(BuildContext context) {
+    final nameController = TextEditingController();
+    final descriptionController = TextEditingController();
+    List<String> selectedTriggers = [];
+    List<String> selectedActions = [];
+
+    final triggerOptions = [
+      {'value': 'http_request', 'label': 'HTTP 请求'},
+      {'value': 'response_received', 'label': '收到响应'},
+      {'value': 'capture_start', 'label': '抓包开始'},
+      {'value': 'scheduled', 'label': '定时触发'},
+    ];
+
+    final actionOptions = [
+      {'value': 'analyze', 'label': '分析数据'},
+      {'value': 'notify', 'label': '发送通知'},
+      {'value': 'log', 'label': '记录日志'},
+      {'value': 'report', 'label': '生成报告'},
+      {'value': 'modify', 'label': '修改请求'},
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('添加工作流'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: '工作流名称',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: descriptionController,
+                  decoration: const InputDecoration(
+                    labelText: '描述',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 16),
+                const Text('触发器:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                ...triggerOptions.map((t) => CheckboxListTile(
+                  title: Text(t['label'] as String),
+                  value: selectedTriggers.contains(t['value']),
+                  onChanged: (checked) {
+                    setDialogState(() {
+                      if (checked == true) {
+                        selectedTriggers.add(t['value'] as String);
+                      } else {
+                        selectedTriggers.remove(t['value']);
+                      }
+                    });
+                  },
+                )),
+                const SizedBox(height: 16),
+                const Text('操作:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                ...actionOptions.map((a) => CheckboxListTile(
+                  title: Text(a['label'] as String),
+                  value: selectedActions.contains(a['value']),
+                  onChanged: (checked) {
+                    setDialogState(() {
+                      if (checked == true) {
+                        selectedActions.add(a['value'] as String);
+                      } else {
+                        selectedActions.remove(a['value']);
+                      }
+                    });
+                  },
+                )),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (nameController.text.isEmpty) {
+                  FlutterToastr.show('请输入工作流名称', context, duration: 2);
+                  return;
+                }
+                if (selectedTriggers.isEmpty) {
+                  FlutterToastr.show('请至少选择一个触发器', context, duration: 2);
+                  return;
+                }
+                if (selectedActions.isEmpty) {
+                  FlutterToastr.show('请至少选择一个操作', context, duration: 2);
+                  return;
+                }
+
+                // 添加工作流
+                _workflows.add({
+                  'name': nameController.text,
+                  'description': descriptionController.text,
+                  'enabled': true,
+                  'triggers': selectedTriggers,
+                  'actions': selectedActions,
+                });
+
+                Navigator.pop(context);
+                FlutterToastr.show('工作流已添加', context, duration: 2);
+                setState(() {});
+              },
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Color _getEventTypeColor(String eventType) {
     switch (eventType) {
       case 'http_request':
+      case 'http_request:*':
         return Colors.blue;
       case 'network_status':
+      case 'network_status:*':
         return Colors.green;
       case 'proxy_status':
+      case 'proxy_status:*':
         return Colors.orange;
+      case 'capture_start':
+        return Colors.teal;
+      case 'capture_stop':
+        return Colors.red;
       default:
         return Colors.grey;
     }
@@ -440,11 +1310,18 @@ class _McpAutomationPageState extends State<McpAutomationPage>
   IconData _getEventTypeIcon(String eventType) {
     switch (eventType) {
       case 'http_request':
+      case 'http_request:*':
         return Icons.http;
       case 'network_status':
+      case 'network_status:*':
         return Icons.wifi;
       case 'proxy_status':
+      case 'proxy_status:*':
         return Icons.security;
+      case 'capture_start':
+        return Icons.play_arrow;
+      case 'capture_stop':
+        return Icons.stop;
       default:
         return Icons.event;
     }
@@ -453,11 +1330,18 @@ class _McpAutomationPageState extends State<McpAutomationPage>
   String _getEventTypeName(String eventType) {
     switch (eventType) {
       case 'http_request':
+      case 'http_request:*':
         return 'HTTP 请求事件';
       case 'network_status':
+      case 'network_status:*':
         return '网络状态事件';
       case 'proxy_status':
+      case 'proxy_status:*':
         return '代理状态事件';
+      case 'capture_start':
+        return '抓包开始';
+      case 'capture_stop':
+        return '抓包停止';
       default:
         return eventType;
     }
@@ -479,122 +1363,28 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     return '${time.month.toString().padLeft(2, '0')}-${time.day.toString().padLeft(2, '0')} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
   }
 
+  String _formatDateTime(DateTime time) {
+    return '${time.year}-${time.month.toString().padLeft(2, '0')}-${time.day.toString().padLeft(2, '0')} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
   String _formatCondition(dynamic condition) {
     return '${condition.field} ${condition.operator} ${condition.value}';
   }
 
   String _formatAction(dynamic action) {
-    return '${action.type}: ${action.params}';
+    return '${action.type}: ${action.description}';
   }
 
-  Widget _buildWorkflowTab() {
-    if (_workflows.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.auto_awesome, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              '暂无工作流',
-              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '工作流可编排多个脚本顺序执行',
-              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-            ),
-          ],
+  Widget _buildEventDesc(String code, String name, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: Colors.grey[600]),
+        const SizedBox(width: 8),
+        Text(
+          '$code：$name',
+          style: TextStyle(fontSize: 13, color: Colors.grey[700]),
         ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: _workflows.length,
-      itemBuilder: (context, index) {
-        final workflow = _workflows[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ExpansionTile(
-            leading: CircleAvatar(
-              backgroundColor: workflow['enabled'] ? Colors.green : Colors.grey,
-              child: Icon(Icons.auto_awesome, color: Colors.white, size: 20),
-            ),
-            title: Text(workflow['name'] ?? '未命名工作流'),
-            subtitle: Text(
-              '${workflow['nodes']?.length ?? 0} 个节点 • ${workflow['successCount'] ?? 0} 次成功 • 成功率：${workflow['successRate'] ?? 0}%',
-            ),
-            trailing: Switch(
-              value: workflow['enabled'] ?? false,
-              onChanged: (value) {
-                setState(() {
-                  workflow['enabled'] = value;
-                });
-              },
-            ),
-            children: [
-              const Divider(),
-              if (workflow['nodes'] != null)
-                ...workflow['nodes'].map<Widget>((node) {
-                  return ListTile(
-                    dense: true,
-                    leading: Icon(_getScriptTypeIcon(node['type']), size: 18),
-                    title: Text(node['name'] ?? '未命名节点', style: const TextStyle(fontSize: 13)),
-                    subtitle: Text(node['dependencies']?.isNotEmpty == true 
-                        ? '依赖：${node['dependencies'].join(', ')}' 
-                        : '无依赖', style: const TextStyle(fontSize: 11)),
-                  );
-                }).toList(),
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton.icon(
-                      icon: const Icon(Icons.play_arrow, size: 18),
-                      onPressed: () {
-                        FlutterToastr.show('开始执行工作流', context, backgroundColor: Colors.green);
-                      },
-                      label: const Text('执行'),
-                    ),
-                    TextButton.icon(
-                      icon: const Icon(Icons.edit, size: 18),
-                      onPressed: () {
-                        FlutterToastr.show('编辑工作流', context);
-                      },
-                      label: const Text('编辑'),
-                    ),
-                    TextButton.icon(
-                      icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                      onPressed: () {
-                        setState(() {
-                          _workflows.removeAt(index);
-                        });
-                        FlutterToastr.show('工作流已删除', context, backgroundColor: Colors.green);
-                      },
-                      label: const Text('删除', style: TextStyle(color: Colors.red)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+      ],
     );
-  }
-
-  IconData _getScriptTypeIcon(String? type) {
-    switch (type) {
-      case 'javascript':
-        return Icons.javascript;
-      case 'dart':
-        return Icons.code;
-      case 'shell':
-        return Icons.terminal;
-      default:
-        return Icons.description;
-    }
   }
 }

@@ -12,10 +12,13 @@ class PerformanceDashboard extends StatefulWidget {
 class _PerformanceDashboardState extends State<PerformanceDashboard> {
   bool _isRefreshing = false;
   DateTime _lastUpdateTime = DateTime.now();
+  Map<String, dynamic>? _stats;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
+    _loadStats();
     _startAutoRefresh();
   }
 
@@ -23,22 +26,34 @@ class _PerformanceDashboardState extends State<PerformanceDashboard> {
     // 每 2 秒自动刷新一次
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
-        setState(() {
-          _lastUpdateTime = DateTime.now();
-        });
+        _loadStats();
         _startAutoRefresh();
       }
     });
   }
 
+  void _loadStats() {
+    try {
+      final pool = ConnectionPool.instance;
+      setState(() {
+        _stats = pool.getStats();
+        _errorMessage = null;
+        _lastUpdateTime = DateTime.now();
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = '加载数据失败：${e.toString()}';
+        _lastUpdateTime = DateTime.now();
+      });
+    }
+  }
+
   Future<void> _refresh() async {
     if (_isRefreshing) return;
     setState(() => _isRefreshing = true);
+    _loadStats();
     await Future.delayed(const Duration(milliseconds: 300));
-    setState(() {
-      _isRefreshing = false;
-      _lastUpdateTime = DateTime.now();
-    });
+    setState(() => _isRefreshing = false);
   }
 
   @override
@@ -55,23 +70,55 @@ class _PerformanceDashboardState extends State<PerformanceDashboard> {
             ),
           ],
         ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildLastUpdateTime(),
-              const SizedBox(height: 16),
-              _buildPerformanceOverview(),
-              const SizedBox(height: 16),
-              _buildConnectionPoolStatus(),
-              const SizedBox(height: 16),
-              _buildPerformanceMetrics(),
-              const SizedBox(height: 16),
-              _buildRequestStats(),
-            ],
-          ),
-        ),
+        body: _errorMessage != null
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+                    const SizedBox(height: 16),
+                    Text(
+                      _errorMessage!,
+                      style: TextStyle(color: Colors.grey[600]),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: _refresh,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('重试'),
+                    ),
+                  ],
+                ),
+              )
+            : _stats == null
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text('正在加载数据...'),
+                      ],
+                    ),
+                  )
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildLastUpdateTime(),
+                        const SizedBox(height: 16),
+                        _buildPerformanceOverview(),
+                        const SizedBox(height: 16),
+                        _buildConnectionPoolStatus(),
+                        const SizedBox(height: 16),
+                        _buildPerformanceMetrics(),
+                        const SizedBox(height: 16),
+                        _buildRequestStats(),
+                      ],
+                    ),
+                  ),
       ),
     );
   }
@@ -85,8 +132,10 @@ class _PerformanceDashboardState extends State<PerformanceDashboard> {
 
   /// 性能概览卡片
   Widget _buildPerformanceOverview() {
-    final pool = ConnectionPool.instance;
-    final stats = pool.getStats();
+    if (_stats == null) {
+      return _buildEmptyCard('性能概览', Icons.speed, Colors.blue);
+    }
+    final stats = _stats!;
     
     return Card(
       child: Padding(
@@ -105,10 +154,10 @@ class _PerformanceDashboardState extends State<PerformanceDashboard> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildStatItem('总请求', '${stats['totalRequests']}', Colors.blue),
-                _buildStatItem('成功', '${stats['successfulRequests']}', Colors.green),
-                _buildStatItem('失败', '${stats['failedRequests']}', Colors.red),
-                _buildStatItem('成功率', '${stats['successRate'].toStringAsFixed(1)}%', Colors.orange),
+                _buildStatItem('总请求', '${stats['totalRequests'] ?? 0}', Colors.blue),
+                _buildStatItem('成功', '${stats['successfulRequests'] ?? 0}', Colors.green),
+                _buildStatItem('失败', '${stats['failedRequests'] ?? 0}', Colors.red),
+                _buildStatItem('成功率', '${((stats['successRate'] ?? 0.0).toStringAsFixed(1))}%', Colors.orange),
               ],
             ),
           ],
@@ -119,8 +168,10 @@ class _PerformanceDashboardState extends State<PerformanceDashboard> {
 
   /// 连接池状态卡片
   Widget _buildConnectionPoolStatus() {
-    final pool = ConnectionPool.instance;
-    final stats = pool.getStats();
+    if (_stats == null) {
+      return _buildEmptyCard('连接池状态', Icons.pool, Colors.teal);
+    }
+    final stats = _stats!;
     
     return Card(
       child: Padding(
@@ -136,17 +187,17 @@ class _PerformanceDashboardState extends State<PerformanceDashboard> {
               ],
             ),
             const SizedBox(height: 16),
-            _buildProgressBar('活跃连接', stats['activeConnections'] as int, stats['maxConnections'] as int, Colors.teal),
+            _buildProgressBar('活跃连接', stats['activeConnections'] as int? ?? 0, stats['maxConnections'] as int? ?? 100, Colors.teal),
             const SizedBox(height: 12),
-            _buildProgressBar('空闲连接', stats['idleConnections'] as int, stats['maxConnections'] as int, Colors.green),
+            _buildProgressBar('空闲连接', stats['idleConnections'] as int? ?? 0, stats['maxConnections'] as int? ?? 100, Colors.green),
             const SizedBox(height: 12),
-            _buildProgressBar('等待队列', stats['waitingRequests'] as int, 50, Colors.orange),
+            _buildProgressBar('等待队列', stats['waitingRequests'] as int? ?? 0, 50, Colors.orange),
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('连接复用率:', style: TextStyle(color: Colors.grey[700])),
-                Text('${stats['reuseRate'].toStringAsFixed(1)}%', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal[700])),
+                Text('${((stats['reuseRate'] ?? 0.0).toStringAsFixed(1))}%', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal[700])),
               ],
             ),
           ],
@@ -157,8 +208,10 @@ class _PerformanceDashboardState extends State<PerformanceDashboard> {
 
   /// 性能指标卡片
   Widget _buildPerformanceMetrics() {
-    final pool = ConnectionPool.instance;
-    final stats = pool.getStats();
+    if (_stats == null) {
+      return _buildEmptyCard('性能指标', Icons.analytics, Colors.purple);
+    }
+    final stats = _stats!;
     
     return Card(
       child: Padding(
@@ -174,15 +227,15 @@ class _PerformanceDashboardState extends State<PerformanceDashboard> {
               ],
             ),
             const SizedBox(height: 16),
-            _buildMetricRow('平均响应时间', '${(stats['avgResponseTime'] as num).toStringAsFixed(0)}ms'),
+            _buildMetricRow('平均响应时间', '${((stats['avgResponseTime'] as num? ?? 0).toStringAsFixed(0))}ms'),
             const Divider(height: 24),
-            _buildMetricRow('最快响应', '${(stats['minResponseTime'] as num).toStringAsFixed(0)}ms'),
+            _buildMetricRow('最快响应', '${((stats['minResponseTime'] as num? ?? 0).toStringAsFixed(0))}ms'),
             const Divider(height: 24),
-            _buildMetricRow('最慢响应', '${(stats['maxResponseTime'] as num).toStringAsFixed(0)}ms'),
+            _buildMetricRow('最慢响应', '${((stats['maxResponseTime'] as num? ?? 0).toStringAsFixed(0))}ms'),
             const Divider(height: 24),
-            _buildMetricRow('P95 响应时间', '${(stats['p95ResponseTime'] as num).toStringAsFixed(0)}ms'),
+            _buildMetricRow('P95 响应时间', '${((stats['p95ResponseTime'] as num? ?? 0).toStringAsFixed(0))}ms'),
             const Divider(height: 24),
-            _buildMetricRow('P99 响应时间', '${(stats['p99ResponseTime'] as num).toStringAsFixed(0)}ms'),
+            _buildMetricRow('P99 响应时间', '${((stats['p99ResponseTime'] as num? ?? 0).toStringAsFixed(0))}ms'),
           ],
         ),
       ),
@@ -191,8 +244,10 @@ class _PerformanceDashboardState extends State<PerformanceDashboard> {
 
   /// 请求统计卡片
   Widget _buildRequestStats() {
-    final pool = ConnectionPool.instance;
-    final stats = pool.getStats();
+    if (_stats == null) {
+      return _buildEmptyCard('请求统计', Icons.list_alt, Colors.indigo);
+    }
+    final stats = _stats!;
     final breakdown = stats['requestBreakdown'] as Map<String, int>? ?? {};
     
     return Card(
@@ -225,6 +280,24 @@ class _PerformanceDashboardState extends State<PerformanceDashboard> {
                 child: Text('暂无数据', style: TextStyle(color: Colors.grey[400])),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 空状态卡片
+  Widget _buildEmptyCard(String title, IconData icon, MaterialColor color) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          children: [
+            Icon(icon, size: 48, color: color[300]),
+            const SizedBox(height: 12),
+            Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color[700])),
+            const SizedBox(height: 8),
+            Text('暂无数据', style: TextStyle(color: Colors.grey[500])),
           ],
         ),
       ),
