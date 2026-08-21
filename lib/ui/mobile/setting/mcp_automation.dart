@@ -4,7 +4,7 @@ import 'package:flutter_toastr/flutter_toastr.dart';
 import 'package:proxypin/l10n/app_localizations.dart';
 import 'package:proxypin/network/mcp/mcp_scheduler.dart';
 import 'package:proxypin/network/mcp/mcp_event_automation.dart';
-import 'package:proxypin/network/mcp/mcp_rule_engine.dart' hide Action, Condition, Rule;
+import 'package:proxypin/network/mcp/mcp_rule_engine.dart' as mcp;
 import 'package:proxypin/network/mcp/mcp_server.dart';
 import 'package:proxypin/network/util/logger.dart';
 
@@ -21,7 +21,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
   late TabController _tabController;
   final McpScheduler _scheduler = McpScheduler();
   final McpEventAutomation _eventAutomation = McpEventAutomation();
-  final McpRuleEngine _ruleEngine = McpRuleEngine();
+  final mcp.McpRuleEngine _ruleEngine = mcp.McpRuleEngine();
   final McpServer _mcpServer = McpServer();
   
   // Prompts 相关状态
@@ -1132,24 +1132,24 @@ class _McpAutomationPageState extends State<McpAutomationPage>
               }
 
               // 添加规则到规则引擎
-              _ruleEngine.addRule(Rule(
+              _ruleEngine.addRule(mcp.Rule(
                 id: DateTime.now().millisecondsSinceEpoch.toString(),
                 name: nameController.text,
                 conditions: [
-                  Condition(
-                    type: ConditionType.custom,
+                  mcp.Condition(
+                    type: mcp.ConditionType.custom,
                     field: 'request.url',
-                    operator: Operator.contains,
+                    operator: mcp.Operator.contains,
                     value: conditionValueController.text,
                   ),
                 ],
                 actions: [
-                  Action(
-                    type: ActionType.custom,
+                  mcp.Action(
+                    type: mcp.ActionType.custom,
                     target: actionValueController.text,
                   ),
                 ],
-                priority: RulePriority.normal,
+                priority: mcp.RulePriority.normal,
                 enabled: true,
               ));
 
