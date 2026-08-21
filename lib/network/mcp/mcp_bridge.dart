@@ -292,7 +292,7 @@ class McpBridge implements EventListener {
     if (!_webSocketInterceptEnabled) return;
     
     // 自动暂停所有 WebSocket 消息
-    final url = message.request?.url?.toString() ?? 'unknown';
+    final url = message.requestUrl?.toString() ?? 'unknown';
     final isOutgoing = message is HttpRequest;
     pauseWebSocketMessage(frame, url, isOutgoing);
   }
