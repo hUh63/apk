@@ -480,11 +480,65 @@ class _McpAutomationPageState extends State<McpAutomationPage>
   }
 
   String _formatCondition(dynamic condition) {
-    return '${condition.field} ${condition.operator} ${condition.value}';
+    return '${condition.field} ${_formatOperator(condition.operator)} ${condition.value}';
+  }
+
+  String _formatOperator(Operator operator) {
+    switch (operator) {
+      case Operator.equals:
+        return '=';
+      case Operator.notEquals:
+        return '≠';
+      case Operator.greaterThan:
+        return '>';
+      case Operator.lessThan:
+        return '<';
+      case Operator.greaterThanOrEqual:
+        return '≥';
+      case Operator.lessThanOrEqual:
+        return '≤';
+      case Operator.contains:
+        return '包含';
+      case Operator.startsWith:
+        return '始于';
+      case Operator.endsWith:
+        return '终于';
+      case Operator.matches:
+        return '匹配';
+      case Operator.inList:
+        return '在...中';
+      case Operator.notInList:
+        return '不在...中';
+      case Operator.exists:
+        return '存在';
+      case Operator.notExists:
+        return '不存在';
+    }
   }
 
   String _formatAction(dynamic action) {
-    return '${action.type}: ${action.params}';
+    return '${_formatActionType(action.type)}: ${action.target ?? action.parameters}';
+  }
+
+  String _formatActionType(ActionType type) {
+    switch (type) {
+      case ActionType.log:
+        return '记录';
+      case ActionType.notify:
+        return '通知';
+      case ActionType.stopCapture:
+        return '停止抓包';
+      case ActionType.startCapture:
+        return '开始抓包';
+      case ActionType.exportData:
+        return '导出数据';
+      case ActionType.executeScript:
+        return '执行脚本';
+      case ActionType.sendWebhook:
+        return '发送 Webhook';
+      case ActionType.custom:
+        return '自定义';
+    }
   }
 
   Widget _buildWorkflowTab() {
