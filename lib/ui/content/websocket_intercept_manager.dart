@@ -1,14 +1,34 @@
+/*
+ * Copyright 2023 Hongen Wang All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:proxypin/l10n/app_localizations.dart';
 import 'package:proxypin/network/mcp/mcp_bridge.dart';
 import 'package:proxypin/network/http/websocket.dart';
+import 'package:proxypin/network/rules/websocket_rule_manager.dart';
 import 'package:proxypin/ui/component/app_dialog.dart';
 import 'package:proxypin/ui/component/json/json_text.dart';
 import 'package:proxypin/ui/component/json/json_viewer.dart';
 import 'package:proxypin/ui/component/json/theme.dart';
 import 'package:proxypin/utils/lang.dart';
+
+import 'websocket_rule_manager_page.dart';
 
 /// WebSocket 拦截管理界面 (v1.6.0+)
 /// 显示所有暂停的 WebSocket 消息，支持恢复/中止/修改
@@ -21,12 +41,20 @@ class WebSocketInterceptManager extends StatefulWidget {
 
 class _WebSocketInterceptManagerState extends State<WebSocketInterceptManager> {
   List<PausedWebSocketFrame> _pausedMessages = [];
-  bool _isInterceptEnabled = false;
+  bool _globalEnabled = false;
+  final WebSocketRuleManager _ruleManager = WebSocketRuleManager();
 
   @override
   void initState() {
     super.initState();
-    _isInterceptEnabled = McpBridge().webSocketInterceptEnabled;
+    _initRuleManager();
+  }
+
+  Future<void> _initRuleManager() async {
+    await _ruleManager.init();
+    setState(() {
+      _globalEnabled = _ruleManager.globalEnabled;
+    });
     _loadPausedMessages();
   }
 
@@ -36,10 +64,10 @@ class _WebSocketInterceptManagerState extends State<WebSocketInterceptManager> {
     });
   }
 
-  void _toggleIntercept(bool enabled) {
-    McpBridge().setWebSocketInterceptEnabled(enabled);
+  Future<void> _toggleGlobalEnabled(bool enabled) async {
+    await _ruleManager.setGlobalEnabled(enabled);
     setState(() {
-      _isInterceptEnabled = enabled;
+      _globalEnabled = enabled;
     });
     if (enabled) {
       _loadPausedMessages();
@@ -50,262 +78,236 @@ class _WebSocketInterceptManagerState extends State<WebSocketInterceptManager> {
     McpBridge().resumeWebSocketMessage(frame.frameId);
     _loadPausedMessages();
     if (mounted) {
-      CustomToast.success('消息已恢复').show(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('消息已恢复'), duration: const Duration(seconds: 1)),
+      );
     }
   }
 
-  void _resumeWithModification(PausedWebSocketFrame frame) {
+  void _abortMessage(PausedWebSocketFrame frame) {
+    McpBridge().abortWebSocketMessage(frame.frameId, reason: '用户手动中止');
+    _loadPausedMessages();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('消息已中止'), duration: const Duration(seconds: 1)),
+      );
+    }
+  }
+
+  void _editMessage(PausedWebSocketFrame frame) {
     showDialog(
       context: context,
-      builder: (context) => _ModifyPayloadDialog(
-        frame: frame,
-        onConfirm: (newPayload) {
-          McpBridge().resumeWebSocketMessage(frame.frameId, payload: newPayload);
-          _loadPausedMessages();
-          if (mounted) {
-            CustomToast.success('消息已修改并恢复').show(context);
-          }
-        },
+      builder: (context) => _PayloadEditDialog(frame: frame, onSaved: (newPayload) {
+        McpBridge().resumeWebSocketMessage(frame.frameId, payload: newPayload);
+        _loadPausedMessages();
+      }),
+    );
+  }
+
+  void _navigateToRuleManager() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const WebSocketRuleManagerPage(),
+      ),
+    ).then((_) {
+      // 返回后重新加载规则状态
+      _initRuleManager();
+      _loadPausedMessages();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final appLocalizations = AppLocalizations.of(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('WebSocket 拦截管理'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.rule),
+            tooltip: '管理拦截规则',
+            onPressed: _navigateToRuleManager,
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // 顶部控制栏
+          _buildControlCard(theme),
+          
+          // 消息列表
+          Expanded(
+            child: _pausedMessages.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.web_asset_off, size: 64, color: theme.colorScheme.outline),
+                        const SizedBox(height: 16),
+                        Text(
+                          _globalEnabled 
+                            ? '暂无暂停的 WebSocket 消息' 
+                            : '全局拦截已禁用，开启后将显示暂停的消息',
+                          style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.outline),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _pausedMessages.length,
+                    padding: const EdgeInsets.all(8),
+                    itemBuilder: (context, index) {
+                      final frame = _pausedMessages[index];
+                      return _buildMessageCard(frame, theme);
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }
 
-  void _abortMessage(PausedWebSocketFrame frame) {
-    McpBridge().abortWebSocketMessage(frame.frameId);
-    _loadPausedMessages();
-    if (mounted) {
-      CustomToast.success('消息已中止').show(context);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    AppLocalizations localizations = AppLocalizations.of(context)!;
-
-    return Column(
-      children: [
-        // 顶部控制栏
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: _isInterceptEnabled ? Colors.green.shade50 : Colors.grey.shade100,
-            border: Border(
-              bottom: BorderSide(color: Colors.grey.shade300),
+  Widget _buildControlCard(ThemeData theme) {
+    return Card(
+      margin: const EdgeInsets.all(8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(
+              _globalEnabled ? Icons.shield : Icons.shield_outlined,
+              color: _globalEnabled ? theme.colorScheme.primary : theme.colorScheme.outline,
+              size: 32,
             ),
-          ),
-          child: Row(
-            children: [
-              Switch(
-                value: _isInterceptEnabled,
-                onChanged: _toggleIntercept,
-                activeColor: Colors.green,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'WebSocket 拦截',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      _isInterceptEnabled ? '拦截已启用 - 新消息将被暂停' : '拦截已禁用 - 消息直接放行',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                    ),
-                  ],
-                ),
-              ),
-              if (_pausedMessages.isNotEmpty)
-                Text(
-                  '${_pausedMessages.length} 条暂停',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: _isInterceptEnabled ? Colors.green.shade700 : Colors.grey.shade600,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '全局拦截开关',
+                    style: theme.textTheme.titleMedium,
                   ),
-                ),
-            ],
-          ),
-        ),
-
-        // 消息列表
-        Expanded(
-          child: _pausedMessages.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.web_asset_outlined,
-                        size: 64,
-                        color: Colors.grey.shade400,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _isInterceptEnabled ? '暂无暂停的消息' : '启用拦截以开始捕获 WebSocket 消息',
-                        style: TextStyle(color: Colors.grey.shade500, fontSize: 16),
-                      ),
-                    ],
+                  const SizedBox(height: 4),
+                  Text(
+                    _globalEnabled 
+                      ? '已启用 - 匹配规则的 WebSocket 消息将被暂停' 
+                      : '已禁用 - 所有消息直接放行',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
                   ),
-                )
-              : ListView.builder(
-                  itemCount: _pausedMessages.length,
-                  itemBuilder: (context, index) {
-                    final frame = _pausedMessages[index];
-                    return _PausedMessageCard(
-                      frame: frame,
-                      onResume: () => _resumeMessage(frame),
-                      onModify: () => _resumeWithModification(frame),
-                      onAbort: () => _abortMessage(frame),
-                    );
-                  },
-                ),
+                ],
+              ),
+            ),
+            Switch(
+              value: _globalEnabled,
+              onChanged: _toggleGlobalEnabled,
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
-}
 
-class _PausedMessageCard extends StatelessWidget {
-  final PausedWebSocketFrame frame;
-  final VoidCallback onResume;
-  final VoidCallback onModify;
-  final VoidCallback onAbort;
-
-  const _PausedMessageCard({
-    required this.frame,
-    required this.onResume,
-    required this.onModify,
-    required this.onAbort,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildMessageCard(PausedWebSocketFrame frame, ThemeData theme) {
+    final isOutgoing = frame.isOutgoing;
     final duration = DateTime.now().difference(frame.pausedAt);
-
+    
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 0),
+      child: ExpansionTile(
+        leading: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: isOutgoing 
+              ? theme.colorScheme.primaryContainer 
+              : theme.colorScheme.tertiaryContainer,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            isOutgoing ? 'OUT' : 'IN',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: isOutgoing 
+                ? theme.colorScheme.onPrimaryContainer 
+                : theme.colorScheme.onTertiaryContainer,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        title: Text(
+          frame.url,
+          style: theme.textTheme.bodyMedium,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(
+          '${_getOpcodeName(frame.opcode)} • 暂停 ${duration.inSeconds}秒 • ${frame.payloadPreview}',
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.edit),
+              tooltip: '修改 Payload',
+              onPressed: () => _editMessage(frame),
+              color: theme.colorScheme.primary,
+            ),
+            IconButton(
+              icon: const Icon(Icons.play_arrow),
+              tooltip: '恢复',
+              onPressed: () => _resumeMessage(frame),
+              color: theme.colorScheme.tertiary,
+            ),
+            IconButton(
+              icon: const Icon(Icons.stop),
+              tooltip: '中止',
+              onPressed: () => _abortMessage(frame),
+              color: theme.colorScheme.error,
+            ),
+          ],
+        ),
         children: [
-          // 头部信息
+          Divider(height: 1, color: theme.colorScheme.outlineVariant),
           Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 方向标识
+                Text('完整 URL:', style: theme.textTheme.labelSmall),
+                const SizedBox(height: 4),
+                SelectionArea(
+                  child: Text(
+                    frame.url,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text('Payload 预览:', style: theme.textTheme.labelSmall),
+                const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: frame.isOutgoing ? Colors.green.shade100 : Colors.blue.shade100,
+                    color: theme.colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Text(
-                    frame.isOutgoing ? 'OUT' : 'IN',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: frame.isOutgoing ? Colors.green.shade700 : Colors.blue.shade700,
+                  child: SelectionArea(
+                    child: Text(
+                      frame.payloadPreview,
+                      style: theme.textTheme.bodySmall,
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                // Opcode 标识
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    _opcodeToString(frame.opcode),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                // 暂停时长
+                const SizedBox(height: 12),
                 Text(
-                  '暂停 ${duration.inSeconds}s',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                ),
-              ],
-            ),
-          ),
-
-          // URL
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              frame.url,
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.blue.shade700,
-                fontWeight: FontWeight.w500,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-
-          // Payload 预览
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                frame.payloadPreview,
-                style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-
-          // 操作按钮
-          Divider(height: 1, color: Colors.grey.shade200),
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onModify,
-                    icon: const Icon(Icons.edit, size: 18),
-                    label: const Text('修改'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.orange.shade700,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onResume,
-                    icon: const Icon(Icons.play_arrow, size: 18),
-                    label: const Text('恢复'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.green.shade700,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onAbort,
-                    icon: const Icon(Icons.stop, size: 18),
-                    label: const Text('中止'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red.shade700,
-                    ),
-                  ),
+                  '暂停时间：${_formatDateTime(frame.pausedAt)}',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
                 ),
               ],
             ),
@@ -315,148 +317,149 @@ class _PausedMessageCard extends StatelessWidget {
     );
   }
 
-  String _opcodeToString(int opcode) {
+  String _getOpcodeName(int opcode) {
     switch (opcode) {
-      case 0x01:
-        return 'Text';
-      case 0x02:
-        return 'Binary';
-      case 0x08:
-        return 'Close';
-      case 0x09:
-        return 'Ping';
-      case 0x0A:
-        return 'Pong';
-      default:
-        return '0x${opcode.toRadixString(16)}';
+      case 0x01: return 'Text';
+      case 0x02: return 'Binary';
+      case 0x08: return 'Close';
+      case 0x09: return 'Ping';
+      case 0x0A: return 'Pong';
+      default: return 'Unknown';
     }
+  }
+
+  String _formatDateTime(DateTime dt) {
+    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}';
   }
 }
 
-class _ModifyPayloadDialog extends StatefulWidget {
+/// Payload 编辑对话框
+class _PayloadEditDialog extends StatefulWidget {
   final PausedWebSocketFrame frame;
-  final Function(String) onConfirm;
+  final Function(Uint8List) onSaved;
 
-  const _ModifyPayloadDialog({
-    required this.frame,
-    required this.onConfirm,
-  });
+  const _PayloadEditDialog({required this.frame, required this.onSaved});
 
   @override
-  State<_ModifyPayloadDialog> createState() => _ModifyPayloadDialogState();
+  State<_PayloadEditDialog> createState() => _PayloadEditDialogState();
 }
 
-class _ModifyPayloadDialogState extends State<_ModifyPayloadDialog> {
-  late TextEditingController _controller;
-  int tabIndex = 0;
+class _PayloadEditDialogState extends State<_PayloadEditDialog> {
+  late TextEditingController _textController;
+  String _viewMode = 'text'; // text, json, hex
 
   @override
   void initState() {
     super.initState();
     try {
-      _controller = TextEditingController(
-        text: utf8.decode(widget.frame.payload, allowMalformed: true),
-      );
+      _textController = TextEditingController(text: utf8.decode(widget.frame.payload, allowMalformed: true));
     } catch (e) {
-      _controller = TextEditingController(text: '');
+      _textController = TextEditingController(text: '[Binary Data]');
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _textController.dispose();
     super.dispose();
+  }
+
+  Uint8List _getPayload() {
+    if (_viewMode == 'hex') {
+      // HEX 模式解析
+      final hex = _textController.text.replaceAll(' ', '').replaceAll('\n', '');
+      return Uint8List.fromList(List.generate(hex.length ~/ 2, (i) => int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16)));
+    } else if (_viewMode == 'json') {
+      // JSON 模式 - 保存为 UTF-8
+      return Uint8List.fromList(utf8.encode(_textController.text));
+    } else {
+      // Text 模式
+      return Uint8List.fromList(utf8.encode(_textController.text));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final tabs = [
-      const Tab(text: "Text"),
-      const Tab(text: "JSON"),
-      const Tab(text: "HEX"),
-    ];
+    final theme = Theme.of(context);
 
     return AlertDialog(
       title: const Text('修改 Payload'),
       content: SizedBox(
-        width: MediaQuery.of(context).size.width * 0.85,
-        height: MediaQuery.of(context).size.height * 0.6,
-        child: DefaultTabController(
-          length: 3,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const TabBar(tabs: tabs),
-              Expanded(
-                child: TabBarView(
-                  children: [
-                    // Text 编辑
-                    TextField(
-                      controller: _controller,
-                      maxLines: null,
-                      expands: true,
-                      textAlignVertical: TextAlignVertical.top,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: '输入新的 payload 文本',
-                      ),
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 视图切换
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'text', label: Text('文本')),
+                ButtonSegment(value: 'json', label: Text('JSON')),
+                ButtonSegment(value: 'hex', label: Text('HEX')),
+              ],
+              selected: {_viewMode},
+              onSelectionChanged: (Set<String> selected) {
+                setState(() {
+                  _viewMode = selected.first;
+                  if (_viewMode == 'hex') {
+                    // 转换为 HEX 显示
+                    final hex = widget.frame.payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+                    _textController.text = hex.toUpperCase();
+                  } else if (_viewMode == 'json') {
+                    // 尝试格式化 JSON
+                    try {
+                      final text = utf8.decode(widget.frame.payload, allowMalformed: true);
+                      final json = jsonDecode(text);
+                      _textController.text = const JsonEncoder.withIndent('  ').convert(json);
+                    } catch (e) {
+                      // 不是有效 JSON，保持原样
+                    }
+                  } else {
+                    // Text 模式
+                    _textController.text = utf8.decode(widget.frame.payload, allowMalformed: true);
+                  }
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+            // 编辑器
+            SizedBox(
+              height: 300,
+              child: _viewMode == 'json'
+                ? JsonTextEditor(
+                    initialText: _textController.text,
+                    onChanged: (text) => _textController.text = text,
+                  )
+                : TextField(
+                    controller: _textController,
+                    maxLines: null,
+                    expands: true,
+                    textAlignVertical: TextAlignVertical.top,
+                    style: theme.textTheme.bodyMedium?.copyWith(fontFamily: 'monospace'),
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.all(8),
                     ),
-                    // JSON 预览
-                    _buildJsonView(),
-                    // HEX 预览
-                    _buildHexView(),
-                  ],
-                ),
-              ),
-            ],
-          ),
+                  ),
+            ),
+          ],
         ),
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.pop(context),
           child: const Text('取消'),
         ),
-        ElevatedButton(
+        FilledButton(
           onPressed: () {
-            Navigator.of(context).pop();
-            widget.onConfirm(_controller.text);
+            widget.onSaved(_getPayload());
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Payload 已修改并恢复'), duration: Duration(seconds: 2)),
+            );
           },
-          child: const Text('确认'),
+          child: const Text('保存并恢复'),
         ),
       ],
     );
-  }
-
-  Widget _buildJsonView() {
-    try {
-      final text = _controller.text;
-      final jsonData = json.decode(text);
-      return SingleChildScrollView(
-        padding: const EdgeInsets.all(8.0),
-        child: JsonText(
-          json: jsonData,
-          indent: '  ',
-          colorTheme: ColorTheme.of(context),
-        ),
-      );
-    } catch (e) {
-      return Center(
-        child: Text('无效的 JSON: $e', style: TextStyle(color: Colors.red.shade700)),
-      );
-    }
-  }
-
-  Widget _buildHexView() {
-    try {
-      final bytes = utf8.encode(_controller.text);
-      final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
-      return SingleChildScrollView(
-        padding: const EdgeInsets.all(8.0),
-        child: SelectableText(hex, style: const TextStyle(fontFamily: 'monospace')),
-      );
-    } catch (e) {
-      return const Center(child: Text('无法编码为 HEX'));
-    }
   }
 }
