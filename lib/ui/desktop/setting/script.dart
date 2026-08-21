@@ -155,6 +155,12 @@ class _ScriptWidgetState extends State<ScriptWidget> {
                                   onPressed: consoleLog,
                                   label: Text(localizations.logger),
                                 ),
+                                const SizedBox(width: 10),
+                                TextButton.icon(
+                                  icon: const Icon(Icons.auto_awesome, size: 18),
+                                  onPressed: workflowManager,
+                                  label: const Text('工作流'),
+                                ),
                               ],
                             )),
                             const SizedBox(width: 15)
@@ -166,6 +172,10 @@ class _ScriptWidgetState extends State<ScriptWidget> {
 
   void consoleLog() {
     openScriptConsoleWindow();
+  }
+
+  void workflowManager() {
+    openWorkflowManagerWindow();
   }
 
   //导入js
@@ -996,4 +1006,16 @@ class _ScriptListState extends State<ScriptList> {
       if (mounted) FlutterToastr.show(localizations.deleteSuccess, context);
     });
   }
+}
+
+/// 打开脚本控制台窗口
+void openScriptConsoleWindow() async {
+  final window = await DesktopMultiWindow.createWindow(jsonEncode({'name': 'ScriptConsoleWidget'}));
+  window..setTitle('脚本控制台').setSize(const Size(800, 600)).center().show();
+}
+
+/// 打开工作流管理器窗口
+void openWorkflowManagerWindow() async {
+  final window = await DesktopMultiWindow.createWindow(jsonEncode({'name': 'ScriptWorkflowManagerPage'}));
+  window..setTitle('脚本工作流管理').setSize(const Size(1200, 800)).center().show();
 }
