@@ -97,11 +97,45 @@
 
 ---
 
+### v1.9.0 - 多环境配置 (Feature 4)
+
+**发布状态**: ✅ 已实现 (项目原有功能) | **完成度**: 100%
+
+#### 后端功能
+- ✅ `EnvironmentManager` 单例 (lib/network/components/manager/environment_manager.dart)
+- ✅ `Environment` 模型类 (支持 dev/staging/prod 等命名环境)
+- ✅ `EnvironmentVariable` 模型类 (key/value/enabled)
+- ✅ 配置文件持久化 (environments.json)
+- ✅ `{{name}}` 变量替换 (render 方法)
+- ✅ 脚本侧写入变量 (setVariableFromScript)
+- ✅ 环境差异应用 (applyScriptDiff)
+
+#### UI 功能
+- ✅ Desktop UI (lib/ui/desktop/setting/environment.dart)
+  - 左侧环境列表 (Global 置顶)
+  - 右侧变量表格 (key/value/enabled)
+  - 添加/重命名/删除环境
+  - 使用指南链接
+- ✅ Mobile UI (lib/ui/mobile/setting/environment.dart)
+  - 移动端适配界面
+  - 底部导航集成
+  - 抽屉菜单集成
+
+#### 技术细节
+- Global 环境始终存在且唯一
+- 支持任意数量命名环境
+- activeId 指向当前激活的命名环境
+- 配置文件：`~/environments.json`
+- 变量替换正则：`{{\s*([\w.\-]+)\s*}}`
+- 代码量：~11KB (manager) + ~15KB (UI)
+- 文件：项目原有功能，无需新增
+
+---
+
 ## ⏳ 待实现功能
 
 | 功能 | 描述 | 预计工作量 | 优先级 |
 |------|------|-----------|--------|
-| **Feature 4** | 多环境配置 (dev/staging/prod) | ~0.5h | 中 |
 | **Feature 5** | MCP 自动化任务逻辑完善 | ~1h | 中 |
 | **Feature 6** | 请求批量操作 (删除/导出/修改) | ~1h | 低 |
 
@@ -110,13 +144,13 @@
 ## 📊 整体进度
 
 ```
-已完成：3/6 (50%)
-- Feature 1: ✅ 100%
-- Feature 2: ✅ 100%
-- Feature 3: ✅ 100%
-- Feature 4: ⏳ 0%
-- Feature 5: ⏳ 0%
-- Feature 6: ⏳ 0%
+已完成：4/6 (67%) ✅
+- Feature 1: ✅ 100% (v1.6.0)
+- Feature 2: ✅ 100% (v1.7.0)
+- Feature 3: ✅ 100% (v1.8.0)
+- Feature 4: ✅ 100% (v1.9.0 - 项目原有功能)
+- Feature 5: ⏳ 0% (MCP 自动化)
+- Feature 6: ⏳ 0% (批量操作)
 ```
 
 ---
@@ -129,6 +163,7 @@
 | v1.6.0 | 2026-08-21 | WebSocket 消息修改 | 0f617c8 |
 | v1.7.0 | 2026-08-21 | WebSocket 规则管理 | cd5a413 |
 | v1.8.0 | 2026-08-21 | 脚本模板库 | 5c67ffe |
+| v1.9.0 | 2026-08-21 | 多环境配置 (项目原有) | - |
 
 ---
 
