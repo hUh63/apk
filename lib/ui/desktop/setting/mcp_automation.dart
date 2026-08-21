@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:proxypin/network/mcp/mcp_scheduler.dart';
 import 'package:proxypin/network/mcp/mcp_event_automation.dart';
 import 'package:proxypin/network/mcp/mcp_rule_engine.dart';
+import 'package:flutter_toastr/flutter_toastr.dart';
 
 /// 桌面端 MCP 自动化配置页面
 class DesktopMcpAutomation extends StatefulWidget {
@@ -31,11 +32,12 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
   final McpScheduler _scheduler = McpScheduler();
   final McpEventAutomation _eventAutomation = McpEventAutomation();
   final McpRuleEngine _ruleEngine = McpRuleEngine();
+  final List<Map<String, dynamic>> _workflows = [];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -56,6 +58,7 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
             Tab(text: '定时任务', icon: Icon(Icons.schedule)),
             Tab(text: '事件监听', icon: Icon(Icons.event)),
             Tab(text: '规则引擎', icon: Icon(Icons.rule)),
+            Tab(text: '工作流', icon: Icon(Icons.auto_awesome)),
           ],
         ),
         actions: [
@@ -72,6 +75,7 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
           _buildScheduledTasksTab(),
           _buildEventListenersTab(),
           _buildRuleEngineTab(),
+          _buildWorkflowTab(),
         ],
       ),
     );
@@ -424,5 +428,116 @@ class _DesktopMcpAutomationState extends State<DesktopMcpAutomation> with Single
         ),
       ],
     );
+  }
+
+  Widget _buildWorkflowTab() {
+    if (_workflows.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.auto_awesome, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              '暂无工作流',
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '工作流可编排多个脚本顺序执行',
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _workflows.length,
+      itemBuilder: (context, index) {
+        final workflow = _workflows[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ExpansionTile(
+            leading: CircleAvatar(
+              backgroundColor: workflow['enabled'] == true ? Colors.green : Colors.grey,
+              child: Icon(Icons.auto_awesome, color: Colors.white, size: 20),
+            ),
+            title: Text(workflow['name'] ?? '未命名工作流'),
+            subtitle: Text(
+              '${(workflow['nodes'] as List?)?.length ?? 0} 个节点 • ${workflow['successCount'] ?? 0} 次成功',
+            ),
+            trailing: Switch(
+              value: workflow['enabled'] == true,
+              onChanged: (value) {
+                setState(() {
+                  workflow['enabled'] = value;
+                });
+              },
+            ),
+            children: [
+              const Divider(),
+              if (workflow['nodes'] != null)
+                ...(workflow['nodes'] as List).map<Widget>((node) {
+                  return ListTile(
+                    dense: true,
+                    leading: Icon(_getScriptTypeIcon(node['type']), size: 18),
+                    title: Text(node['name'] ?? '未命名节点', style: const TextStyle(fontSize: 13)),
+                    subtitle: Text((node['dependencies'] as List?)?.isNotEmpty == true
+                        ? '依赖：${(node['dependencies'] as List).join(', ')}'
+                        : '无依赖', style: const TextStyle(fontSize: 11)),
+                  );
+                }).toList(),
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      icon: const Icon(Icons.play_arrow, size: 18),
+                      onPressed: () {
+                        FlutterToastr.show('开始执行工作流', context, backgroundColor: Colors.green);
+                      },
+                      label: const Text('执行'),
+                    ),
+                    TextButton.icon(
+                      icon: const Icon(Icons.edit, size: 18),
+                      onPressed: () {
+                        FlutterToastr.show('编辑工作流', context);
+                      },
+                      label: const Text('编辑'),
+                    ),
+                    TextButton.icon(
+                      icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                      onPressed: () {
+                        setState(() {
+                          _workflows.removeAt(index);
+                        });
+                        FlutterToastr.show('工作流已删除', context, backgroundColor: Colors.green);
+                      },
+                      label: const Text('删除', style: TextStyle(color: Colors.red)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  IconData _getScriptTypeIcon(String? type) {
+    switch (type) {
+      case 'javascript':
+        return Icons.javascript;
+      case 'dart':
+        return Icons.code;
+      case 'shell':
+        return Icons.terminal;
+      default:
+        return Icons.description;
+    }
   }
 }
