@@ -316,6 +316,16 @@ void registerMethodHandler() {
       final server = McpServer();
       return {'running': server.isRunning, 'port': server.port};
     }
+
+    // 供 MCP 自动化子窗口将 MCP 协议请求代理到主窗口运行中的 McpServer
+    //（子窗口为独立 isolate，其 McpServer 单例未运行）
+    if (call.method == 'mcpSendRequest') {
+      final method = call.arguments['method'] as String?;
+      if (method == null) return null;
+      final params = call.arguments['params'];
+      return await McpServer()
+          .sendRequest(method, params is Map ? Map<String, dynamic>.from(params) : null);
+    }
     if (call.method == 'refreshRequestRewrite') {
       await MultiWindow._handleRefreshRewrite(Operation.of(call.arguments['operation']), call.arguments);
       return 'done';

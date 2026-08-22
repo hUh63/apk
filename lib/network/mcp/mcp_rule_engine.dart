@@ -16,6 +16,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:proxypin/network/http/http.dart';
 import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/storage/path.dart';
@@ -334,8 +335,12 @@ class Action {
       }
 
       logger.i('发送 Webhook 到：$url');
-      // 注意：实际发送需要 HttpClient，此处为框架实现
-      // 具体发送逻辑由调用方提供 callback 实现
+      final response = await http.post(
+        Uri.parse(url),
+        headers: headers,
+        body: jsonEncode(payload),
+      );
+      logger.i('Webhook 响应：${response.statusCode}');
     } catch (e) {
       logger.e('Webhook 发送失败：$e');
     }

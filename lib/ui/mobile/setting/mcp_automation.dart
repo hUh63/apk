@@ -87,6 +87,23 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     }
   }
 
+  /// MCP 协议请求：桌面端经 IPC 转发到主窗口运行中的 McpServer；
+  /// 移动端直接调本地单例（同进程）。
+  Future<Map<String, dynamic>?> _mcpSendRequest(String method, [Map<String, dynamic>? params]) async {
+    if (Platforms.isDesktop()) {
+      try {
+        final res =
+            await DesktopMultiWindow.invokeMainWindowMethod('mcpSendRequest', {'method': method, 'params': params});
+        if (res is Map) return Map<String, dynamic>.from(res);
+        return null;
+      } catch (e, s) {
+        logger.e('mcpSendRequest IPC 失败: $method', error: e, stackTrace: s);
+        return null;
+      }
+    }
+    return _mcpServer.sendRequest(method, params);
+  }
+
   Future<void> _loadWorkflows() async {
     try {
       final file = await Paths.getPath('mcp_workflows.json');
@@ -414,7 +431,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
         if (tool == null || tool.isEmpty) return null;
         return () {
           logger.i('[$taskName] 调用 MCP 工具: $tool');
-          _mcpServer.sendRequest('tools/call', {'name': tool, 'arguments': {}}).then((res) {
+          _mcpSendRequest('tools/call', {'name': tool, 'arguments': {}}).then((res) {
             logger.i('[$taskName] 工具 $tool 返回: $res');
           }).catchError((e) => logger.e('[$taskName] 调用工具失败: $tool', error: e));
         };
@@ -1034,7 +1051,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                 Map<String, dynamic>? result;
                 try {
                   // 优先走 MCP 协议（支持参数），失败回退到本地 getPrompt
-                  final res = await _mcpServer.sendRequest('prompts/get', {'name': name, 'arguments': args});
+                  final res = await _mcpSendRequest('prompts/get', {'name': name, 'arguments': args});
                   result = (res?['result'] as Map<String, dynamic>?) ?? res;
                 } catch (e) {
                   logger.w('sendRequest prompts/get 失败，回退 getPrompt', error: e);
@@ -1108,7 +1125,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     FlutterToastr.show('读取 $name…', context, duration: 1, backgroundColor: Colors.blue);
     String text;
     try {
-      final res = await _mcpServer.sendRequest('resources/read', {'uri': uri});
+      final res = await _mcpSendRequest('resources/read', {'uri': uri});
       final result = (res?['result'] as Map<String, dynamic>?) ?? res;
       final contents = (result?['contents'] as List?) ?? [];
       if (contents.isEmpty) {
