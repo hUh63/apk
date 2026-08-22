@@ -305,6 +305,12 @@ class Action {
     } else if (type == ActionType.executeScript) {
       // 脚本执行动作增强：支持多种脚本类型
       await _executeScript(context, parameters);
+    } else if (type == ActionType.log) {
+      logger.i('规则动作[log]: target=$target params=$parameters');
+    } else if (type == ActionType.notify) {
+      logger.i('规则动作[notify]: ${target ?? ''}');
+    } else {
+      logger.i('规则动作[${type.name}]: target=$target params=$parameters');
     }
   }
 

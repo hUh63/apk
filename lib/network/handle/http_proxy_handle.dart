@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:proxypin/network/bin/listener.dart';
@@ -12,6 +13,8 @@ import 'package:proxypin/network/channel/host_port.dart';
 import 'package:proxypin/network/http/http.dart';
 import 'package:proxypin/network/http/http_client.dart';
 import 'package:proxypin/network/http/http_headers.dart';
+import 'package:proxypin/network/mcp/mcp_event_automation.dart';
+import 'package:proxypin/network/mcp/mcp_rule_engine.dart';
 import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/network/util/proxy_helper.dart';
 import 'package:proxypin/network/util/attribute_keys.dart';
@@ -127,6 +130,14 @@ class HttpProxyChannelHandler extends ChannelHandler<HttpRequest> {
       channelContext.currentRequest = request;
 
       listener?.onRequest(channel, request!);
+
+      // 触发 MCP 事件自动化（HTTP 请求事件，按 URL 正则匹配）。
+      // 未注册监听器时为空操作，不阻塞代理转发。
+      try {
+        McpEventAutomation().triggerHttpRequest(request!);
+      } catch (e, s) {
+        log.e('MCP triggerHttpRequest 失败', error: e, stackTrace: s);
+      }
 
       for (var interceptor in interceptors) {
         var response = await interceptor.execute(request!);
@@ -290,6 +301,15 @@ class HttpResponseProxyHandler extends ChannelHandler<HttpResponse> {
   Future<void> channelRead(ChannelContext channelContext, Channel channel, HttpResponse msg) async {
     var request = msg.request ?? channelContext.currentRequest;
     request?.response = msg;
+
+    // 响应就绪后评估 MCP 规则引擎（此时 request/response 字段齐全，
+    // 可匹配 URL、方法、状态码、耗时、大小等全部条件）。
+    // 未注册规则时为空操作，不阻塞转发。
+    if (request != null) {
+      unawaited(McpRuleEngine().evaluate(request).catchError((e, s) {
+        log.e('MCP 规则引擎评估失败', error: e, stackTrace: s);
+      }));
+    }
 
     //域名是否过滤
     if (HostFilter.filter(request?.hostAndPort?.host) || request?.method == HttpMethod.connect) {

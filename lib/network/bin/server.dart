@@ -26,6 +26,8 @@ import 'package:proxypin/network/components/request_block.dart';
 import 'package:proxypin/network/components/request_rewrite.dart';
 import 'package:proxypin/network/components/script.dart';
 import 'package:proxypin/network/handle/http_proxy_handle.dart';
+import 'package:proxypin/network/mcp/mcp_event_automation.dart';
+import 'package:proxypin/network/mcp/mcp_rule_engine.dart';
 import 'package:proxypin/network/util/crts.dart';
 import 'package:proxypin/utils/platform.dart';
 
@@ -103,7 +105,7 @@ class ProxyServer {
       );
     });
 
-    return server.bind(port).then((serverSocket) {
+    return server.bind(port).then((serverSocket) async {
       logger.i("listen on $port");
       this.server = server;
       if (configuration.enableSystemProxy) {
@@ -112,6 +114,17 @@ class ProxyServer {
 
       //初始化证书
       CertificateManager.initCAConfig();
+      // 加载已持久化的 MCP 规则 + 触发代理启动事件
+      try {
+        await McpRuleEngine().loadRules();
+      } catch (e, s) {
+        logger.e('加载 MCP 规则失败', error: e, stackTrace: s);
+      }
+      try {
+        McpEventAutomation().triggerProxyStatusChange(ProxyStatus.started);
+      } catch (e, s) {
+        logger.e('触发代理启动事件失败', error: e, stackTrace: s);
+      }
       return server;
     });
   }
@@ -127,6 +140,11 @@ class ProxyServer {
     }
     logger.i("stop on $port");
     await server?.stop();
+    try {
+      McpEventAutomation().triggerProxyStatusChange(ProxyStatus.stopped);
+    } catch (e, s) {
+      logger.e('触发代理停止事件失败', error: e, stackTrace: s);
+    }
     return server;
   }
 
