@@ -204,6 +204,7 @@ class ScheduledTask {
     this.action,
     this.actionDescriptor,
     this.repeatDaily = false,
+    this.lastExecuted,
   });
 
   Map<String, dynamic> toJson() => {
