@@ -111,6 +111,31 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     }
   }
 
+  /// 按脚本名称独立运行（供定时任务/工作流调用）。
+  /// 复用 ScriptManager.runStandalone，用合成请求跑脚本的 onRequest。
+  Future<void> _runScriptByName(String name) async {
+    try {
+      final mgr = await ScriptManager.instance;
+      ScriptItem? item;
+      for (final s in mgr.list) {
+        if (s.name == name) {
+          item = s;
+          break;
+        }
+      }
+      if (item == null) {
+        logger.w('脚本不存在: $name');
+        if (mounted) FlutterToastr.show('脚本不存在: $name', context, backgroundColor: Colors.orange);
+        return;
+      }
+      await mgr.runStandalone(item);
+      if (mounted) FlutterToastr.show('脚本已执行: $name', context, backgroundColor: Colors.green);
+    } catch (e, s) {
+      logger.e('执行脚本失败: $name', error: e, stackTrace: s);
+      if (mounted) FlutterToastr.show('脚本执行失败: $e', context, backgroundColor: Colors.red);
+    }
+  }
+
   Future<void> _loadWorkflows() async {
     try {
       final file = await Paths.getPath('mcp_workflows.json');
@@ -431,8 +456,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
         if (script == null || script.isEmpty) return null;
         return () {
           logger.i('[$taskName] 执行脚本: $script');
-          FlutterToastr.show('执行脚本: $script', context, duration: 2, backgroundColor: Colors.blue);
-          // 当前进程内无独立的 JS 运行入口，按名称记录执行意图
+          _runScriptByName(script).catchError((e, s) => logger.e('[$taskName] 执行脚本失败', error: e, stackTrace: s));
         };
       case 1: // 调用 MCP 工具
         if (tool == null || tool.isEmpty) return null;
@@ -1400,8 +1424,13 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     FlutterToastr.show('开始执行工作流：${workflow['name']}', context, backgroundColor: Colors.blue);
     for (final n in ordered) {
       try {
-        logger.i('▶ 执行节点 ${n['name']} (${n['type']}, scriptId=${n['scriptId']})');
-        await Future.delayed(const Duration(milliseconds: 100));
+        final scriptId = n['scriptId']?.toString() ?? n['name']?.toString() ?? '';
+        logger.i('▶ 执行节点 ${n['name']} (scriptId=$scriptId)');
+        if (scriptId.isNotEmpty) {
+          await _runScriptByName(scriptId);
+        } else {
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
       } catch (e) {
         logger.e('节点 ${n['name']} 执行失败', error: e);
       }

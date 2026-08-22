@@ -325,6 +325,35 @@ async function onResponse(context, request, response) {
     return request;
   }
 
+  /// 独立运行指定脚本（用合成请求，供定时任务/工作流调用）。
+  /// 不作用于真实请求；仅执行脚本逻辑并应用 env 副作用。
+  /// 复用 runScript 的上下文注入（context/request/onRequest 调用）。
+  Future<Map<String, dynamic>?> runStandalone(ScriptItem item) async {
+    if (!enabled || !item.enabled) return null;
+    try {
+      final request = HttpRequest(HttpMethod.get, 'http://standalone.local/script/${item.name ?? 'unnamed'}');
+      final ctxMap = scriptContext(item);
+      final envBefore = Map<String, String>.from(ctxMap['env'] as Map);
+      var context = jsonEncode(ctxMap);
+      var jsRequestMap = await JavaScriptEngine.convertJsRequest(request);
+      var jsRequest = jsonEncode(jsRequestMap);
+      String? script = await getScript(item);
+      if (script == null) return null;
+      var result = await flutterJsPool.run((flutterJs) async {
+        var jsResult = await flutterJs.evaluateAsync(
+            """var request = $jsRequest, context = $context;  request['scriptContext'] = context; $script\n  onRequest(context, request)""");
+        return await JavaScriptEngine.jsResultResolve(flutterJs, jsResult);
+      });
+      if (result == null) return null;
+      await _applyScriptEnv(envBefore, result['scriptContext']);
+      logger.i('独立运行脚本完成: ${item.name}');
+      return result;
+    } catch (e, st) {
+      logger.e('独立运行脚本失败: ${item.name}', error: e, stackTrace: st);
+      return null;
+    }
+  }
+
   ///运行脚本
   Future<HttpResponse?> runResponseScript(HttpResponse response) async {
     if (!enabled || response.request == null) {
