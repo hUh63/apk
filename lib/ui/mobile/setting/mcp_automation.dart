@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Action;
 import 'package:flutter_toastr/flutter_toastr.dart';
 import 'package:http/http.dart' as http;
 import 'package:proxypin/network/components/manager/script_manager.dart';
@@ -557,8 +557,8 @@ class _McpAutomationPageState extends State<McpAutomationPage>
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
             ElevatedButton(
               onPressed: () {
-                final String eventName;
-                final String desc;
+                String eventName = '';
+                String desc = '';
                 final EventCallback callback = (data) {
                   logger.i('事件触发 $eventName: $data');
                 };
