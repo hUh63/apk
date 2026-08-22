@@ -104,6 +104,13 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     return _mcpServer.sendRequest(method, params);
   }
 
+  /// 桌面端规则变更后通知主窗口重载（移动端同进程无需通知）
+  void _notifyRulesChanged() {
+    if (Platforms.isDesktop()) {
+      unawaited(DesktopMultiWindow.invokeMainWindowMethod('refreshMcpRules'));
+    }
+  }
+
   Future<void> _loadWorkflows() async {
     try {
       final file = await Paths.getPath('mcp_workflows.json');
@@ -845,6 +852,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   _ruleEngine.addRule(rule);
                 }
                 await _ruleEngine.saveRules();
+                _notifyRulesChanged();
                 if (context.mounted) Navigator.pop(context);
                 FlutterToastr.show(isEdit ? '规则已更新' : '规则已添加', context, duration: 2, backgroundColor: Colors.green);
                 setState(() {});
@@ -864,6 +872,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
       _ruleEngine.disableRule(rule.id);
     }
     _ruleEngine.saveRules();
+    _notifyRulesChanged();
     setState(() {});
     FlutterToastr.show(enable ? '规则已启用' : '规则已禁用', context, duration: 2, backgroundColor: Colors.green);
   }
@@ -871,6 +880,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
   void _deleteRule(Rule rule) {
     _ruleEngine.removeRule(rule.id);
     _ruleEngine.saveRules();
+    _notifyRulesChanged();
     setState(() {});
     FlutterToastr.show('规则已删除', context, duration: 2, backgroundColor: Colors.green);
   }

@@ -29,6 +29,7 @@ import 'package:proxypin/network/components/manager/rewrite_rule.dart';
 import 'package:proxypin/network/components/manager/script_manager.dart';
 import 'package:proxypin/network/http/connection_pool.dart';
 import 'package:proxypin/network/http/http.dart';
+import 'package:proxypin/network/mcp/mcp_rule_engine.dart';
 import 'package:proxypin/network/mcp/mcp_server.dart';
 import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/ui/component/performance_dashboard.dart';
@@ -325,6 +326,12 @@ void registerMethodHandler() {
       final params = call.arguments['params'];
       return await McpServer()
           .sendRequest(method, params is Map ? Map<String, dynamic>.from(params) : null);
+    }
+
+    // 供 MCP 自动化子窗口通知主窗口重载已持久化的规则（使桌面端即时生效）
+    if (call.method == 'refreshMcpRules') {
+      await McpRuleEngine().loadRules();
+      return 'done';
     }
     if (call.method == 'refreshRequestRewrite') {
       await MultiWindow._handleRefreshRewrite(Operation.of(call.arguments['operation']), call.arguments);
