@@ -73,6 +73,9 @@ class _McpAutomationPageState extends State<McpAutomationPage>
   Future<void> _bootstrap() async {
     await _ruleEngine.loadRules();
     await _loadWorkflows();
+    // 注册任务执行器并加载持久化定时任务
+    _scheduler.setActionExecutor(_executeTaskDescriptor);
+    await _scheduler.loadTasks();
     _refreshMcpData();
     if (mounted) setState(() {});
   }
@@ -419,23 +422,24 @@ class _McpAutomationPageState extends State<McpAutomationPage>
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 if (nameController.text.isEmpty) {
                   FlutterToastr.show('请输入任务名称', context, duration: 2, backgroundColor: Colors.red);
                   return;
                 }
-                final action = _buildTaskAction(actionType, nameController.text,
+                final descriptor = _buildTaskDescriptor(actionType, nameController.text,
                     script: selectedScript, tool: selectedTool, workflow: selectedWorkflow, webhookUrl: webhookUrlController.text);
-                if (action == null) {
+                if (descriptor == null) {
                   FlutterToastr.show('请完善执行任务配置', context, duration: 2, backgroundColor: Colors.red);
                   return;
                 }
                 _scheduler.scheduleTask(
                   name: nameController.text,
                   executeAt: selectedTime,
-                  action: action,
+                  actionDescriptor: descriptor,
                   repeatDaily: repeatDaily,
                 );
+                await _scheduler.saveTasks();
                 Navigator.pop(context);
                 FlutterToastr.show('定时任务已添加', context, duration: 2, backgroundColor: Colors.green);
                 setState(() {});
@@ -448,50 +452,71 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     );
   }
 
-  /// 根据动作类型构造可执行回调
-  VoidCallback? _buildTaskAction(int type, String taskName,
+  /// 根据动作类型构造可序列化动作描述（跨重启由执行器还原执行）
+  Map<String, dynamic>? _buildTaskDescriptor(int type, String taskName,
       {String? script, String? tool, String? workflow, String? webhookUrl}) {
     switch (type) {
       case 0: // 执行脚本
         if (script == null || script.isEmpty) return null;
-        return () {
-          logger.i('[$taskName] 执行脚本: $script');
-          _runScriptByName(script).catchError((e, s) => logger.e('[$taskName] 执行脚本失败', error: e, stackTrace: s));
-        };
+        return {'type': 0, 'name': taskName, 'script': script};
       case 1: // 调用 MCP 工具
         if (tool == null || tool.isEmpty) return null;
-        return () {
-          logger.i('[$taskName] 调用 MCP 工具: $tool');
-          _mcpSendRequest('tools/call', {'name': tool, 'arguments': {}}).then((res) {
-            logger.i('[$taskName] 工具 $tool 返回: $res');
-          }).catchError((e) => logger.e('[$taskName] 调用工具失败: $tool', error: e));
-        };
+        return {'type': 1, 'name': taskName, 'tool': tool};
       case 2: // 执行工作流
         if (workflow == null || workflow.isEmpty) return null;
         final wf = _workflows.firstWhere(
           (w) => w['name'] == workflow,
           orElse: () => <String, dynamic>{},
         );
-        return () {
-          logger.i('[$taskName] 执行工作流: $workflow');
-          _executeWorkflow(wf);
-        };
+        if (wf.isEmpty) return null;
+        return {'type': 2, 'name': taskName, 'workflow': wf};
       case 3: // 发送 Webhook
         if (webhookUrl == null || webhookUrl.isEmpty || !webhookUrl.startsWith('http')) return null;
-        return () {
-          logger.i('[$taskName] 发送 Webhook: $webhookUrl');
-          http.post(Uri.parse(webhookUrl),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({'task': taskName, 'timestamp': DateTime.now().toIso8601String()})).then((r) {
-            logger.i('[$taskName] Webhook 响应: ${r.statusCode}');
-          }).catchError((e) => logger.e('[$taskName] Webhook 发送失败', error: e));
-        };
+        return {'type': 3, 'name': taskName, 'webhookUrl': webhookUrl};
     }
     return null;
   }
 
+  /// 任务执行器（由 McpScheduler 在任务到期时调用，UI 无关，可后台触发）
+  Future<void> _executeTaskDescriptor(Map<String, dynamic> desc) async {
+    final type = desc['type'] as int? ?? 1;
+    final taskName = desc['name'] as String? ?? '';
+    try {
+      switch (type) {
+        case 0: // 执行脚本
+          final script = desc['script'] as String?;
+          if (script != null && script.isNotEmpty) await _runScriptByName(script);
+          break;
+        case 1: // 调用 MCP 工具
+          final tool = desc['tool'] as String?;
+          if (tool != null && tool.isNotEmpty) {
+            final res = await _mcpSendRequest('tools/call', {'name': tool, 'arguments': {}});
+            logger.i('[$taskName] 工具 $tool 返回: $res');
+          }
+          break;
+        case 2: // 执行工作流
+          final wf = desc['workflow'] as Map<String, dynamic>?;
+          if (wf != null) await _executeWorkflowNodes(wf);
+          break;
+        case 3: // 发送 Webhook
+          final url = desc['webhookUrl'] as String?;
+          if (url != null && url.startsWith('http')) {
+            final r = await http.post(Uri.parse(url),
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode({'task': taskName, 'timestamp': DateTime.now().toIso8601String()}));
+            logger.i('[$taskName] Webhook 响应: ${r.statusCode}');
+          }
+          break;
+      }
+      logger.i('[$taskName] 定时任务执行完成 (type=$type)');
+    } catch (e, s) {
+      logger.e('[$taskName] 定时任务执行失败', error: e, stackTrace: s);
+    }
+  }
+
   void _cancelTask(ScheduledTask task) {
     _scheduler.cancelTask(task.name);
+    unawaited(_scheduler.saveTasks());
     setState(() {});
     FlutterToastr.show('任务已取消', context, duration: 2, backgroundColor: Colors.green);
   }
@@ -1404,6 +1429,14 @@ class _McpAutomationPageState extends State<McpAutomationPage>
       FlutterToastr.show('工作流没有节点', context, backgroundColor: Colors.orange);
       return;
     }
+    if (mounted) FlutterToastr.show('开始执行工作流：${workflow['name']}', context, backgroundColor: Colors.blue);
+    await _executeWorkflowNodes(workflow);
+    if (mounted) FlutterToastr.show('工作流执行完成', context, backgroundColor: Colors.green);
+  }
+
+  /// 工作流节点拓扑执行（UI 无关，供 play 按钮与定时任务执行器复用）
+  Future<void> _executeWorkflowNodes(Map<String, dynamic> workflow) async {
+    final nodes = (workflow['nodes'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     // 拓扑排序
     final ordered = <Map<String, dynamic>>[];
     final added = <String>{};
@@ -1421,7 +1454,6 @@ class _McpAutomationPageState extends State<McpAutomationPage>
         }
       }
     }
-    FlutterToastr.show('开始执行工作流：${workflow['name']}', context, backgroundColor: Colors.blue);
     for (final n in ordered) {
       try {
         final scriptId = n['scriptId']?.toString() ?? n['name']?.toString() ?? '';
@@ -1435,7 +1467,6 @@ class _McpAutomationPageState extends State<McpAutomationPage>
         logger.e('节点 ${n['name']} 执行失败', error: e);
       }
     }
-    FlutterToastr.show('工作流执行完成', context, backgroundColor: Colors.green);
   }
 
   IconData _scriptTypeIcon(String? type) {
