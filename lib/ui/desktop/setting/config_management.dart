@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
@@ -139,9 +140,15 @@ class _DesktopConfigManagementState extends State<DesktopConfigManagement> {
   Future<void> _exportConfig(BuildContext context) async {
     BuildContext? dialogContext;
 
+    void closeDialog() {
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.of(dialogContext!).pop();
+      }
+    }
+
     try {
-      // 显示进度对话框
-      await showDialog(
+      // 显示进度对话框（非阻塞，避免阻塞后续导出与保存逻辑）
+      unawaited(showDialog(
         context: context,
         barrierDismissible: false,
         builder: (ctx) {
@@ -149,25 +156,23 @@ class _DesktopConfigManagementState extends State<DesktopConfigManagement> {
           return AlertDialog(
             title: const Row(
               children: [
-                CircularProgressIndicator(strokeWidth: 2, value: 0.3),
+                SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
                 SizedBox(width: 12),
                 Text('正在导出配置'),
               ],
             ),
-            content: Column(
+            content: const Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('正在保存文件...'),
-                const SizedBox(height: 16),
-                const LinearProgressIndicator(value: 0.3, minHeight: 6),
-                const SizedBox(height: 8),
-                const Text('30%', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                Text('正在生成配置文件...'),
+                SizedBox(height: 16),
+                LinearProgressIndicator(minHeight: 6),
               ],
             ),
           );
         },
-      );
+      ));
 
       // 生成默认文件名
       final timestamp = DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
@@ -176,6 +181,10 @@ class _DesktopConfigManagementState extends State<DesktopConfigManagement> {
       // 导出配置
       final jsonStr = configuration.exportConfig();
       final bytes = Uint8List.fromList(utf8.encode(jsonStr));
+
+      // 关闭进度对话框后再弹出系统保存对话框，避免两个模态叠加
+      closeDialog();
+      await Future.delayed(const Duration(milliseconds: 50));
 
       // 使用 FilePicker 保存文件
       Uri? outputPath = await FilePicker.saveFile(
@@ -201,6 +210,7 @@ class _DesktopConfigManagementState extends State<DesktopConfigManagement> {
         logger.i('配置已导出到：${outputPath.path}');
       }
     } catch (e) {
+      closeDialog();
       logger.e('导出配置失败', error: e, stackTrace: StackTrace.current);
       if (mounted) {
         FlutterToastr.show(

@@ -15,8 +15,10 @@
  */
 
 import 'dart:async';
+import 'dart:convert';
 import 'package:proxypin/network/http/http.dart';
 import 'package:proxypin/network/util/logger.dart';
+import 'package:proxypin/storage/path.dart';
 
 /// 规则优先级
 enum RulePriority { low, normal, high, critical }
@@ -101,6 +103,32 @@ class Rule {
 
   /// 检查规则是否可用
   bool get isAvailable => enabled && !isExpired;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'description': description,
+        'conditions': conditions.map((c) => c.toJson()).toList(),
+        'actions': actions.map((a) => a.toJson()).toList(),
+        'priority': priority.name,
+        'enabled': enabled,
+        if (expiresAt != null) 'expiresAt': expiresAt!.toIso8601String(),
+      };
+
+  factory Rule.fromJson(Map<String, dynamic> json) => Rule(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        description: json['description'] as String? ?? '',
+        conditions: (json['conditions'] as List<dynamic>? ?? [])
+            .map((e) => Condition.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        actions: (json['actions'] as List<dynamic>? ?? [])
+            .map((e) => Action.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        priority: _enumByName(RulePriority.values, json['priority'] as String?, RulePriority.normal),
+        enabled: json['enabled'] as bool? ?? true,
+        expiresAt: json['expiresAt'] == null ? null : DateTime.tryParse(json['expiresAt'] as String),
+      );
 }
 
 /// 条件类
@@ -116,6 +144,20 @@ class Condition {
     required this.operator,
     required this.value,
   });
+
+  Map<String, dynamic> toJson() => {
+        'type': type.name,
+        'field': field,
+        'operator': operator.name,
+        'value': _encodeValue(value),
+      };
+
+  factory Condition.fromJson(Map<String, dynamic> json) => Condition(
+        type: _enumByName(ConditionType.values, json['type'] as String?, ConditionType.custom),
+        field: json['field'] as String,
+        operator: _enumByName(Operator.values, json['operator'] as String?, Operator.equals),
+        value: _decodeValue(json['value']),
+      );
 
   /// 评估条件是否匹配
   bool evaluate(dynamic context) {
@@ -241,6 +283,18 @@ class Action {
     this.callback,
   });
 
+  Map<String, dynamic> toJson() => {
+        'type': type.name,
+        if (target != null) 'target': target,
+        if (parameters != null) 'parameters': parameters,
+      };
+
+  factory Action.fromJson(Map<String, dynamic> json) => Action(
+        type: _enumByName(ActionType.values, json['type'] as String?, ActionType.log),
+        target: json['target'] as String?,
+        parameters: json['parameters'] as Map<String, dynamic>?,
+      );
+
   /// 执行动作
   Future<void> execute(dynamic context) async {
     if (callback != null) {
@@ -345,6 +399,43 @@ class Action {
   }
 }
 
+/// 枚举名 -> 枚举值（未知/缺失时回退到 fallback）
+T _enumByName<T extends Enum>(Iterable<T> values, String? name, T fallback) {
+  if (name == null) return fallback;
+  for (final v in values) {
+    if (v.name == name) return v;
+  }
+  return fallback;
+}
+
+/// 序列化条件值：RegExp 等非 JSON 类型编码为标记 Map
+dynamic _encodeValue(dynamic value) {
+  if (value is RegExp) {
+    return {'__regexp__': value.pattern};
+  }
+  if (value is List) {
+    return value.map(_encodeValue).toList();
+  }
+  if (value is Map) {
+    return value.map((k, v) => MapEntry(k, _encodeValue(v)));
+  }
+  return value; // String / num / bool / null
+}
+
+/// 反序列化条件值
+dynamic _decodeValue(dynamic value) {
+  if (value is Map && value.containsKey('__regexp__')) {
+    return RegExp(value['__regexp__'] as String);
+  }
+  if (value is List) {
+    return value.map(_decodeValue).toList();
+  }
+  if (value is Map) {
+    return value.map((k, v) => MapEntry(k, _decodeValue(v)));
+  }
+  return value;
+}
+
 /// MCP 条件规则引擎
 /// 支持基于条件的自动化决策和资源管理
 /// @author wanghongen
@@ -435,6 +526,45 @@ class McpRuleEngine {
   void clearRules() {
     _rules.clear();
     logger.d('清除所有规则');
+  }
+
+  /// 更新规则（整体替换，用于编辑）
+  void updateRule(String ruleId, Rule newRule) {
+    final index = _rules.indexWhere((r) => r.id == ruleId);
+    if (index != -1) {
+      _rules[index] = newRule;
+      logger.i('更新规则：${newRule.name} ($ruleId)');
+      _sortRules();
+    }
+  }
+
+  /// 持久化规则到 mcp_rules.json
+  Future<void> saveRules() async {
+    try {
+      final file = await Paths.getPath('mcp_rules.json');
+      final data = _rules.map((r) => r.toJson()).toList();
+      await file.writeAsString(jsonEncode(data));
+    } catch (e, st) {
+      logger.e('保存规则失败', error: e, stackTrace: st);
+    }
+  }
+
+  /// 从 mcp_rules.json 加载规则
+  Future<void> loadRules() async {
+    try {
+      final file = await Paths.getPath('mcp_rules.json');
+      if (!await file.exists()) return;
+      final content = await file.readAsString();
+      if (content.trim().isEmpty) return;
+      final list = jsonDecode(content) as List<dynamic>;
+      _rules
+        ..clear()
+        ..addAll(list.map((e) => Rule.fromJson(e as Map<String, dynamic>)));
+      _sortRules();
+      logger.i('已加载 ${_rules.length} 条规则');
+    } catch (e, st) {
+      logger.e('加载规则失败', error: e, stackTrace: st);
+    }
   }
 
   // ==================== 规则评估 ====================

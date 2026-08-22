@@ -836,6 +836,9 @@ class McpServer {
   /// 获取 Roots 列表（供 UI 调用）
   List<Map<String, dynamic>> getRoots() => _getRootsList();
 
+  /// 获取具体提示模板（供 UI 调用，返回 messages/arguments）
+  Map<String, dynamic>? getPrompt(String name) => _getPrompt(name);
+
   // ==================== MCP 2026-07-28: Prompts 支持 ====================
 
   /// 获取可用提示模板列表

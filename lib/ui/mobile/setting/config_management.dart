@@ -191,9 +191,6 @@ class _ConfigManagementState extends State<ConfigManagement> {
         },
       );
 
-      // 等待对话框显示
-      await Future.delayed(const Duration(milliseconds: 100));
-
       // 生成默认文件名
       final timestamp = DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
       final defaultName = 'proxypin_config_$timestamp.json';
@@ -202,44 +199,11 @@ class _ConfigManagementState extends State<ConfigManagement> {
       final jsonStr = configuration.exportConfig();
       final bytes = Uint8List.fromList(utf8.encode(jsonStr));
 
-      // 更新进度 - 使用 setDialogState 刷新 UI
-      if (dialogContext != null) {
-        await Future.delayed(const Duration(milliseconds: 200));
-        // 注意：这里无法直接调用 setDialogState，因为它是 StatefulBuilder 的局部变量
-        // 解决方案：关闭旧对话框，重新显示新进度的对话框
-        if (dialogContext!.mounted) Navigator.of(dialogContext!).pop();
+      // 关闭进度对话框后再弹出系统保存对话框，避免模态叠加与阻塞
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.of(dialogContext!).pop();
+        await Future.delayed(const Duration(milliseconds: 50));
       }
-      
-      // 重新显示 30% 进度对话框
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) {
-          dialogContext = ctx;
-          return AlertDialog(
-            title: const Row(
-              children: [
-                CircularProgressIndicator(strokeWidth: 2, value: 0.3),
-                SizedBox(width: 12),
-                Text('正在导出配置'),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('正在保存文件...'),
-                const SizedBox(height: 16),
-                const LinearProgressIndicator(value: 0.3, minHeight: 6),
-                const SizedBox(height: 8),
-                const Text('30%', style: TextStyle(fontSize: 12, color: Colors.grey)),
-              ],
-            ),
-          );
-        },
-      );
-
-      isExporting = true;
 
       // 使用 FilePicker v12+ API 保存文件 (直接传入 bytes)
       Uri? outputPath = await FilePicker.saveFile(
@@ -252,15 +216,7 @@ class _ConfigManagementState extends State<ConfigManagement> {
 
       // 用户取消保存
       if (outputPath == null) {
-        if (dialogContext != null && dialogContext!.mounted) {
-          Navigator.of(dialogContext!).pop();
-        }
         return;
-      }
-
-      // 关闭进度对话框
-      if (dialogContext != null && dialogContext!.mounted) {
-        Navigator.of(dialogContext!).pop();
       }
 
       if (mounted) {

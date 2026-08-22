@@ -106,6 +106,17 @@ class McpScheduler {
     logger.i('已取消所有定时任务');
   }
 
+  /// 取消单个定时任务（按名称，避免误删全部）
+  void cancelTask(String name) {
+    for (final task in _tasks) {
+      if (task.name == name && !task.isCancelled) {
+        task.isCancelled = true;
+      }
+    }
+    _tasks.removeWhere((task) => task.isCancelled);
+    logger.i('已取消定时任务：$name');
+  }
+
   /// 获取任务列表
   List<ScheduledTask> get tasks => List.unmodifiable(_tasks);
 }

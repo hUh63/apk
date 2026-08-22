@@ -27,8 +27,12 @@ import 'package:proxypin/network/components/manager/request_map_manager.dart';
 import 'package:proxypin/network/components/manager/request_rewrite_manager.dart';
 import 'package:proxypin/network/components/manager/rewrite_rule.dart';
 import 'package:proxypin/network/components/manager/script_manager.dart';
+import 'package:proxypin/network/http/connection_pool.dart';
 import 'package:proxypin/network/http/http.dart';
+import 'package:proxypin/network/mcp/mcp_server.dart';
 import 'package:proxypin/network/util/logger.dart';
+import 'package:proxypin/ui/component/performance_dashboard.dart';
+import 'package:proxypin/ui/desktop/setting/mcp_automation.dart';
 import 'package:proxypin/network/components/request_breakpoint.dart';
 import 'package:proxypin/ui/component/utils.dart';
 import 'package:proxypin/ui/content/body.dart';
@@ -155,6 +159,16 @@ Widget multiWindow(String windowId, Map<dynamic, dynamic> argument) {
 
   if (argument['name'] == 'McpConnectionPage') {
     return const McpConnectionPage();
+  }
+
+  //性能监控
+  if (argument['name'] == 'PerformanceDashboard') {
+    return const PerformanceDashboard();
+  }
+
+  //MCP 自动化
+  if (argument['name'] == 'McpAutomationWidget') {
+    return const DesktopMcpAutomation();
   }
 
   if (argument['name'] == 'AesPage') {
@@ -287,6 +301,20 @@ void registerMethodHandler() {
 
     if (call.method == 'getProxyInfo') {
       return ProxyServer.current?.isRunning == true ? {'host': '127.0.0.1', 'port': ProxyServer.current!.port} : null;
+    }
+
+    // 供性能监控子窗口拉取主窗口的连接池统计（子窗口为独立 isolate，不共享单例）
+    if (call.method == 'getPerformanceStats') {
+      final stats = ConnectionPool.instance.getStats();
+      stats['proxyRunning'] = ProxyServer.current?.isRunning == true;
+      stats['proxyPort'] = ProxyServer.current?.port ?? 0;
+      return stats;
+    }
+
+    // 供 MCP 自动化子窗口拉取主窗口 MCP 服务运行状态
+    if (call.method == 'getMcpStatus') {
+      final server = McpServer();
+      return {'running': server.isRunning, 'port': server.port};
     }
     if (call.method == 'refreshRequestRewrite') {
       await MultiWindow._handleRefreshRewrite(Operation.of(call.arguments['operation']), call.arguments);
