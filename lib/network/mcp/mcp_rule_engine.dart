@@ -17,6 +17,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:proxypin/network/components/manager/script_manager.dart';
 import 'package:proxypin/network/http/http.dart';
 import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/storage/path.dart';
@@ -351,11 +352,22 @@ class Action {
     try {
       final scriptType = params?['type'] as String? ?? 'dart';
       final scriptContent = params?['content'] as String?;
-      final scriptPath = params?['path'] as String?;
-      
+      final scriptPath = params?['path'] as String? ?? params?['name'] as String?;
+
       if (scriptContent == null && scriptPath == null) {
         logger.w('脚本内容或路径未指定');
         return;
+      }
+
+      // 优先按名称复用 ScriptManager.runStandalone（请求绑定模型，含 env 副作用）
+      if (scriptPath != null && scriptPath.isNotEmpty) {
+        final mgr = await ScriptManager.instance;
+        for (final s in mgr.list) {
+          if (s.name == scriptPath) {
+            await mgr.runStandalone(s);
+            return;
+          }
+        }
       }
 
       logger.i('执行脚本：type=$scriptType, path=$scriptPath');
