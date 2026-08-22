@@ -241,6 +241,9 @@ class ScriptWorkflowEngine {
   factory ScriptWorkflowEngine() => _instance;
   ScriptWorkflowEngine._internal();
 
+  /// 便捷单例访问
+  static ScriptWorkflowEngine get instance => _instance;
+
   // 工作流存储
   final Map<String, ScriptWorkflow> _workflows = {};
 

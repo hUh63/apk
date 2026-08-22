@@ -27,6 +27,7 @@ import '../util/logger.dart';
 import '../../utils/file_utils.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
+import '../components/manager/script_manager.dart';
 
 /// MCP 自动化任务触发器类型
 enum AutomationTriggerType {
@@ -691,19 +692,33 @@ class MCPAutomationManager {
     };
   }
 
-  /// 实现执行脚本逻辑
+  /// 实现执行脚本逻辑（通过 ScriptManager 真实执行）
   Future<void> _runScript(MCPAutomationTask task, Map<String, dynamic> context) async {
     final params = task.actionParams;
     final scriptType = params['scriptType'] as String? ?? 'javascript';
     final scriptCode = params['scriptCode'] as String?;
     final scriptPath = params['scriptPath'] as String?;
-    
-    if (scriptCode == null && scriptPath == null) {
-      logger.w('[MCP Automation] No script code or path provided');
+    final scriptName = params['scriptName'] as String?;
+
+    if (scriptCode == null && scriptPath == null && scriptName == null) {
+      logger.w('[MCP Automation] No script code, path or name provided');
       return;
     }
-    
+
     try {
+      // 优先按名称匹配 ScriptManager 注册脚本
+      if (scriptName != null) {
+        final mgr = await ScriptManager.instance;
+        for (final s in mgr.list) {
+          if (s.name == scriptName) {
+            await mgr.runStandalone(s);
+            logger.i('[MCP Automation] 通过 ScriptManager 执行脚本: $scriptName');
+            return;
+          }
+        }
+      }
+
+      // 文件路径或内联代码
       String code;
       if (scriptCode != null && scriptCode.isNotEmpty) {
         code = scriptCode;
@@ -712,20 +727,22 @@ class MCPAutomationManager {
       } else {
         return;
       }
-      
+
       logger.i('[MCP Automation] Executing script for task: ${task.name}');
-      
+
       // 根据脚本类型执行
       if (scriptType == 'dart') {
-        // Dart 脚本执行（简化版本，实际可能需要更复杂的处理）
-        logger.i('[MCP Automation] Dart script executed (simulated)');
+        // Dart 内联脚本：查找是否有匹配的注册脚本，否则仅记录
+        logger.i('[MCP Automation] Dart script (inline, no runtime): ${code.length} chars');
       } else {
-        // JavaScript 脚本执行（简化版本）
-        logger.i('[MCP Automation] JavaScript script executed (simulated)');
+        // JavaScript 脚本：通过 flutterJs 引擎执行
+        final mgr = await ScriptManager.instance;
+        await mgr.flutterJsPool.run((flutterJs) async {
+          final jsResult = await flutterJs.evaluateAsync(
+            'var context = ${jsonEncode(context)}; $code\n  onRequest(context, {})');
+          logger.i('[MCP Automation] JavaScript 脚本执行完成');
+        });
       }
-      
-      // 注意：实际脚本执行需要集成 JavaScript/Dart 运行时
-      // 这里提供框架，实际执行逻辑可根据需求扩展
     } catch (e) {
       logger.e('[MCP Automation] Failed to run script: $e');
     }

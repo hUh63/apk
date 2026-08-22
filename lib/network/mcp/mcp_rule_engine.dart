@@ -18,7 +18,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:proxypin/network/components/manager/script_manager.dart';
+import 'package:proxypin/network/components/js/script_engine.dart';
 import 'package:proxypin/network/http/http.dart';
+import 'package:proxypin/network/mcp/mcp_event_automation.dart';
 import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/storage/path.dart';
 
@@ -206,14 +208,32 @@ class Condition {
     }
   }
 
-  /// 获取字段值
+  /// 获取字段值（支持 ConditionType 感知的字段提取）
   dynamic _getFieldValue(dynamic context, String field) {
     if (context == null) return null;
-    
-    // 支持嵌套字段，如 "request.headers.content-type"
+
+    // 优先按条件自身类型提取（无论 context 是否包含 type 字段）
+    if (type != ConditionType.httpRequest && type != ConditionType.custom) {
+      if (context is Map) {
+        return _getConditionContextField(context, type, field);
+      }
+    }
+
+    // 兼容旧版：按 context 中的 type 推断
+    if (context is Map) {
+      final typeStr = context['type'] as String?;
+      if (typeStr != null) {
+        final detectedType = _enumByName(ConditionType.values, typeStr, ConditionType.custom);
+        if (detectedType != ConditionType.httpRequest && detectedType != ConditionType.custom) {
+          return _getConditionContextField(context, detectedType, field);
+        }
+      }
+    }
+
+    // 通用嵌套字段提取（httpRequest 或 custom）
     final parts = field.split('.');
     dynamic result = context;
-    
+
     for (final part in parts) {
       if (result is Map) {
         result = result[part];
@@ -222,11 +242,56 @@ class Condition {
       } else {
         return null;
       }
-      
+
       if (result == null) break;
     }
-    
+
     return result;
+  }
+
+  /// 获取非 HTTP 条件类型的上下文字段
+  dynamic _getConditionContextField(Map context, ConditionType type, String field) {
+    switch (type) {
+      case ConditionType.proxyStatus:
+        switch (field) {
+          case 'status':
+            final v = context['status'];
+            return v is ProxyStatus ? v.name : v;
+          case 'type':
+            return 'proxyStatus';
+          case 'timestamp':
+            return context['timestamp'];
+          default:
+            return context[field];
+        }
+      case ConditionType.networkStatus:
+        switch (field) {
+          case 'status':
+            final v = context['status'];
+            return v is NetworkStatus ? v.name : v;
+          case 'type':
+            return context['type'] ?? context['networkType'];
+          case 'timestamp':
+            return context['timestamp'];
+          default:
+            return context[field];
+        }
+      case ConditionType.systemStatus:
+        switch (field) {
+          case 'memoryUsage':
+            return context['memoryUsage'];
+          case 'captureCount':
+            return context['captureCount'];
+          case 'diskUsage':
+            return context['diskUsage'];
+          case 'cpuUsage':
+            return context['cpuUsage'];
+          default:
+            return context[field];
+        }
+      default:
+        return context[field];
+    }
   }
 
   /// 获取 HttpRequest 字段
@@ -397,16 +462,49 @@ class Action {
     }
   }
 
-  /// 执行 Dart 脚本
+  /// 执行 Dart 脚本：按名称查找 ScriptManager 注册脚本，走 runStandalone（含 env 副作用）
   Future<void> _executeDartScript(String? content, String? path, dynamic context) async {
-    logger.i('执行 Dart 脚本');
-    // Dart 脚本已预留执行入口，可通过回调注入具体实现
+    if (path != null && path.isNotEmpty) {
+      final mgr = await ScriptManager.instance;
+      for (final s in mgr.list) {
+        if (s.name == path) {
+          await mgr.runStandalone(s);
+          return;
+        }
+      }
+    }
+    // 无注册脚本时仅记录；Dart 内联脚本需要 Isolate 隔离执行，暂留为扩展点
+    logger.i('执行 Dart 脚本（内联）：content=$content');
   }
 
-  /// 执行 JavaScript 脚本
+  /// 执行 JavaScript 脚本：通过 flutter_js 引擎真实执行
   Future<void> _executeJavaScript(String? content, String? path, dynamic context) async {
-    logger.i('执行 JavaScript 脚本');
-    // JavaScript 已预留执行入口，可通过 flutter_js 集成
+    // 优先按名称复用 ScriptManager 注册脚本
+    if (path != null && path.isNotEmpty) {
+      final mgr = await ScriptManager.instance;
+      for (final s in mgr.list) {
+        if (s.name == path) {
+          await mgr.runStandalone(s);
+          return;
+        }
+      }
+    }
+    // 内联 JavaScript：通过 flutterJs 引擎直接执行
+    if (content == null || content.isEmpty) {
+      logger.w('JavaScript 内容为空');
+      return;
+    }
+    try {
+      final mgr = await ScriptManager.instance;
+      await mgr.flutterJsPool.run((flutterJs) async {
+        final jsResult = await flutterJs.evaluateAsync(
+          'var context = {}; $content\n  onRequest(context, {})');
+        return await JavaScriptEngine.jsResultResolve(flutterJs, jsResult);
+      });
+      logger.i('JavaScript 内联脚本执行完成');
+    } catch (e, st) {
+      logger.e('JavaScript 脚本执行失败', error: e, stackTrace: st);
+    }
   }
 
   /// 执行 Shell 脚本
@@ -631,6 +729,30 @@ class McpRuleEngine {
     if (limit == null) return List.unmodifiable(_executionHistory);
     final start = _executionHistory.length - limit.clamp(0, _executionHistory.length);
     return _executionHistory.sublist(start);
+  }
+
+  // ==================== 便捷评估方法 ====================
+
+  /// 便捷评估代理状态变化
+  void evaluateProxyStatus(String status) {
+    unawaited(evaluate({
+      'type': 'proxyStatus',
+      'status': status,
+      'timestamp': DateTime.now().toIso8601String(),
+    }).catchError((e, s) {
+      logger.e('代理状态规则评估失败', error: e, stackTrace: s);
+    }));
+  }
+
+  /// 便捷评估网络状态变化
+  void evaluateNetworkStatus(String status) {
+    unawaited(evaluate({
+      'type': 'networkStatus',
+      'status': status,
+      'timestamp': DateTime.now().toIso8601String(),
+    }).catchError((e, s) {
+      logger.e('网络状态规则评估失败', error: e, stackTrace: s);
+    }));
   }
 
   // ==================== 预定义规则构建器 ====================

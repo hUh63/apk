@@ -161,7 +161,11 @@ class McpEventAutomation {
 
   /// 触发网络状态变化事件
   void triggerNetworkStatusChange(NetworkStatus status) {
-    _triggerEvent('network_status:$status', {'status': status, 'timestamp': DateTime.now()});
+    _triggerEvent('network_status:$status', {
+      'type': 'networkStatus',
+      'status': status.name,
+      'timestamp': DateTime.now(),
+    });
   }
 
   // ==================== 代理状态事件 ====================
@@ -173,7 +177,11 @@ class McpEventAutomation {
 
   /// 触发代理状态变化事件
   void triggerProxyStatusChange(ProxyStatus status) {
-    _triggerEvent('proxy_status:$status', {'status': status, 'timestamp': DateTime.now()});
+    _triggerEvent('proxy_status:$status', {
+      'type': 'proxyStatus',
+      'status': status.name,
+      'timestamp': DateTime.now(),
+    });
   }
 
   // ==================== 脚本事件 ====================

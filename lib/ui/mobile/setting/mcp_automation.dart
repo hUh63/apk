@@ -779,8 +779,6 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     final actions = List<_ActionRow>.from(
         existing?.actions.map((a) => _ActionRow.fromAction(a)) ?? [_ActionRow()]);
 
-    const fields = ['url', 'method', 'statusCode', 'duration', 'host', 'path', 'contentType', 'responseContentType', 'requestSize', 'responseSize'];
-
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -819,26 +817,44 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   ...conditions.asMap().entries.map((e) {
                     final i = e.key;
                     final c = e.value;
+                    final fields = _ConditionRow.fieldsForType(c.type);
                     return _removableTile(
-                      title: Row(children: [
-                        Expanded(child: DropdownButtonFormField<String>(
-                          value: c.field.isEmpty ? 'url' : c.field,
-                          decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
-                          items: fields.map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
-                          onChanged: (v) => setDialogState(() => c.field = v ?? 'url'),
-                        )),
-                        const SizedBox(width: 6),
-                        Expanded(child: DropdownButtonFormField<Operator>(
-                          value: c.operator,
-                          decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
-                          items: Operator.values.map((o) => DropdownMenuItem(value: o, child: Text(_formatOperator(o)))).toList(),
-                          onChanged: (v) => setDialogState(() => c.operator = v ?? Operator.equals),
-                        )),
+                      title: Column(children: [
+                        // 条件类型选择
+                        DropdownButtonFormField<ConditionType>(
+                          value: c.type,
+                          decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), labelText: '条件类型'),
+                          items: [
+                            for (final t in ConditionType.values)
+                              if (t != ConditionType.custom)
+                                DropdownMenuItem(value: t, child: Text(_conditionTypeLabel(t))),
+                          ],
+                          onChanged: (v) => setDialogState(() {
+                            c.type = v ?? ConditionType.httpRequest;
+                            // 切换类型时重置字段为第一个可用字段
+                            final newFields = _ConditionRow.fieldsForType(c.type);
+                            c.field = newFields.isNotEmpty ? newFields.first : 'url';
+                            c.valueController.clear();
+                          }),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(children: [
+                          Expanded(child: DropdownButtonFormField<String>(
+                            value: fields.contains(c.field) ? c.field : (fields.isNotEmpty ? fields.first : 'url'),
+                            decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+                            items: fields.map((f) => DropdownMenuItem(value: f, child: Text(_ConditionRow.fieldDisplayName(c.type, f)))).toList(),
+                            onChanged: (v) => setDialogState(() => c.field = v ?? fields.first),
+                          )),
+                          const SizedBox(width: 6),
+                          Expanded(child: DropdownButtonFormField<Operator>(
+                            value: c.operator,
+                            decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+                            items: Operator.values.map((o) => DropdownMenuItem(value: o, child: Text(_formatOperator(o)))).toList(),
+                            onChanged: (v) => setDialogState(() => c.operator = v ?? Operator.equals),
+                          )),
+                        ]),
                       ]),
-                      subtitle: TextField(
-                        controller: c.valueController,
-                        decoration: const InputDecoration(isDense: true, labelText: '值', border: OutlineInputBorder()),
-                      ),
+                      subtitle: _buildValueEditor(c, setDialogState),
                       onDelete: () => setDialogState(() => conditions.removeAt(i)),
                     );
                   }),
@@ -947,7 +963,45 @@ class _McpAutomationPageState extends State<McpAutomationPage>
   }
 
   String _formatCondition(Condition c) {
-    return '${c.field} ${_formatOperator(c.operator)} ${c.value}';
+    final typeLabel = switch (c.type) {
+      ConditionType.httpRequest => 'HTTP',
+      ConditionType.proxyStatus => '代理',
+      ConditionType.networkStatus => '网络',
+      ConditionType.systemStatus => '系统',
+      ConditionType.custom => '自定义',
+    };
+    final fieldName = _ConditionRow.fieldDisplayName(c.type, c.field);
+    return '[$typeLabel] $fieldName ${_formatOperator(c.operator)} ${c.value}';
+  }
+
+  String _conditionTypeLabel(ConditionType type) {
+    switch (type) {
+      case ConditionType.httpRequest: return 'HTTP 请求';
+      case ConditionType.proxyStatus: return '代理状态';
+      case ConditionType.networkStatus: return '网络状态';
+      case ConditionType.systemStatus: return '系统状态';
+      case ConditionType.custom: return '自定义';
+    }
+  }
+
+  /// 条件值编辑器:枚举型 status 字段(代理/网络状态)在 equals/notEquals 时用下拉,
+  /// 其余情况(数值/正则/列表/时间戳等)用文本框。
+  Widget _buildValueEditor(_ConditionRow c, void Function(VoidCallback) setDialogState) {
+    final opts = _ConditionRow.valueOptions(c.type, c.field);
+    if (opts != null && (c.operator == Operator.equals || c.operator == Operator.notEquals)) {
+      return DropdownButtonFormField<String>(
+        value: opts.contains(c.valueController.text) ? c.valueController.text : null,
+        decoration: const InputDecoration(isDense: true, labelText: '值', border: OutlineInputBorder()),
+        items: opts
+            .map((v) => DropdownMenuItem(value: v, child: Text(_ConditionRow.valueDisplayName(c.type, v))))
+            .toList(),
+        onChanged: (v) => setDialogState(() => c.valueController.text = v ?? ''),
+      );
+    }
+    return TextField(
+      controller: c.valueController,
+      decoration: const InputDecoration(isDense: true, labelText: '值', border: OutlineInputBorder()),
+    );
   }
 
   String _formatOperator(Operator operator) {
@@ -1592,12 +1646,14 @@ class _RegisteredEventListener {
 
 /// 可编辑条件行
 class _ConditionRow {
+  ConditionType type;
   String field;
   Operator operator;
   final TextEditingController valueController = TextEditingController();
-  _ConditionRow({this.field = 'url', this.operator = Operator.equals});
+  _ConditionRow({this.type = ConditionType.httpRequest, this.field = 'url', this.operator = Operator.equals});
   _ConditionRow.fromCondition(Condition c)
-      : field = c.field,
+      : type = c.type,
+        field = c.field,
         operator = c.operator {
     valueController.text = c.value is RegExp ? (c.value as RegExp).pattern : c.value?.toString() ?? '';
   }
@@ -1608,7 +1664,104 @@ class _ConditionRow {
       Operator.inList || Operator.notInList => v.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
       _ => v,
     };
-    return Condition(type: ConditionType.httpRequest, field: field, operator: operator, value: value);
+    return Condition(type: type, field: field, operator: operator, value: value);
+  }
+
+  /// 根据条件类型获取可用字段列表
+  static List<String> fieldsForType(ConditionType t) {
+    switch (t) {
+      case ConditionType.httpRequest:
+        return ['url', 'method', 'statusCode', 'duration', 'host', 'path', 'contentType', 'responseContentType', 'requestSize', 'responseSize'];
+      case ConditionType.proxyStatus:
+        return ['status', 'type', 'timestamp'];
+      case ConditionType.networkStatus:
+        return ['status', 'type', 'timestamp'];
+      case ConditionType.systemStatus:
+        return ['memoryUsage', 'captureCount', 'diskUsage', 'cpuUsage'];
+      case ConditionType.custom:
+        return ['customField'];
+    }
+  }
+
+  /// 获取字段的显示名
+  static String fieldDisplayName(ConditionType t, String field) {
+    switch (t) {
+      case ConditionType.httpRequest:
+        switch (field) {
+          case 'url': return 'URL';
+          case 'method': return '方法';
+          case 'statusCode': return '状态码';
+          case 'duration': return '耗时(ms)';
+          case 'host': return '域名';
+          case 'path': return '路径';
+          case 'contentType': return '请求 Content-Type';
+          case 'responseContentType': return '响应 Content-Type';
+          case 'requestSize': return '请求大小';
+          case 'responseSize': return '响应大小';
+          default: return field;
+        }
+      case ConditionType.proxyStatus:
+        switch (field) {
+          case 'status': return '代理状态';
+          case 'type': return '类型';
+          case 'timestamp': return '时间戳';
+          default: return field;
+        }
+      case ConditionType.networkStatus:
+        switch (field) {
+          case 'status': return '网络状态';
+          case 'type': return '类型';
+          case 'timestamp': return '时间戳';
+          default: return field;
+        }
+      case ConditionType.systemStatus:
+        switch (field) {
+          case 'memoryUsage': return '内存使用(MB)';
+          case 'captureCount': return '抓包数量';
+          case 'diskUsage': return '磁盘使用(MB)';
+          case 'cpuUsage': return 'CPU 使用率(%)';
+          default: return field;
+        }
+      case ConditionType.custom:
+        return field;
+    }
+  }
+
+  /// 枚举型 status 字段的候选值(原始枚举名,与规则引擎 context 比对一致);非枚举字段返回 null
+  static List<String>? valueOptions(ConditionType t, String field) {
+    switch (t) {
+      case ConditionType.proxyStatus:
+        return field == 'status' ? ['started', 'stopped', 'paused', 'resumed'] : null;
+      case ConditionType.networkStatus:
+        return field == 'status' ? ['connected', 'disconnected', 'wifi', 'mobile', 'weak'] : null;
+      default:
+        return null;
+    }
+  }
+
+  /// 枚举候选值的中文显示名
+  static String valueDisplayName(ConditionType t, String value) {
+    switch (t) {
+      case ConditionType.proxyStatus:
+        switch (value) {
+          case 'started': return '已启动';
+          case 'stopped': return '已停止';
+          case 'paused': return '已暂停';
+          case 'resumed': return '已恢复';
+          default: return value;
+        }
+      case ConditionType.networkStatus:
+        switch (value) {
+          case 'connected': return '已连接';
+          case 'disconnected': return '已断开';
+          case 'wifi': return 'WiFi';
+          case 'mobile': return '移动数据';
+          case 'weak': return '弱网';
+          default: return value;
+        }
+      default:
+        return value;
+    }
   }
 }
 
