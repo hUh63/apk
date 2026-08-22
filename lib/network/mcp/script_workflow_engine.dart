@@ -592,7 +592,7 @@ class ScriptWorkflowEngineExample {
   static void setupSequentialWorkflow() {
     final engine = ScriptWorkflowEngine();
 
-    final workflow = ScriptWorkflow.createSequentialWorkflow(
+    final workflow = ScriptWorkflowEngine.createSequentialWorkflow(
       id: 'api_test_workflow',
       name: 'API 测试工作流',
       description: '依次执行登录、获取数据、验证结果',
@@ -646,7 +646,7 @@ Future<bool> onRequest(Map<String, dynamic> context) async {
   static void setupParallelWorkflow() {
     final engine = ScriptWorkflowEngine();
 
-    final workflow = ScriptWorkflow.createParallelWorkflow(
+    final workflow = ScriptWorkflowEngine.createParallelWorkflow(
       id: 'parallel_check',
       name: '并行健康检查',
       description: '同时检查多个 API 端点',
@@ -690,7 +690,7 @@ Future<bool> onRequest(Map<String, dynamic> context) async {
 // 使用变量 {{baseUrl}} 和 {{endpoint}}
 Future<void> onRequest() async {
   final url = '{{baseUrl}}/{{endpoint}}';
-  print('Requesting: $url');
+  print('Requesting: \$url');
 }
 ''',
           scriptType: 'dart',

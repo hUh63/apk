@@ -30,6 +30,7 @@ import 'package:proxypin/network/mcp/mcp_event_automation.dart';
 import 'package:proxypin/network/mcp/mcp_rule_engine.dart';
 import 'package:proxypin/network/mcp/script_workflow_engine.dart';
 import 'package:proxypin/network/components/manager/script_manager.dart';
+import 'package:proxypin/network/components/js/script_engine.dart';
 import 'package:proxypin/network/util/crts.dart';
 import 'package:proxypin/utils/platform.dart';
 
@@ -142,7 +143,7 @@ class ProxyServer {
           }
           // 找不到已注册脚本时，尝试直接执行 JavaScript 内容
           if (scriptType == 'javascript' && scriptContent.isNotEmpty) {
-            return await mgr.flutterJsPool.run((flutterJs) async {
+            return await ScriptManager.flutterJsPool.run((flutterJs) async {
               final jsResult = await flutterJs.evaluateAsync(
                 'var context = ${parameters is Map ? parameters.toString() : '{}'}; $scriptContent\n  onRequest(context, {})');
               return await JavaScriptEngine.jsResultResolve(flutterJs, jsResult);
