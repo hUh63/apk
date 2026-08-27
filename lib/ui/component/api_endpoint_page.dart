@@ -2,14 +2,18 @@
  * API 端点提取页面 - 自动识别和分组 API 端点
  */
 
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:proxypin/network/http/http.dart';
 import 'package:proxypin/network/util/api_extractor.dart';
+import 'package:proxypin/network/util/logger.dart';
 
 /// API 端点页面
 class ApiEndpointPage extends StatefulWidget {
-  final List<Request> requests;
-  final List<Response>? responses;
+  final List<HttpRequest> requests;
+  final List<HttpResponse>? responses;
 
   const ApiEndpointPage({
     super.key,
@@ -324,24 +328,42 @@ class _ApiEndpointPageState extends State<ApiEndpointPage> {
 
   void _exportAsOpenApi() {
     final openApi = _extractor.exportToOpenApi(_endpoints);
-    // TODO: 保存文件
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('OpenAPI 导出功能开发中')),
-    );
+    _saveJsonFile('openapi.json', openApi, 'OpenAPI');
   }
 
   void _exportAsPostman() {
     final postman = _extractor.exportToPostman(_endpoints);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Postman 导出功能开发中')),
-    );
+    _saveJsonFile('postman_collection.json', postman, 'Postman');
   }
 
   void _exportAsJson() {
     final json = _endpoints.map((e) => e.toJson()).toList();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('JSON 导出功能开发中')),
-    );
+    _saveJsonFile('api_endpoints.json', json, 'JSON');
+  }
+
+  /// 将数据保存为 JSON 文件（统一导出入口，带成功/失败反馈）
+  Future<void> _saveJsonFile(String fileName, Object data, String label) async {
+    try {
+      final String content;
+      if (data is String) {
+        content = data;
+      } else {
+        content = const JsonEncoder.withIndent('  ').convert(data);
+      }
+      final Uri? path = await FilePicker.saveFile(fileName: fileName, bytes: utf8.encode(content));
+      if (path == null) {
+        // 用户取消，无需提示
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$label 已导出')));
+      }
+    } catch (e) {
+      logger.e('导出 $label 失败', error: e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$label 导出失败: $e')));
+      }
+    }
   }
 
   void _showEndpointDetail(ApiEndpoint endpoint) {
@@ -402,7 +424,7 @@ class _ApiEndpointPageState extends State<ApiEndpointPage> {
 
 /// API 端点工具函数
 class ApiEndpointUtils {
-  static void showEndpoints(BuildContext context, List<Request> requests, {List<Response>? responses}) {
+  static void showEndpoints(BuildContext context, List<HttpRequest> requests, {List<HttpResponse>? responses}) {
     Navigator.push(
       context,
       MaterialPageRoute(

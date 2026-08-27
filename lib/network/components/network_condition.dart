@@ -66,7 +66,11 @@ class NetworkConditionInterceptor extends Interceptor {
     // 离线：直接返回 502，请求不会真的发出
     if (eff.offline) {
       logger.d('[${request.requestId}] weak-network offline: ${request.requestUrl}');
-      return null;
+      final resp = HttpResponse(HttpStatus.newStatus(502, 'Weak Network: Offline'),
+          protocolVersion: request.protocolVersion)
+        ..request = request;
+      resp.headers.set('X-ProxyPin-Weak-Network', 'offline');
+      return resp;
     }
 
     // 丢包：按概率整包丢弃 -> 合成 502（模拟连接失败/超时）

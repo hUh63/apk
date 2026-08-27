@@ -27,7 +27,7 @@ typedef VoidCallback = void Function();
 typedef TaskActionExecutor = Future<void> Function(Map<String, dynamic> descriptor);
 
 /// MCP 定时任务调度器
-/// 支持一次性任务和每日重复任务，可持久化到 mcp_tasks.json
+/// 支持一次性任务、每日重复任务和固定间隔任务，可持久化到 mcp_tasks.json
 class McpScheduler {
   static final McpScheduler _instance = McpScheduler._internal();
   factory McpScheduler() => _instance;
@@ -43,22 +43,33 @@ class McpScheduler {
   /// 添加定时任务
   /// [action] 仅本会话即时触发（闭包不可序列化）；[actionDescriptor] 可持久化，
   /// 重启加载后由 [setActionExecutor] 注册的执行器触发。二者任一非空即可。
+  ///
+  /// [repeatMode] 重复方式：none 一次性 / daily 每天 / interval 固定间隔；
+  /// [intervalMinutes] interval 模式的间隔分钟数；
+  /// [repeatCount] 重复次数，null 表示无限重复。
   void scheduleTask({
     required String name,
     required DateTime executeAt,
     VoidCallback? action,
     Map<String, dynamic>? actionDescriptor,
     bool repeatDaily = false,
+    String repeatMode = 'none',
+    int? repeatCount,
+    int? intervalMinutes,
   }) {
+    // 兼容旧参数：未显式指定 repeatMode 时按 repeatDaily 推断
+    final mode = (repeatMode == 'none' && repeatDaily) ? 'daily' : repeatMode;
     final task = ScheduledTask(
       name: name,
       executeAt: executeAt,
       action: action,
       actionDescriptor: actionDescriptor,
-      repeatDaily: repeatDaily,
+      repeatMode: mode,
+      repeatCount: repeatCount,
+      intervalMinutes: intervalMinutes,
     );
     _tasks.add(task);
-    logger.i('添加定时任务：$name，执行时间：$executeAt，重复：$repeatDaily');
+    logger.i('添加定时任务：$name，执行时间：$executeAt，模式：$mode，次数：${repeatCount ?? '无限'}');
 
     _startCheckTimer();
   }
@@ -84,8 +95,10 @@ class McpScheduler {
           logger.i('执行定时任务：${task.name}');
           await _runTask(task);
           task.lastExecuted = now;
+          task.executedCount++;
 
-          if (task.repeatDaily) {
+          // 计算下一次执行时间 / 是否结束
+          if (task.repeatMode == 'daily') {
             // 设置为明天的同一时间
             task.executeAt = DateTime(
               now.year,
@@ -96,11 +109,23 @@ class McpScheduler {
               task.executeAt.second,
             );
             logger.d('定时任务 ${task.name} 下次执行时间：${task.executeAt}');
-            await saveTasks();
+          } else if (task.repeatMode == 'interval' && task.intervalMinutes != null && task.intervalMinutes! > 0) {
+            task.executeAt = now.add(Duration(minutes: task.intervalMinutes!));
+            logger.d('定时任务 ${task.name} 下次执行时间：${task.executeAt}');
           } else {
-            // 一次性任务，标记为已取消
             task.isCancelled = true;
             logger.d('一次性任务 ${task.name} 已完成');
+          }
+
+          // 达到重复次数上限则结束
+          if (!task.isCancelled && task.repeatCount != null && task.executedCount >= task.repeatCount!) {
+            task.isCancelled = true;
+            logger.i('定时任务 ${task.name} 已完成全部 ${task.repeatCount} 次执行');
+          }
+
+          if (task.isCancelled) {
+            await saveTasks();
+          } else {
             await saveTasks();
           }
         } catch (e) {
@@ -194,37 +219,82 @@ class ScheduledTask {
   DateTime executeAt;
   final VoidCallback? action; // 本会话闭包（不持久化）
   final Map<String, dynamic>? actionDescriptor; // 可序列化动作描述
-  final bool repeatDaily;
+
+  /// 重复方式：none 一次性 / daily 每天 / interval 固定间隔
+  final String repeatMode;
+
+  /// 重复次数上限，null 表示无限（仅 daily/interval 模式有效）
+  final int? repeatCount;
+
+  /// interval 模式的间隔分钟数
+  final int? intervalMinutes;
+
   DateTime? lastExecuted;
+  int executedCount = 0;
   bool isCancelled = false;
+
+  /// 兼容旧字段：是否每日重复
+  bool get repeatDaily => repeatMode == 'daily';
 
   ScheduledTask({
     required this.name,
     required this.executeAt,
     this.action,
     this.actionDescriptor,
-    this.repeatDaily = false,
+    String repeatMode = 'none',
+    this.repeatCount,
+    this.intervalMinutes,
     this.lastExecuted,
-  });
+    bool repeatDaily = false,
+  }) : repeatMode = (repeatMode == 'none' && repeatDaily) ? 'daily' : repeatMode;
 
   Map<String, dynamic> toJson() => {
         'name': name,
         'executeAt': executeAt.toIso8601String(),
-        'repeatDaily': repeatDaily,
+        'repeatMode': repeatMode,
+        'repeatDaily': repeatDaily, // 兼容旧版本读取
+        if (repeatCount != null) 'repeatCount': repeatCount,
+        if (intervalMinutes != null) 'intervalMinutes': intervalMinutes,
+        'executedCount': executedCount,
         if (actionDescriptor != null) 'action': actionDescriptor,
         if (lastExecuted != null) 'lastExecuted': lastExecuted!.toIso8601String(),
       };
 
-  factory ScheduledTask.fromJson(Map<String, dynamic> json) => ScheduledTask(
-        name: json['name'] as String,
-        executeAt: DateTime.parse(json['executeAt'] as String),
-        actionDescriptor: json['action'] as Map<String, dynamic>?,
-        repeatDaily: json['repeatDaily'] == true,
-        lastExecuted: json['lastExecuted'] == null ? null : DateTime.tryParse(json['lastExecuted'] as String),
-      );
+  factory ScheduledTask.fromJson(Map<String, dynamic> json) {
+    // 兼容旧版本：仅 repeatDaily 字段
+    final String mode;
+    if (json['repeatMode'] is String) {
+      mode = json['repeatMode'] as String;
+    } else {
+      mode = json['repeatDaily'] == true ? 'daily' : 'none';
+    }
+    final task = ScheduledTask(
+      name: json['name'] as String,
+      executeAt: DateTime.parse(json['executeAt'] as String),
+      actionDescriptor: json['action'] as Map<String, dynamic>?,
+      repeatMode: mode,
+      repeatCount: json['repeatCount'] is int ? json['repeatCount'] as int : null,
+      intervalMinutes: json['intervalMinutes'] is int ? json['intervalMinutes'] as int : null,
+      lastExecuted: json['lastExecuted'] == null ? null : DateTime.tryParse(json['lastExecuted'] as String),
+    );
+    task.executedCount = json['executedCount'] is int ? json['executedCount'] as int : 0;
+    return task;
+  }
+
+  /// 重复方式描述（供 UI 展示）
+  String get repeatLabel {
+    switch (repeatMode) {
+      case 'daily':
+        return '每天${repeatCount == null ? '' : ' · 共${repeatCount}次'}';
+      case 'interval':
+        return '每${intervalMinutes ?? 0}分钟${repeatCount == null ? '' : ' · 共${repeatCount}次'}';
+      default:
+        return '一次性';
+    }
+  }
 
   @override
   String toString() {
-    return 'ScheduledTask(name: $name, executeAt: $executeAt, repeatDaily: $repeatDaily)';
+    return 'ScheduledTask(name: $name, executeAt: $executeAt, repeatMode: $repeatMode, repeatCount: $repeatCount)';
   }
 }

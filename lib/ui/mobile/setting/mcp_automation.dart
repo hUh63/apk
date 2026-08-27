@@ -472,17 +472,27 @@ class _McpAutomationPageState extends State<McpAutomationPage>
       itemCount: tasks.length,
       itemBuilder: (context, index) {
         final task = tasks[index];
+        final isInterval = task.repeatMode == 'interval';
+        final isDaily = task.repeatMode == 'daily';
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
             leading: CircleAvatar(
-              backgroundColor: task.repeatDaily ? Colors.blue : Colors.green,
-              child: Icon(task.repeatDaily ? Icons.repeat : Icons.play_circle_outline, color: Colors.white, size: 20),
+              backgroundColor: isDaily ? Colors.blue : (isInterval ? Colors.deepPurple : Colors.green),
+              child: Icon(
+                  isDaily
+                      ? Icons.repeat
+                      : isInterval
+                          ? Icons.timer_outlined
+                          : Icons.play_circle_outline,
+                  color: Colors.white,
+                  size: 20),
             ),
             title: Text(task.name),
             subtitle: Text(
-              '${task.repeatDaily ? '每天' : '一次性'} • ${_formatTime(task.executeAt)}'
-              '${task.lastExecuted != null ? ' • 上次：${_formatTime(task.lastExecuted!)}' : ''}',
+              '${task.repeatLabel} • ${isInterval ? '下次：' : ''}${_formatTime(task.executeAt)}'
+              '${task.lastExecuted != null ? ' • 上次：${_formatTime(task.lastExecuted!)}' : ''}'
+              '${task.repeatCount != null ? ' • 已执行 ${task.executedCount}/${task.repeatCount} 次' : ''}',
               style: const TextStyle(fontSize: 12),
             ),
             trailing: IconButton(
@@ -498,7 +508,12 @@ class _McpAutomationPageState extends State<McpAutomationPage>
   Future<void> _showAddTaskDialog(BuildContext context) async {
     final nameController = TextEditingController();
     DateTime selectedTime = DateTime.now().add(const Duration(minutes: 1));
-    bool repeatDaily = false;
+    // 定时方式：none 一次性 / daily 每天 / interval 固定间隔
+    String repeatMode = 'none';
+    int? repeatCount;
+    int intervalMinutes = 30;
+    final repeatCountController = TextEditingController();
+    final intervalController = TextEditingController(text: '30');
     int actionType = 1; // 0 执行脚本 1 调用MCP工具 2 执行工作流 3 发送Webhook
     // 子配置
     String? selectedScript;
@@ -542,39 +557,73 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                     decoration: const InputDecoration(labelText: '任务名称', border: OutlineInputBorder()),
                   ),
                   const SizedBox(height: 16),
-                  const Text('执行时间:'),
+                  const Text('定时方式:', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      final picked = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.fromDateTime(selectedTime),
-                      );
-                      if (picked != null) {
-                        setDialogState(() {
-                          selectedTime = DateTime(
-                            selectedTime.year, selectedTime.month, selectedTime.day,
-                            picked.hour, picked.minute,
-                          );
-                          if (selectedTime.isBefore(DateTime.now())) {
-                            selectedTime = selectedTime.add(const Duration(days: 1));
-                          }
-                        });
-                      }
-                    },
-                    icon: const Icon(Icons.access_time),
-                    label: Text('${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}'),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: repeatDaily,
-                        onChanged: (v) => setDialogState(() => repeatDaily = v ?? false),
-                      ),
-                      const Text('每天重复'),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'none', label: Text('一次性'), icon: Icon(Icons.play_circle_outline, size: 16)),
+                      ButtonSegment(value: 'daily', label: Text('每天'), icon: Icon(Icons.repeat, size: 16)),
+                      ButtonSegment(value: 'interval', label: Text('间隔'), icon: Icon(Icons.timer_outlined, size: 16)),
                     ],
+                    selected: {repeatMode},
+                    onSelectionChanged: (v) => setDialogState(() => repeatMode = v.first),
+                    showSelectedIcon: false,
+                    style: const ButtonStyle(visualDensity: VisualDensity.compact),
                   ),
+                  const SizedBox(height: 8),
+                  // 一次性 / 每天：选择执行时刻
+                  if (repeatMode != 'interval') ...[
+                    const Text('执行时间:'),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: TimeOfDay.fromDateTime(selectedTime),
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            selectedTime = DateTime(
+                              selectedTime.year, selectedTime.month, selectedTime.day,
+                              picked.hour, picked.minute,
+                            );
+                            if (selectedTime.isBefore(DateTime.now())) {
+                              selectedTime = selectedTime.add(const Duration(days: 1));
+                            }
+                          });
+                        }
+                      },
+                      icon: const Icon(Icons.access_time),
+                      label: Text('${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}'),
+                    ),
+                  ],
+                  // 固定间隔：间隔分钟数
+                  if (repeatMode == 'interval') ...[
+                    TextField(
+                      controller: intervalController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: '间隔分钟数',
+                        border: OutlineInputBorder(),
+                        hintText: '如 30 表示每 30 分钟执行一次',
+                      ),
+                      onChanged: (v) => intervalMinutes = int.tryParse(v) ?? 30,
+                    ),
+                  ],
+                  // 重复次数（仅重复模式）
+                  if (repeatMode != 'none') ...[
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: repeatCountController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: '重复次数（留空 = 无限重复）',
+                        border: OutlineInputBorder(),
+                        hintText: '如 5 表示执行 5 次后自动结束',
+                      ),
+                      onChanged: (v) => repeatCount = int.tryParse(v),
+                    ),
+                  ],
                   const Divider(),
                   const Text('执行任务:', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
@@ -619,17 +668,28 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   FlutterToastr.show('请输入任务名称', context, duration: 2, backgroundColor: Colors.red);
                   return;
                 }
+                if (repeatMode == 'interval' && intervalMinutes <= 0) {
+                  FlutterToastr.show('请输入有效的间隔分钟数', context, duration: 2, backgroundColor: Colors.red);
+                  return;
+                }
                 final descriptor = _buildTaskDescriptor(actionType, nameController.text,
                     script: selectedScript, tool: selectedTool, workflow: selectedWorkflow, webhookUrl: webhookUrlController.text);
                 if (descriptor == null) {
                   FlutterToastr.show('请完善执行任务配置', context, duration: 2, backgroundColor: Colors.red);
                   return;
                 }
+                // 一次性任务从当前时间起算；重复任务按所选时刻执行
+                var executeAt = selectedTime;
+                if (repeatMode == 'interval') {
+                  executeAt = DateTime.now().add(Duration(minutes: intervalMinutes));
+                }
                 _scheduler.scheduleTask(
                   name: nameController.text,
-                  executeAt: selectedTime,
+                  executeAt: executeAt,
                   actionDescriptor: descriptor,
-                  repeatDaily: repeatDaily,
+                  repeatMode: repeatMode,
+                  repeatCount: repeatCount,
+                  intervalMinutes: repeatMode == 'interval' ? intervalMinutes : null,
                 );
                 await _scheduler.saveTasks();
                 Navigator.pop(context);

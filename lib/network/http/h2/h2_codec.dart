@@ -227,6 +227,8 @@ abstract class Http2Codec<T extends HttpMessage> implements Codec<T, T> {
           logger.w(
               "[${channelContext.clientChannel?.id}] h2 streaming stream:${frameHeader.streamIdentifier} reset");
         }
+        // 清理该流的请求/响应上下文，避免连接存活期内无响应流累积（资源泄漏）
+        channelContext.removeStream(frameHeader.streamIdentifier);
         result.forward = List.from(frameHeader.encode())..addAll(framePayload);
         return result;
       case FrameType.goaway:
@@ -304,9 +306,10 @@ abstract class Http2Codec<T extends HttpMessage> implements Codec<T, T> {
           logger.w('[${channelContext.clientChannel?.id}] HTTP/2 连接需要降级到 HTTP/1.1: $errorCategory');
         }
         
+        // 注意：shouldRetry 场景暂不自动重连（重试需要重新建立连接，
+        // 链路复杂且容易造成请求重复），仅记录日志，由上层按需处理。
         if (shouldRetry) {
-          channelContext.putAttribute(AttributeKeys.h2ShouldRetry, true);
-          logger.i('[${channelContext.clientChannel?.id}] HTTP/2 连接将自动重试：$errorCategory');
+          logger.i('[${channelContext.clientChannel?.id}] HTTP/2 GOAWAY 建议重试：$errorCategory');
         }
         
         logger.i(
@@ -617,10 +620,17 @@ abstract class Http2Codec<T extends HttpMessage> implements Codec<T, T> {
 class Http2RequestDecoder extends Http2Codec<HttpRequest> {
   @override
   HttpRequest createMessage(ChannelContext channelContext, FrameHeader frameHeader, Map<String, List<String>> headers) {
-    HttpMethod httpMethod = HttpMethod.valueOf(headers[":method"]!.first);
+    // 防御：畸形/恶意帧可能缺少伪头，抛受控异常交由上层降级处理，避免空指针崩溃
+    final methodValues = headers[":method"];
+    final pathValues = headers[":path"];
+    if (methodValues == null || methodValues.isEmpty || pathValues == null || pathValues.isEmpty) {
+      throw FormatException('Invalid HTTP/2 request headers, missing :method or :path pseudo-header: $headers');
+    }
 
-    var httpRequest =
-        HttpRequest(httpMethod, headers[":path"]!.first, protocolVersion: headers[":version"]?.firstOrNull ?? "HTTP/2");
+    HttpMethod httpMethod = HttpMethod.valueOf(methodValues.first);
+
+    var httpRequest = HttpRequest(httpMethod, pathValues.first,
+        protocolVersion: headers[":version"]?.firstOrNull ?? "HTTP/2");
 
     String? authority = headers[":authority"]?.firstOrNull;
     String? scheme = headers[":scheme"]?.firstOrNull;
@@ -705,7 +715,12 @@ class Http2ResponseDecoder extends Http2Codec<HttpResponse> {
   @override
   HttpResponse createMessage(
       ChannelContext channelContext, FrameHeader frameHeader, Map<String, List<String>> headers) {
-    var httpResponse = HttpResponse(HttpStatus.valueOf(int.parse(headers[':status']!.first)),
+    // 防御：畸形帧缺少 :status 伪头时抛受控异常，避免空指针崩溃
+    final statusValues = headers[':status'];
+    if (statusValues == null || statusValues.isEmpty) {
+      throw FormatException('Invalid HTTP/2 response headers, missing :status pseudo-header: $headers');
+    }
+    var httpResponse = HttpResponse(HttpStatus.valueOf(int.parse(statusValues.first)),
         protocolVersion: headers[":version"]?.firstOrNull ?? 'HTTP/2');
     final requestId = channelContext.getStreamRequest(frameHeader.streamIdentifier)?.requestId;
     if (requestId != null) {

@@ -158,9 +158,23 @@ class Har {
     return jsonEncode(har);
   }
 
+  /// 流式写入 HAR 文件：逐条序列化 entry 并追加到 StringBuffer，
+  /// 避免大列表时「entries 全量 Map + 完整 JSON 字符串」双份驻留内存（OOM 风险）。
   static Future<File> writeFile(List<HttpRequest> list, File file, {String title = ''}) async {
-    var json = await writeJson(list, title: title);
-    return file.writeAsString(json);
+    title = title.contains("ProxyPin") ? title : "[ProxyPin]$title";
+    final buf = StringBuffer();
+    buf.write('{"log":{"version":"1.2",');
+    buf.write('"creator":{"name":"ProxyPin","version":${jsonEncode(AppConfiguration.version)}},');
+    buf.write('"pages":[{"title":${jsonEncode(title)},"id":"ProxyPin",');
+    buf.write('"startedDateTime":${jsonEncode(list.firstOrNull?.requestTime.toUtc().toIso8601String())},');
+    buf.write('"pageTimings":{"onContentLoad":-1,"onLoad":-1}}],');
+    buf.write('"entries":[');
+    for (var i = 0; i < list.length; i++) {
+      if (i > 0) buf.write(',');
+      buf.write(jsonEncode(toHar(list[i])));
+    }
+    buf.write(']}}');
+    return file.writeAsString(buf.toString());
   }
 
   //读取文件

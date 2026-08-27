@@ -26,6 +26,7 @@ import 'package:proxypin/network/components/request_block.dart';
 import 'package:proxypin/network/components/request_rewrite.dart';
 import 'package:proxypin/network/components/script.dart';
 import 'package:proxypin/network/handle/http_proxy_handle.dart';
+import 'package:proxypin/network/mcp/mcp_automation_manager.dart';
 import 'package:proxypin/network/mcp/mcp_event_automation.dart';
 import 'package:proxypin/network/mcp/mcp_rule_engine.dart';
 import 'package:proxypin/network/mcp/script_workflow_engine.dart';
@@ -161,6 +162,12 @@ class ProxyServer {
       } catch (e, s) {
         logger.e('触发代理启动事件失败', error: e, stackTrace: s);
       }
+      // 触发 MCP 自动化任务（onProxyStart 触发器）
+      try {
+        unawaited(MCPAutomationManager().onProxyStart().catchError((e, s) {
+          logger.e('MCP 自动化 onProxyStart 触发失败', error: e, stackTrace: s);
+        }));
+      } catch (_) {}
       // 代理启动时也评估规则引擎（proxyStatus 条件）
       try {
         unawaited(McpRuleEngine().evaluate({
@@ -191,6 +198,12 @@ class ProxyServer {
     } catch (e, s) {
       logger.e('触发代理停止事件失败', error: e, stackTrace: s);
     }
+    // 触发 MCP 自动化任务（onProxyStop 触发器）
+    try {
+      unawaited(MCPAutomationManager().onProxyStop().catchError((e, s) {
+        logger.e('MCP 自动化 onProxyStop 触发失败', error: e, stackTrace: s);
+      }));
+    } catch (_) {}
     // 代理停止时评估规则引擎
     try {
       unawaited(McpRuleEngine().evaluate({

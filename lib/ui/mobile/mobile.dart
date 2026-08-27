@@ -20,6 +20,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:proxypin/event/event_bus.dart';
 import 'package:proxypin/l10n/app_localizations.dart';
 import 'package:flutter_toastr/flutter_toastr.dart';
 import 'package:proxypin/native/app_lifecycle.dart';
@@ -36,6 +37,7 @@ import 'package:proxypin/network/http/http_client.dart';
 import 'package:proxypin/network/mcp/mcp_bridge.dart';
 import 'package:proxypin/network/mcp/mcp_server.dart';
 import 'package:proxypin/storage/histories.dart';
+import 'package:proxypin/ui/component/app_dialog.dart';
 import 'package:proxypin/ui/component/memory_cleanup.dart';
 import 'package:proxypin/ui/component/multi_select_controller.dart';
 import 'package:proxypin/ui/component/utils.dart';
@@ -92,6 +94,7 @@ class MobileHomeState extends State<MobileHomePage> implements EventListener, Li
   final ValueNotifier<int> _selectIndex = ValueNotifier(0);
 
   StreamSubscription<HistoryItem>? _remoteHistorySubscription;
+  Subscription? _eventBusSubscription;
 
   late ProxyServer proxyServer;
 
@@ -130,6 +133,23 @@ class MobileHomeState extends State<MobileHomePage> implements EventListener, Li
     proxyServer.addListener(this);
     proxyServer.start();
     _remoteHistorySubscription = HistoryStorage.onRemoteImported.listen((item) => _openHistoryPage(item));
+
+    // 订阅 MCP 通知与抓包控制事件（规则引擎/自动化任务发布）
+    _eventBusSubscription = EventBus().subscribe(handler: (event) {
+      if (event.type == 'notification') {
+        if (!mounted) return;
+        final title = event.data['title']?.toString() ?? 'ProxyPin';
+        final message = event.data['message']?.toString() ?? '';
+        CustomToast('$title：$message').show(context);
+      } else if (event.type == 'mcp_capture_control') {
+        final action = event.data['action']?.toString();
+        if (action == 'stop') {
+          unawaited(proxyServer.stop());
+        } else if (action == 'start') {
+          unawaited(proxyServer.start());
+        }
+      }
+    });
 
     // MCP 初始化
     McpBridge().setRequestContainer(MobileApp.container);
@@ -174,6 +194,8 @@ class MobileHomeState extends State<MobileHomePage> implements EventListener, Li
   void dispose() {
     AppLifecycleBinding.instance.removeListener(this);
     _remoteHistorySubscription?.cancel();
+    final eventSub = _eventBusSubscription;
+    if (eventSub != null) EventBus().unsubscribe(eventSub);
     McpServer().stop();
     super.dispose();
   }
@@ -218,7 +240,7 @@ class MobileHomeState extends State<MobileHomePage> implements EventListener, Li
                       title: Text(localizations.toolbox,
                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w400)),
                       centerTitle: true)),
-              body: Toolbox(proxyServer: proxyServer))),
+              body: Toolbox(proxyServer: proxyServer, requestContainer: MobileApp.container))),
       NavigatorPage(navigatorKey: configNavigatorKey, child: ConfigPage(proxyServer: proxyServer)),
       NavigatorPage(
           navigatorKey: settingNavigatorKey,

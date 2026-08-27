@@ -212,9 +212,19 @@ class HttpClients {
 class Http2ClientHandler {
   static const int FLAG_ACK = 0x1;
 
+  /// 窗口归还阈值：累计接收 DATA 字节达到该值时，向上游发送连接级 WINDOW_UPDATE。
+  /// 否则连接级窗口（默认 65535）耗尽后上游将停止发送，大响应存在挂起风险。
+  static const int _windowUpdateThreshold = 32768;
+
   ByteBuf byteBuf = ByteBuf();
   Http2ResponseDecoder decoder = Http2ResponseDecoder();
   final ChannelHandler<HttpResponse> handler;
+
+  /// 连接级已消费但未归还的字节数
+  int _connectionWindowPending = 0;
+
+  /// 各流已消费但未归还的字节数（流级窗口耗尽同样会导致上游停止发送）
+  final Map<int, int> _streamWindowPending = {};
 
   Http2ClientHandler(this.handler);
 
@@ -248,15 +258,18 @@ class Http2ClientHandler {
     setInt32(payload, offset, streamSetting.initialWindowSize);
     offset += 4;
 
-    //SETTINGS_MAX_FRAME_SIZE
+    //SETTINGS_MAX_FRAME_SIZE（此前误写为 maxHeaderListSize，导致声明的帧上限与实现不一致）
     setInt16(payload, offset, 6);
     offset += 2;
-    setInt32(payload, offset, streamSetting.maxHeaderListSize!);
+    setInt32(payload, offset, streamSetting.maxFrameSize);
     offset += 4;
 
     var settingFrame = FrameHeader(payload.length, FrameType.settings, 0, 0);
     var buffer = settingFrame.encode()..addAll(payload);
     await channel.writeBytes(buffer);
+
+    // 连接建立后立即扩大连接级接收窗口（默认 65535 对大响应过小）
+    await channel.writeBytes(buildWindowUpdateFrame(0, 1048576 - 65535));
   }
 
   void onData(ChannelContext channelContext, Channel channel, Uint8List data) {
@@ -270,6 +283,9 @@ class Http2ClientHandler {
     byteBuf.clearRead();
 
     if (decodeResult.forward != null) {
+      // 统计本批次透传帧中的 DATA 字节，按需归还接收窗口
+      releaseWindow(channel, decodeResult.forward!);
+
       ByteBuf buffer = ByteBuf(decodeResult.forward);
 
       FrameHeader? frameHeader = FrameReader.readFrameHeader(buffer);
@@ -286,7 +302,76 @@ class Http2ClientHandler {
       return;
     }
 
+    // 完整响应结束：归还该流剩余窗口并清理
+    final streamId = decodeResult.data?.streamId ?? 0;
+    _streamWindowPending.remove(streamId);
+    releaseWindow(channel, null);
+
     handler.channelRead(channelContext, channel, decodeResult.data!);
+  }
+
+  /// 解析透传帧，累计 DATA 帧字节数；连接级达到阈值或单流达到 512KB 时发送 WINDOW_UPDATE
+  void releaseWindow(Channel channel, List<int>? forward) {
+    void flush() {
+      if (_connectionWindowPending >= _windowUpdateThreshold) {
+        channel.writeBytes(buildWindowUpdateFrame(0, _connectionWindowPending));
+        _connectionWindowPending = 0;
+      }
+      _streamWindowPending.removeWhere((streamId, pending) {
+        if (pending >= 524288) {
+          channel.writeBytes(buildWindowUpdateFrame(streamId, pending));
+          return true;
+        }
+        return false;
+      });
+    }
+
+    if (forward == null) {
+      flush();
+      return;
+    }
+
+    // 遍历 forward 中的帧，累计 DATA 帧的 payload 长度
+    final buffer = ByteBuf(forward);
+    while (buffer.readableBytes() >= 9) {
+      final header = FrameReader.readFrameHeader(buffer);
+      if (header == null) break;
+      final payloadLength = header.length;
+      if (buffer.readableBytes() < payloadLength) break;
+      if (header.type == FrameType.data) {
+        _connectionWindowPending += payloadLength;
+        _streamWindowPending[header.streamIdentifier] =
+            (_streamWindowPending[header.streamIdentifier] ?? 0) + payloadLength;
+      }
+      buffer.skipBytes(payloadLength);
+    }
+    flush();
+  }
+
+  /// 构造 WINDOW_UPDATE 帧（streamId=0 为连接级）
+  static Uint8List buildWindowUpdateFrame(int streamId, int increment) {
+    final frame = Uint8List(13);
+    // length = 4
+    frame[0] = 0;
+    frame[1] = 0;
+    frame[2] = 4;
+    // type = 8 (WINDOW_UPDATE)
+    frame[3] = 8;
+    // flags = 0
+    frame[4] = 0;
+    // stream id
+    final sid = streamId & 0x7FFFFFFF;
+    frame[5] = (sid >> 24) & 0xFF;
+    frame[6] = (sid >> 16) & 0xFF;
+    frame[7] = (sid >> 8) & 0xFF;
+    frame[8] = sid & 0xFF;
+    // window size increment（最高位保留，必须为 0）
+    final inc = increment & 0x7FFFFFFF;
+    frame[9] = (inc >> 24) & 0xFF;
+    frame[10] = (inc >> 16) & 0xFF;
+    frame[11] = (inc >> 8) & 0xFF;
+    frame[12] = inc & 0xFF;
+    return frame;
   }
 }
 

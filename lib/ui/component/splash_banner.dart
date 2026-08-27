@@ -3,8 +3,11 @@
  * 显示应用信息、版本、加载状态
  */
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:proxypin/ui/configuration.dart';
 
 /// 启动横幅页面
 class SplashBanner extends StatefulWidget {
@@ -13,12 +16,24 @@ class SplashBanner extends StatefulWidget {
   final bool showVersion;
   final bool showFeatures;
 
+  /// 背景模式：default 蓝色渐变 / custom 自定义图片 / transparent 跟随主题背景
+  final String backgroundMode;
+
+  /// 自定义背景图片文件（backgroundMode == custom 时使用）
+  final File? backgroundImage;
+
+  /// 自定义小字文本（为空时显示版本信息）
+  final String? subtitle;
+
   const SplashBanner({
     super.key,
     this.onComplete,
     this.duration = const Duration(seconds: 2),
     this.showVersion = true,
     this.showFeatures = true,
+    this.backgroundMode = 'default',
+    this.backgroundImage,
+    this.subtitle,
   });
 
   @override
@@ -84,8 +99,19 @@ class _SplashBannerState extends State<SplashBanner> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final foregroundColor = backgroundMode == 'transparent' ? (isDark ? Colors.white : Colors.blue.shade700) : Colors.white;
+
+    Widget? backgroundLayer;
+    if (backgroundMode == 'custom' && backgroundImage != null) {
+      // 自定义图片背景 + 深色遮罩，保证文字可读
+      backgroundLayer = Container(
+        decoration: BoxDecoration(
+          image: DecorationImage(image: FileImage(backgroundImage!), fit: BoxFit.cover),
+        ),
+      );
+    } else if (backgroundMode == 'default') {
+      backgroundLayer = Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -97,42 +123,60 @@ class _SplashBannerState extends State<SplashBanner> with SingleTickerProviderSt
             ],
           ),
         ),
-        child: SafeArea(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Logo
-              AnimatedScale(
-                scale: _logoScale,
-                duration: const Duration(milliseconds: 500),
-                curve: Curves.elasticOut,
-                child: AnimatedOpacity(
-                  opacity: _opacity,
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: backgroundMode == 'transparent' ? Theme.of(context).scaffoldBackgroundColor : null,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (backgroundLayer != null) backgroundLayer,
+          // 自定义图片上加遮罩，保证文字可读
+          if (backgroundMode == 'custom' && backgroundImage != null)
+            Container(color: Colors.black.withValues(alpha: 0.45)),
+          SafeArea(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Logo
+                AnimatedScale(
+                  scale: _logoScale,
                   duration: const Duration(milliseconds: 500),
-                  child: Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(30),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 20,
-                          spreadRadius: 5,
+                  curve: Curves.elasticOut,
+                  child: AnimatedOpacity(
+                    opacity: _opacity,
+                    duration: const Duration(milliseconds: 500),
+                    child: Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        color: backgroundMode == 'transparent'
+                            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: backgroundMode == 'transparent'
+                            ? null
+                            : [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  blurRadius: 20,
+                                  spreadRadius: 5,
+                                ),
+                              ],
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.security,
+                          size: 70,
+                          color: backgroundMode == 'transparent'
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.blue.shade700,
                         ),
-                      ],
-                    ),
-                    child: Center(
-                      child: Icon(
-                        Icons.security,
-                        size: 70,
-                        color: Colors.blue.shade700,
                       ),
                     ),
                   ),
                 ),
-              ),
               
               const SizedBox(height: 40),
               
@@ -140,27 +184,29 @@ class _SplashBannerState extends State<SplashBanner> with SingleTickerProviderSt
               AnimatedOpacity(
                 opacity: _opacity,
                 duration: const Duration(milliseconds: 500),
-                child: const Text(
+                child: Text(
                   'ProxyPin',
                   style: TextStyle(
                     fontSize: 36,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: foregroundColor,
                     letterSpacing: 2,
                   ),
                 ),
               ),
-              
+
               if (widget.showVersion) ...[
                 const SizedBox(height: 10),
                 AnimatedOpacity(
                   opacity: _opacity,
                   duration: const Duration(milliseconds: 500),
                   child: Text(
-                    'v1.20.2 - 事件系统完整实现',
+                    widget.subtitle?.isNotEmpty == true
+                        ? widget.subtitle!
+                        : 'v${AppConfiguration.version} · 开源免费抓包工具',
                     style: TextStyle(
                       fontSize: 14,
-                      color: Colors.white.withOpacity(0.8),
+                      color: foregroundColor.withOpacity(0.8),
                     ),
                   ),
                 ),
@@ -189,7 +235,7 @@ class _SplashBannerState extends State<SplashBanner> with SingleTickerProviderSt
                     key: ValueKey(_currentFeatureIndex),
                     style: TextStyle(
                       fontSize: 18,
-                      color: Colors.white.withOpacity(0.9),
+                      color: foregroundColor.withOpacity(0.9),
                       fontWeight: FontWeight.w500,
                     ),
                     textAlign: TextAlign.center,
@@ -210,39 +256,39 @@ class _SplashBannerState extends State<SplashBanner> with SingleTickerProviderSt
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: index == _currentFeatureIndex
-                            ? Colors.white
-                            : Colors.white.withOpacity(0.3),
+                            ? foregroundColor
+                            : foregroundColor.withOpacity(0.3),
                       ),
                     ),
                   ),
                 ),
               ],
-              
+
               const SizedBox(height: 60),
-              
+
               // 加载指示器
               AnimatedOpacity(
                 opacity: _opacity,
                 duration: const Duration(milliseconds: 500),
-                child: const Column(
+                child: Column(
                   children: [
                     CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      valueColor: AlwaysStoppedAnimation<Color>(foregroundColor),
                     ),
-                    SizedBox(height: 20),
+                    const SizedBox(height: 20),
                     Text(
                       '正在启动...',
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.white70,
+                        color: foregroundColor.withOpacity(0.7),
                       ),
                     ),
                   ],
                 ),
               ),
-              
+
               const Spacer(),
-              
+
               // 底部信息
               AnimatedOpacity(
                 opacity: _opacity,
@@ -253,7 +299,7 @@ class _SplashBannerState extends State<SplashBanner> with SingleTickerProviderSt
                     '© 2023 Hongen Wang. All rights reserved.',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.white.withOpacity(0.5),
+                      color: foregroundColor.withOpacity(0.5),
                     ),
                   ),
                 ),
@@ -261,8 +307,8 @@ class _SplashBannerState extends State<SplashBanner> with SingleTickerProviderSt
             ],
           ),
         ),
-      ),
-    );
+      ],
+    ));
   }
 }
 

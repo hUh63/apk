@@ -48,7 +48,8 @@ class ScriptInterceptor extends Interceptor {
       }
       return httpResponse;
     } catch (e, t) {
-      response.status = HttpStatus(-1, 'Script exec error');
+      // 使用合法 HTTP 状态码 500（此前写入 -1 会产生非法响应行，导致客户端解析错误）
+      response.status = HttpStatus(500, 'Script exec error');
       response.body = "$e\n${response.bodyAsString}".codeUnits;
       logger.e('[${request.requestId}] 执行脚本异常 ', error: e, stackTrace: t);
     }

@@ -13,6 +13,7 @@ import 'package:proxypin/network/channel/host_port.dart';
 import 'package:proxypin/network/http/http.dart';
 import 'package:proxypin/network/http/http_client.dart';
 import 'package:proxypin/network/http/http_headers.dart';
+import 'package:proxypin/network/mcp/mcp_automation_manager.dart';
 import 'package:proxypin/network/mcp/mcp_event_automation.dart';
 import 'package:proxypin/network/mcp/mcp_rule_engine.dart';
 import 'package:proxypin/network/util/logger.dart';
@@ -137,6 +138,44 @@ class HttpProxyChannelHandler extends ChannelHandler<HttpRequest> {
         McpEventAutomation().triggerHttpRequest(request!);
       } catch (e, s) {
         log.e('MCP triggerHttpRequest 失败', error: e, stackTrace: s);
+      }
+
+      // 触发 MCP 自动化任务（onRequest 触发器，按 URL/方法/Header 条件匹配）。
+      // 未注册任务时为空操作，不阻塞代理转发。
+      try {
+        final reqMap = <String, dynamic>{
+          'url': request!.requestUrl ?? '',
+          'method': request.method.name,
+          'headers': request.headers.toMap(),
+        };
+        unawaited(MCPAutomationManager().onRequest(reqMap).catchError((e, s) {
+          log.e('MCP 自动化 onRequest 触发失败', error: e, stackTrace: s);
+        }));
+      } catch (e, s) {
+        log.e('MCP 自动化 onRequest 触发失败', error: e, stackTrace: s);
+      }
+
+      // MCP 自动化「拦截请求」动作：命中 onRequest 触发器 + blockRequest 动作的任务时，
+      // 在真实发出请求前短路返回 403，不再转发。
+      try {
+        final blockMap = <String, dynamic>{
+          'url': request!.requestUrl ?? '',
+          'method': request.method.name,
+          'headers': request.headers.toMap(),
+        };
+        if (await MCPAutomationManager().shouldBlockRequest(blockMap)) {
+          log.i('[MCP Automation] Blocked request by automation rule: ${request.requestUrl}');
+          final blockResp = HttpResponse(HttpStatus.newStatus(403, 'Blocked by MCP Automation'),
+              protocolVersion: request.protocolVersion)
+            ..request = request;
+          blockResp.headers.set('X-ProxyPin-MCP-Blocked', 'true');
+          listener?.onResponse(channelContext, blockResp);
+          channel.writeAndClose(channelContext, blockResp);
+          remoteChannel?.close();
+          return;
+        }
+      } catch (e, s) {
+        log.e('MCP 自动化 blockRequest 检查失败', error: e, stackTrace: s);
       }
 
       for (var interceptor in interceptors) {
@@ -309,6 +348,19 @@ class HttpResponseProxyHandler extends ChannelHandler<HttpResponse> {
       unawaited(McpRuleEngine().evaluate(request).catchError((e, s) {
         log.e('MCP 规则引擎评估失败', error: e, stackTrace: s);
       }));
+      // 触发 MCP 自动化任务（onResponse 触发器，按 URL/状态码条件匹配）。
+      // 未注册任务时为空操作，不阻塞转发。
+      try {
+        final respMap = <String, dynamic>{
+          'url': request.requestUrl ?? '',
+          'statusCode': msg.status?.code ?? 0,
+        };
+        unawaited(MCPAutomationManager().onResponse(respMap).catchError((e, s) {
+          log.e('MCP 自动化 onResponse 触发失败', error: e, stackTrace: s);
+        }));
+      } catch (e, s) {
+        log.e('MCP 自动化 onResponse 触发失败', error: e, stackTrace: s);
+      }
     }
 
     //域名是否过滤

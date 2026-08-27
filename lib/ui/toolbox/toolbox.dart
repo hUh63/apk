@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:proxypin/l10n/app_localizations.dart';
 import 'package:proxypin/network/bin/server.dart';
+import 'package:proxypin/network/http/http.dart';
+import 'package:proxypin/ui/component/api_endpoint_page.dart';
 import 'package:proxypin/ui/component/multi_window.dart';
 import 'package:proxypin/ui/mobile/request/request_editor.dart';
 import 'package:proxypin/ui/mobile/setting/mcp_connection.dart';
@@ -8,6 +10,7 @@ import 'package:proxypin/ui/toolbox/qr_code_page.dart';
 import 'package:proxypin/ui/toolbox/regexp.dart';
 import 'package:proxypin/ui/toolbox/timestamp.dart';
 import 'package:proxypin/ui/component/performance_dashboard.dart';
+import 'package:proxypin/ui/component/log_viewer_page.dart';
 import 'package:proxypin/utils/platform.dart';
 
 import 'aes_page.dart';
@@ -23,7 +26,10 @@ import 'xml_viewer.dart';
 class Toolbox extends StatefulWidget {
   final ProxyServer? proxyServer;
 
-  const Toolbox({super.key, this.proxyServer});
+  /// 当前抓包请求容器（由调用方传入，用于 API 端点提取等需要数据源的工具）
+  final List<HttpRequest>? requestContainer;
+
+  const Toolbox({super.key, this.proxyServer, this.requestContainer});
 
   @override
   State<StatefulWidget> createState() {
@@ -253,6 +259,26 @@ class _ToolboxState extends State<Toolbox> {
                       icon: Icons.speed,
                       text: '性能监控',
                       tooltip: '性能监控仪表盘'),
+                  IconText(
+                      onTap: () async {
+                        if (Platforms.isMobile()) {
+                          Navigator.of(context).push(MaterialPageRoute(builder: (context) => const LogViewerPage()));
+                          return;
+                        }
+                        MultiWindow.openWindow('日志查看', 'LogViewerPage', size: const Size(900, 700));
+                      },
+                      icon: Icons.article_outlined,
+                      text: '日志',
+                      tooltip: '日志查看与过滤'),
+                  IconText(
+                      onTap: () {
+                        // 从当前抓包数据提取 API 端点
+                        final source = widget.requestContainer ?? const <HttpRequest>[];
+                        ApiEndpointUtils.showEndpoints(context, List<HttpRequest>.from(source));
+                      },
+                      icon: Icons.api,
+                      text: 'API 端点',
+                      tooltip: '从抓包数据提取 API 端点'),
                 ],
               ),
             ],

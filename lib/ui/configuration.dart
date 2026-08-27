@@ -97,6 +97,21 @@ class AppConfiguration {
   /// 清空抓包前确认
   bool clearConfirm = false;
 
+  /// 启动页开关（移动端启动页）
+  bool splashEnabled = true;
+
+  /// 启动页展示时长（毫秒）
+  int splashDurationMs = 1800;
+
+  /// 启动页背景：default 蓝色渐变 / custom 自定义图片 / transparent 跟随主题（透明）
+  String splashBackground = "default";
+
+  /// 自定义背景图片路径（splashBackground == custom 时使用）
+  String? splashBackgroundPath;
+
+  /// 启动页自定义小字（为空时显示默认副标题）
+  String? splashSubtitle;
+
   //桌面window大小
   Size? windowSize;
 
@@ -228,6 +243,11 @@ class AppConfiguration {
       maxRequestCount = config['maxRequestCount'] ?? 10000;
       autoReadEnabled = config['autoReadEnabled'] ?? true;
       clearConfirm = config['clearConfirm'] ?? false;
+      splashEnabled = config['splashEnabled'] ?? true;
+      splashDurationMs = config['splashDurationMs'] ?? 1800;
+      splashBackground = config['splashBackground'] ?? "default";
+      splashBackgroundPath = config['splashBackgroundPath'];
+      splashSubtitle = config['splashSubtitle'];
 
       windowSize = config['windowSize'] == null
           ? null
@@ -277,6 +297,11 @@ class AppConfiguration {
       "headerViewMode": headerViewMode,
       "autoReadEnabled": autoReadEnabled,
       "clearConfirm": clearConfirm,
+      "splashEnabled": splashEnabled,
+      "splashDurationMs": splashDurationMs,
+      "splashBackground": splashBackground,
+      if (splashBackgroundPath != null) "splashBackgroundPath": splashBackgroundPath,
+      if (splashSubtitle != null) "splashSubtitle": splashSubtitle,
       if (memoryCleanupThreshold != null)
         'memoryCleanupThreshold': memoryCleanupThreshold,
       if (maxRequestCount > 0) 'maxRequestCount': maxRequestCount,

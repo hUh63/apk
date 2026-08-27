@@ -75,57 +75,62 @@ class ScheduledTask {
     }
   }
 
-  /// 简单 Cron 解析 (支持 * / , -)
+  /// Cron 解析（支持 * / , -），格式：分 时 日 月 星期
   DateTime? _parseCronNext(String cron) {
-    // 简化实现：只支持分钟级别
-    // 格式：分 时 日 月 星期
     try {
       final parts = cron.trim().split(RegExp(r'\s+'));
       if (parts.length != 5) return null;
 
-      final now = DateTime.now();
-      var minute = _parseCronField(parts[0], 0, 59, now.minute);
-      var hour = _parseCronField(parts[1], 0, 23, now.hour);
-      var day = _parseCronField(parts[2], 1, 31, now.day);
-      var month = _parseCronField(parts[3], 1, 12, now.month);
+      // 从下一分钟开始，逐级进位寻找下一个匹配时刻（正确处理跨日/跨月/跨年）
+      var next = DateTime.now()
+          .add(const Duration(minutes: 1))
+          .copyWith(second: 0, millisecond: 0, microsecond: 0);
 
-      // 如果当前时间已过，则计算下一个周期
-      if (minute <= now.minute && hour <= now.hour && day <= now.day && month <= now.month) {
-        hour++;
-        if (hour > 23) {
-          hour = 0;
-          day++;
+      for (int i = 0; i < 5000; i++) {
+        final okMinute = _fieldContains(parts[0], next.minute);
+        final okHour = _fieldContains(parts[1], next.hour);
+        final okDay = _fieldContains(parts[2], next.day);
+        final okMonth = _fieldContains(parts[3], next.month);
+
+        if (okMinute && okHour && okDay && okMonth) return next;
+
+        // 逐级进位：优先推进最小单位，避免跨月/跨年时时间回退
+        if (!okMinute) {
+          next = next.add(const Duration(minutes: 1));
+        } else if (!okHour) {
+          next = next.add(const Duration(hours: 1));
+        } else if (!okDay) {
+          next = next.add(const Duration(days: 1));
+        } else if (!okMonth) {
+          next = DateTime(next.year + 1, 1, 1);
         }
       }
-
-      return DateTime(now.year, month, day, hour, minute);
+      return null;
     } catch (e) {
       return null;
     }
   }
 
-  int _parseCronField(String field, int min, int max, int current) {
-    if (field == '*') return current;
+  /// 判断字段是否允许该值
+  bool _fieldContains(String field, int value) {
+    if (field == '*') return true;
     if (field.contains('/')) {
       // */5 表示每 5 个单位
       final step = int.parse(field.split('/').last);
-      return ((current ~/ step) + 1) * step;
+      return step > 0 && value % step == 0;
     }
     if (field.contains(',')) {
       // 1,3,5 表示特定值
-      final values = field.split(',').map(int.parse).toList();
-      for (final v in values) {
-        if (v > current) return v;
-      }
-      return values.first;
+      return field.split(',').map(int.parse).contains(value);
     }
     if (field.contains('-')) {
       // 1-5 表示范围
-      final parts = field.split('-');
-      final start = int.parse(parts.first);
-      return start;
+      final range = field.split('-');
+      final start = int.parse(range.first);
+      final end = int.parse(range.last);
+      return value >= start && value <= end;
     }
-    return int.parse(field);
+    return int.parse(field) == value;
   }
 
   Map<String, dynamic> toJson() => {

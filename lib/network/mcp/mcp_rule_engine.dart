@@ -17,6 +17,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:proxypin/event/event_bus.dart';
 import 'package:proxypin/network/components/manager/script_manager.dart';
 import 'package:proxypin/network/components/js/script_engine.dart';
 import 'package:proxypin/network/http/http.dart';
@@ -375,7 +376,24 @@ class Action {
     } else if (type == ActionType.log) {
       logger.i('规则动作[log]: target=$target params=$parameters');
     } else if (type == ActionType.notify) {
-      logger.i('规则动作[notify]: ${target ?? ''}');
+      // 通知动作：经 EventBus 发布，由 UI 层展示 toast 通知
+      final title = parameters?['title'] as String? ?? 'ProxyPin 规则引擎';
+      final message = target ?? parameters?['message'] as String? ?? '规则触发通知';
+      logger.i('规则动作[notify]: $title - $message');
+      try {
+        EventBus().publish(AppEvent('notification', data: {'title': title, 'message': message}));
+      } catch (e) {
+        logger.e('规则动作[notify] 发布失败：$e');
+      }
+    } else if (type == ActionType.stopCapture || type == ActionType.startCapture) {
+      // 抓包启停动作：经 EventBus 发布控制事件，由 UI 层（持有 ProxyServer 引用）执行
+      final action = type == ActionType.stopCapture ? 'stop' : 'start';
+      logger.i('规则动作[${type.name}]: 发布抓包控制事件');
+      try {
+        EventBus().publish(AppEvent('mcp_capture_control', data: {'action': action}));
+      } catch (e) {
+        logger.e('规则动作[${type.name}] 发布失败：$e');
+      }
     } else {
       logger.i('规则动作[${type.name}]: target=$target params=$parameters');
     }

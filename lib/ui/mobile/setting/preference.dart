@@ -1,11 +1,13 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:proxypin/l10n/app_localizations.dart';
 import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/network/bin/server.dart';
 import 'package:proxypin/network/util/logger.dart';
+import 'package:proxypin/storage/path.dart';
 import 'package:proxypin/ui/component/widgets.dart';
 import 'package:proxypin/ui/configuration.dart';
 import 'package:proxypin/ui/mobile/setting/config_management.dart';
@@ -54,6 +56,156 @@ class _PreferenceState extends State<Preference> {
     super.dispose();
   }
 
+  /// 启动页设置区块：开关 / 展示时长 / 背景（默认·自定义图片·透明）/ 自定义小字
+  Widget _buildSplashSection(Color dividerColor) {
+    return Card(
+      color: Colors.transparent,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: dividerColor),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(children: [
+        ListTile(
+          title: const Text('启动页'),
+          subtitle: const Text('应用启动时展示品牌动画', style: TextStyle(fontSize: 12)),
+          trailing: SwitchWidget(
+            value: appConfiguration.splashEnabled,
+            scale: 0.8,
+            onChanged: (value) {
+              setState(() => appConfiguration.splashEnabled = value);
+              appConfiguration.flushConfig();
+            },
+          ),
+        ),
+        if (appConfiguration.splashEnabled) ...[
+          Divider(height: 0, thickness: 0.3, color: dividerColor),
+          ListTile(
+            title: const Text('展示时长'),
+            subtitle: Text(
+              '${(appConfiguration.splashDurationMs / 1000).toStringAsFixed(1)} 秒',
+              style: const TextStyle(fontSize: 12),
+            ),
+            trailing: SizedBox(
+              width: 150,
+              child: Slider(
+                value: appConfiguration.splashDurationMs.toDouble(),
+                min: 500,
+                max: 5000,
+                divisions: 9,
+                label: '${(appConfiguration.splashDurationMs / 1000).toStringAsFixed(1)}s',
+                onChanged: (v) {
+                  setState(() => appConfiguration.splashDurationMs = v.round());
+                  appConfiguration.flushConfig();
+                },
+              ),
+            ),
+          ),
+          Divider(height: 0, thickness: 0.3, color: dividerColor),
+          ListTile(
+            title: const Text('背景'),
+            trailing: DropdownButton<String>(
+              value: appConfiguration.splashBackground,
+              underline: const SizedBox(),
+              items: const [
+                DropdownMenuItem(value: 'default', child: Text('默认渐变')),
+                DropdownMenuItem(value: 'custom', child: Text('自定义图片')),
+                DropdownMenuItem(value: 'transparent', child: Text('透明（跟随主题）')),
+              ],
+              onChanged: (v) {
+                if (v == null) return;
+                if (v == 'custom' && appConfiguration.splashBackgroundPath == null) {
+                  // 首次切换到自定义图片时立即选图
+                  _pickSplashBackground();
+                  return;
+                }
+                setState(() => appConfiguration.splashBackground = v);
+                appConfiguration.flushConfig();
+              },
+            ),
+          ),
+          if (appConfiguration.splashBackground == 'custom') ...[
+            Divider(height: 0, thickness: 0.3, color: dividerColor),
+            ListTile(
+              title: const Text('自定义图片'),
+              subtitle: Text(
+                appConfiguration.splashBackgroundPath == null ? '未选择' : '已设置，点击更换',
+                style: const TextStyle(fontSize: 12),
+              ),
+              trailing: const Icon(Icons.image_outlined, size: 20),
+              onTap: _pickSplashBackground,
+            ),
+          ],
+          Divider(height: 0, thickness: 0.3, color: dividerColor),
+          ListTile(
+            title: const Text('自定义小字'),
+            subtitle: Text(
+              appConfiguration.splashSubtitle?.isNotEmpty == true
+                  ? appConfiguration.splashSubtitle!
+                  : '默认显示版本信息',
+              style: const TextStyle(fontSize: 12),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: const Icon(Icons.edit_outlined, size: 18),
+            onTap: _editSplashSubtitle,
+          ),
+        ],
+      ]),
+    );
+  }
+
+  /// 选择启动页自定义背景图片，并复制到应用目录持久化
+  Future<void> _pickSplashBackground() async {
+    try {
+      final file = await FilePicker.pickFile(type: FileType.image);
+      if (file == null) return;
+      // 复制到应用目录，避免缓存路径失效
+      final source = File(file.path!);
+      final ext = file.path!.split('.').last.toLowerCase();
+      final target = await Paths.getPath('splash_bg.$ext');
+      await source.copy(target.path);
+      setState(() {
+        appConfiguration.splashBackgroundPath = target.path;
+        appConfiguration.splashBackground = 'custom';
+      });
+      appConfiguration.flushConfig();
+    } catch (e) {
+      logger.e('选择启动页背景失败', error: e);
+    }
+  }
+
+  /// 编辑启动页自定义小字
+  Future<void> _editSplashSubtitle() async {
+    final controller = TextEditingController(text: appConfiguration.splashSubtitle ?? '');
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('自定义小字'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 40,
+          decoration: const InputDecoration(
+            labelText: '副标题文本',
+            hintText: '留空恢复默认（显示版本信息）',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    setState(() => appConfiguration.splashSubtitle = result.isEmpty ? null : result);
+    appConfiguration.flushConfig();
+  }
+
   @override
   Widget build(BuildContext context) {
     AppLocalizations localizations = AppLocalizations.of(context)!;
@@ -96,6 +248,8 @@ class _PreferenceState extends State<Preference> {
               child: themeColor(context),
             ),
           ]),
+          const SizedBox(height: 12),
+          _buildSplashSection(dividerColor),
           const SizedBox(height: 12),
           section([
             ListTile(

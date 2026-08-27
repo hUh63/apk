@@ -24,6 +24,7 @@ import 'package:proxypin/network/channel/channel_context.dart';
 import 'package:proxypin/network/channel/host_port.dart';
 import 'package:proxypin/network/http/http.dart';
 import 'package:proxypin/network/http/http_client.dart';
+import 'package:proxypin/ui/component/api_endpoint_page.dart';
 import 'package:proxypin/ui/component/multi_select_controller.dart';
 import 'package:proxypin/ui/component/selection_action_bar.dart';
 import 'package:proxypin/ui/component/utils.dart';
@@ -200,6 +201,8 @@ class DesktopRequestListState extends State<DesktopRequestListWidget> with Autom
                 text: sortDesc ? localizations.timeAsc : localizations.timeDesc),
             _menuItem(_RequestListMenuAction.report,
                 icon: const Icon(Icons.cloud_upload_outlined, size: 16), text: localizations.reportServers),
+            _menuItem(_RequestListMenuAction.apiEndpoints,
+                icon: const Icon(Icons.api, size: 16), text: 'API 端点'),
           ];
         });
   }
@@ -233,6 +236,10 @@ class DesktopRequestListState extends State<DesktopRequestListWidget> with Autom
         break;
       case _RequestListMenuAction.report:
         showReportServersDialog(context);
+        break;
+      case _RequestListMenuAction.apiEndpoints:
+        // 用当前抓包数据提取 API 端点（同进程打开，支持导出 OpenAPI/Postman/JSON）
+        ApiEndpointUtils.showEndpoints(context, container.source);
         break;
     }
   }
@@ -399,4 +406,4 @@ class _ClearSelectionIntent extends Intent {
   const _ClearSelectionIntent();
 }
 
-enum _RequestListMenuAction { search, export, repeat, select, sort, report }
+enum _RequestListMenuAction { search, export, repeat, select, sort, report, apiEndpoints }

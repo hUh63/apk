@@ -25,6 +25,7 @@ import 'package:proxypin/network/components/manager/environment_manager.dart';
 import 'package:proxypin/ui/component/chinese_font.dart';
 import 'package:proxypin/ui/component/multi_window_compat.dart';
 import 'package:proxypin/ui/component/multi_window.dart';
+import 'package:proxypin/ui/component/splash_banner.dart';
 import 'package:proxypin/ui/configuration.dart';
 import 'package:proxypin/ui/desktop/desktop.dart';
 import 'package:proxypin/ui/mobile/mobile.dart';
@@ -69,7 +70,10 @@ void main(List<String> args) async {
   //移动端
   if (Platforms.isMobile()) {
     var appConfiguration = await instance;
-    runApp(FluentApp(MobileHomePage((await configuration), appConfiguration), appConfiguration));
+    var config = await configuration;
+    runApp(FluentApp(
+        SplashGate(child: MobileHomePage(config, appConfiguration), appConfiguration: appConfiguration),
+        appConfiguration));
     return;
   }
 
@@ -79,6 +83,44 @@ void main(List<String> args) async {
   }
 
   runApp(FluentApp(DesktopHomePage(await configuration, appConfiguration), appConfiguration));
+}
+
+/// 启动页门控：先展示 SplashBanner（Logo 动画 + 版本信息），完成后切换到主页面。
+/// 仅移动端启用（手机应用启动页符合用户预期；桌面端保持直接进入，不拖慢启动）。
+/// 支持偏好设置自定义：开关、时长、背景（默认/自定义图片/透明）、自定义小字。
+class SplashGate extends StatefulWidget {
+  final Widget child;
+  final AppConfiguration appConfiguration;
+
+  const SplashGate({super.key, required this.child, required this.appConfiguration});
+
+  @override
+  State<SplashGate> createState() => _SplashGateState();
+}
+
+class _SplashGateState extends State<SplashGate> {
+  bool _showSplash = true;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_showSplash) return widget.child;
+
+    final config = widget.appConfiguration;
+    final backgroundFile =
+        config.splashBackground == 'custom' && config.splashBackgroundPath != null
+            ? File(config.splashBackgroundPath!)
+            : null;
+
+    return SplashBanner(
+      duration: Duration(milliseconds: config.splashDurationMs.clamp(500, 10000)),
+      backgroundMode: config.splashBackground,
+      backgroundImage: backgroundFile,
+      subtitle: config.splashSubtitle,
+      onComplete: () {
+        if (mounted) setState(() => _showSplash = false);
+      },
+    );
+  }
 }
 
 class FluentApp extends StatelessWidget {

@@ -19,6 +19,7 @@ import 'dart:convert';
 import 'dart:io' as io;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import '../../event/event_bus.dart';
 import '../mcp/mcp_server.dart';
 import '../mcp/mcp_bridge.dart';
 import '../http/http.dart';
@@ -377,6 +378,17 @@ class MCPAutomationManager {
     return executedActions;
   }
 
+  /// 检查是否存在命中该请求的「拦截请求」任务（onRequest 触发器 + blockRequest 动作）。
+  /// 由转发管道在真实发出请求前调用，命中则短路返回拦截响应。
+  Future<bool> shouldBlockRequest(Map<String, dynamic> request) async {
+    for (final task in enabledTasks) {
+      if (task.triggerType != AutomationTriggerType.onRequest) continue;
+      if (!task.actions.contains(AutomationActionType.blockRequest)) continue;
+      if (task.matchesRequest(request)) return true;
+    }
+    return false;
+  }
+
   /// 检查响应匹配并执行自动化任务
   Future<List<String>> onResponse(Map<String, dynamic> response) async {
     final executedActions = <String>[];
@@ -388,6 +400,28 @@ class MCPAutomationManager {
       }
     }
     
+    return executedActions;
+  }
+
+  /// 代理启动时触发（onProxyStart 触发器）
+  Future<List<String>> onProxyStart() async {
+    return _triggerByType(AutomationTriggerType.onProxyStart, {'proxyStart': true});
+  }
+
+  /// 代理停止时触发（onProxyStop 触发器）
+  Future<List<String>> onProxyStop() async {
+    return _triggerByType(AutomationTriggerType.onProxyStop, {'proxyStop': true});
+  }
+
+  /// 按触发器类型执行任务
+  Future<List<String>> _triggerByType(AutomationTriggerType type, Map<String, dynamic> context) async {
+    final executedActions = <String>[];
+    for (final task in enabledTasks) {
+      if (task.triggerType == type) {
+        await _executeTask(task, context);
+        executedActions.add(task.id);
+      }
+    }
     return executedActions;
   }
 
@@ -516,12 +550,16 @@ class MCPAutomationManager {
       logger.i('[MCP Automation] Modified response body for task: ${task.name}');
     }
     
-    // 修改状态码
+    // 修改状态码（真实修改，此前写入占位值 custom 且丢弃了用户传入的 statusCode）
     if (params.containsKey('statusCode')) {
-      final statusCode = params['statusCode'] as int;
-      httpResponse.status = io.HttpStatus.custom;
-      // 注意：实际修改状态码需要更复杂的处理
-      logger.i('[MCP Automation] Modified response status for task: ${task.name}');
+      final raw = params['statusCode'];
+      final code = raw is int ? raw : int.tryParse(raw?.toString() ?? '');
+      if (code != null && code >= 100 && code <= 599) {
+        httpResponse.status = HttpStatus.newStatus(code, null);
+        logger.i('[MCP Automation] Modified response status to $code for task: ${task.name}');
+      } else {
+        logger.w('[MCP Automation] Invalid statusCode: $raw');
+      }
     }
   }
 
@@ -732,8 +770,14 @@ class MCPAutomationManager {
 
       // 根据脚本类型执行
       if (scriptType == 'dart') {
-        // Dart 内联脚本：查找是否有匹配的注册脚本，否则仅记录
-        logger.i('[MCP Automation] Dart script (inline, no runtime): ${code.length} chars');
+        // 项目无 Dart 运行时，内联 Dart 脚本无法执行：明确告知用户，避免静默失败
+        logger.w('[MCP Automation] Dart 内联脚本不支持自动执行（无 Dart 运行时），请改用 JavaScript 或按名称引用已注册脚本');
+        try {
+          EventBus().publish(AppEvent('notification', data: {
+            'title': 'MCP Automation',
+            'message': 'Dart 内联脚本不支持自动执行，请改用 JavaScript 脚本',
+          }));
+        } catch (_) {}
       } else {
         // JavaScript 脚本：通过 flutterJs 引擎执行
         final mgr = await ScriptManager.instance;
@@ -752,16 +796,14 @@ class MCPAutomationManager {
   Future<void> _sendNotification(MCPAutomationTask task, Map<String, dynamic> context) async {
     final params = task.actionParams;
     final title = params['title'] as String? ?? 'MCP Automation';
-    final message = params['message'] as String? ?? 'Task executed: ${task.name}';
-    
+    final message = params['message'] as String? ?? '任务执行完成：${task.name}';
+
     logger.i('[MCP Automation] Sending notification: $title - $message');
-    
-    // 使用 Flutter 的本地通知（需要配置 flutter_local_notifications）
-    // 这里提供框架，实际通知逻辑可根据需求扩展
+
+    // 通过 EventBus 发布通知事件，由桌面/移动端主界面订阅后展示 toast 通知。
+    // 未订阅（如后台无界面）时仅记录日志，不抛异常。
     try {
-      // 注意：实际通知发送需要集成 flutter_local_notifications 插件
-      // 简化版本：只记录日志
-      logger.i('[MCP Automation] Notification sent (logged)');
+      EventBus().publish(AppEvent('notification', data: {'title': title, 'message': message}));
     } catch (e) {
       logger.e('[MCP Automation] Failed to send notification: $e');
     }

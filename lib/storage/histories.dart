@@ -37,6 +37,9 @@ class HistoryStorage {
   final File _storageFile;
   static final StreamController<HistoryItem> _remoteImportedController = StreamController<HistoryItem>.broadcast();
 
+  /// 串行写队列：所有 refresh() 按顺序执行，避免并发全量重写导致文件交错/截断
+  Future<void> _writeQueue = Future.value();
+
   HistoryStorage._internal(this._storageFile);
 
   static final ListenableList<HistoryItem> _histories = ListenableList();
@@ -121,8 +124,10 @@ class HistoryStorage {
     return _histories.source[index];
   }
 
-  Future<void> refresh() async {
-    await _storageFile.writeAsString(jsonEncode(_histories.source));
+  /// 刷新持久化文件：串行执行，避免并发写同一文件
+  Future<void> refresh() {
+    _writeQueue = _writeQueue.then((_) => _storageFile.writeAsString(jsonEncode(_histories.source)));
+    return _writeQueue;
   }
 
   ///删除
@@ -131,7 +136,7 @@ class HistoryStorage {
     logger.i('删除历史记录 $history');
     final homePath = await _homePath();
     var file = File('$homePath${Platform.pathSeparator}${Files.getName(history.path)}');
-    file.delete();
+    await file.delete();
     await refresh();
   }
 
@@ -222,6 +227,7 @@ class HistoryTask extends ListenerListEvent<HttpRequest> {
 
   RandomAccessFile? open;
   bool locked = false;
+  int _idleTicks = 0;
 
   static HistoryTask? _instance;
 
@@ -262,6 +268,8 @@ class HistoryTask extends ListenerListEvent<HttpRequest> {
       startTask();
       return;
     }
+    // 空闲暂停后恢复写入
+    if (timer == null) startTask();
     writeList.add(item);
   }
 
@@ -299,27 +307,45 @@ class HistoryTask extends ListenerListEvent<HttpRequest> {
 
   //写入任务
   Future<void> startTask() async {
-    if (history != null || locked) return;
+    if (history != null && timer != null) return;
+    if (locked) return;
     locked = true;
 
-    HistoryStorage storage = await HistoryStorage.instance;
-    var name = formatDate(DateTime.now(), [mm, '-', d, ' ', HH, ':', nn, ':', ss]);
-    File file = await HistoryStorage.openFile("${DateTime.now().millisecondsSinceEpoch}.txt");
-    history = await storage.addHistory(name, file, 0);
-    writeList.clear();
-    writeList.addAll(sourceList.source);
+    if (history == null) {
+      HistoryStorage storage = await HistoryStorage.instance;
+      var name = formatDate(DateTime.now(), [mm, '-', d, ' ', HH, ':', nn, ':', ss]);
+      File file = await HistoryStorage.openFile("${DateTime.now().millisecondsSinceEpoch}.txt");
+      history = await storage.addHistory(name, file, 0);
+      writeList.clear();
+      writeList.addAll(sourceList.source);
+    } else if (open == null) {
+      // 空闲暂停后恢复：重新打开已有历史文件，继续追加
+      open = await File(history!.path).open(mode: FileMode.append);
+    }
+
     locked = false;
 
-    open = await file.open(mode: FileMode.append);
-    timer = Timer.periodic(const Duration(seconds: 5), (it) => writeTask());
+    timer ??= Timer.periodic(const Duration(seconds: 5), (it) => writeTask());
   }
 
   //写入任务
   Future<void> writeTask() async {
     if (writeList.isEmpty) {
+      // 空闲自动暂停：连续 6 次（约 30 秒）无新数据时释放定时器与文件句柄，
+      // 避免代理停止后 timer/句柄长期驻留（资源泄漏）。有数据时 onAdd 自动恢复。
+      _idleTicks++;
+      if (_idleTicks >= 6 && timer != null) {
+        timer?.cancel();
+        timer = null;
+        open?.close();
+        open = null;
+        _idleTicks = 0;
+        logger.d('history task idle, paused');
+      }
       return;
     }
 
+    _idleTicks = 0;
     bool changed = false;
     while (writeList.isNotEmpty && !locked) {
       var request = writeList.removeFirst();
