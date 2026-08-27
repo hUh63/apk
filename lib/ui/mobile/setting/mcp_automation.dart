@@ -43,7 +43,8 @@ class _McpAutomationPageState extends State<McpAutomationPage>
   List<Map<String, dynamic>> _roots = [];
   List<Map<String, dynamic>> _tools = [];
 
-  bool _mcpRunning = false;
+  /// MCP 运行状态；null 表示首次状态尚未拉取（避免进入页面先闪"已停止"）
+  bool? _mcpRunning;
   Timer? _statusTimer;
 
   @override
@@ -56,23 +57,54 @@ class _McpAutomationPageState extends State<McpAutomationPage>
       }
     });
     _bootstrap();
-    _statusTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
-      // 桌面子窗口为独立 isolate，McpServer 单例与主窗口不共享，
-      // 通过 IPC 拉取主窗口真实运行状态；移动端直接读本地单例。
-      bool running;
+    // 立即拉取一次真实状态（不等 2 秒定时器），消除"已停止"闪现
+    _refreshMcpStatus();
+    _statusTimer = Timer.periodic(const Duration(seconds: 2), (_) => _refreshMcpStatus());
+  }
+
+  /// 拉取 MCP 运行状态：桌面子窗口为独立 isolate，McpServer 单例与主窗口不共享，
+  /// 通过 IPC 拉取主窗口真实运行状态；移动端直接读本地单例。
+  Future<void> _refreshMcpStatus() async {
+    bool running;
+    try {
       if (Platforms.isDesktop()) {
         final res = await DesktopMultiWindow.invokeMainWindowMethod('getMcpStatus');
         running = res is Map && res['running'] == true;
       } else {
         running = _mcpServer.isRunning;
       }
-      if (running != _mcpRunning) setState(() => _mcpRunning = running);
-    });
+    } catch (e) {
+      logger.w('拉取 MCP 状态失败', error: e);
+      return;
+    }
+    if (!mounted) return;
+    if (running != _mcpRunning) setState(() => _mcpRunning = running);
+  }
+
+  /// 启动/停止 MCP 服务（移动端直连本地单例；桌面端经 IPC 操作主窗口的 McpServer）。
+  /// 返回操作后的实际运行状态，供 UI 校验开关是否生效。
+  Future<bool> _setMcpRunning(bool target) async {
+    try {
+      if (Platforms.isDesktop()) {
+        final res = await DesktopMultiWindow.invokeMainWindowMethod(target ? 'startMcp' : 'stopMcp');
+        return res is Map && res['running'] == true;
+      }
+      if (target) {
+        await _mcpServer.start();
+      } else {
+        await _mcpServer.stop();
+      }
+      return _mcpServer.isRunning;
+    } catch (e) {
+      logger.e('切换 MCP 运行状态失败', error: e);
+      return !target; // 失败时保持原状
+    }
   }
 
   Future<void> _bootstrap() async {
     await _ruleEngine.loadRules();
     await _loadWorkflows();
+    await _loadRoots();
     // 注册任务执行器并加载持久化定时任务
     _scheduler.setActionExecutor(_executeTaskDescriptor);
     await _scheduler.loadTasks();
@@ -83,10 +115,120 @@ class _McpAutomationPageState extends State<McpAutomationPage>
   void _refreshMcpData() {
     try {
       _prompts = _mcpServer.getPrompts();
-      _roots = _mcpServer.getRoots();
       _tools = _mcpServer.getTools();
+      // Roots 由本页自由编辑并持久化（mcp_roots.json），不随服务端状态刷新覆盖
     } catch (e) {
-      logger.w('加载 MCP prompts/roots/tools 失败', error: e);
+      logger.w('加载 MCP prompts/tools 失败', error: e);
+    }
+  }
+
+  // ==================== Roots 本地持久化 ====================
+
+  /// 加载 Roots：优先读取 mcp_roots.json（用户编辑后的完整列表）；
+  /// 无持久化文件时以 MCP Server 内置默认 Roots 作为初始列表。
+  Future<void> _loadRoots() async {
+    try {
+      final file = await Paths.getPath('mcp_roots.json');
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        if (content.trim().isNotEmpty) {
+          final list = jsonDecode(content) as List<dynamic>;
+          _roots = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        }
+      } else {
+        _roots = _mcpServer.getRoots();
+      }
+      // 同步到 MCP Server，roots/list 立即生效
+      _mcpServer.setRoots(_roots);
+    } catch (e, st) {
+      logger.e('加载 Roots 失败', error: e, stackTrace: st);
+      _roots = _mcpServer.getRoots();
+    }
+  }
+
+  /// 保存 Roots：写入 mcp_roots.json 并同步到 MCP Server（桌面端额外通知主窗口重载）
+  Future<void> _saveRoots() async {
+    try {
+      final file = await Paths.getPath('mcp_roots.json');
+      await file.writeAsString(jsonEncode(_roots));
+      _mcpServer.setRoots(_roots);
+      if (Platforms.isDesktop()) {
+        unawaited(DesktopMultiWindow.invokeMainWindowMethod('refreshMcpRoots', {'roots': _roots}));
+      }
+    } catch (e, st) {
+      logger.e('保存 Roots 失败', error: e, stackTrace: st);
+    }
+  }
+
+  /// 添加/编辑 Root（uri + 名称，uri 必填）
+  Future<void> _showRootDialog(BuildContext context, Map<String, dynamic>? existing) async {
+    final isEdit = existing != null;
+    final uriController = TextEditingController(text: existing?['uri']?.toString() ?? '');
+    final nameController = TextEditingController(text: existing?['name']?.toString() ?? '');
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isEdit ? '编辑 Root' : '添加 Root'),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: uriController,
+                decoration: const InputDecoration(
+                  labelText: 'URI *',
+                  border: OutlineInputBorder(),
+                  hintText: 'proxypin://workspace 或 file:///path/to/dir',
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: '名称', border: OutlineInputBorder()),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          ElevatedButton(
+            onPressed: () async {
+              final uri = uriController.text.trim();
+              if (uri.isEmpty) {
+                FlutterToastr.show('请输入 Root URI', context, duration: 2, backgroundColor: Colors.red);
+                return;
+              }
+              final name = nameController.text.trim().isEmpty ? uri : nameController.text.trim();
+              // 局部变量避免可空类型提升问题
+              final existingRoot = existing;
+              setState(() {
+                if (existingRoot != null) {
+                  existingRoot['uri'] = uri;
+                  existingRoot['name'] = name;
+                } else {
+                  _roots.add({'uri': uri, 'name': name});
+                }
+              });
+              await _saveRoots();
+              if (context.mounted) Navigator.pop(context);
+              FlutterToastr.show(isEdit ? 'Root 已更新' : 'Root 已添加', context, duration: 2,
+                  backgroundColor: Colors.green);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 删除 Root
+  Future<void> _deleteRoot(Map<String, dynamic> root) async {
+    setState(() => _roots.remove(root));
+    await _saveRoots();
+    if (mounted) {
+      FlutterToastr.show('Root 已删除', context, duration: 2, backgroundColor: Colors.green);
     }
   }
 
@@ -195,6 +337,9 @@ class _McpAutomationPageState extends State<McpAutomationPage>
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
+          // 靠左对齐：scrollable TabBar 默认 startOffset 会带起始缩进，
+          // 显式指定 start 使 6 个 Tab 从最左侧开始显示
+          tabAlignment: TabAlignment.start,
           tabs: const [
             Tab(text: '定时任务', icon: Icon(Icons.schedule)),
             Tab(text: '事件监听', icon: Icon(Icons.event)),
@@ -222,23 +367,66 @@ class _McpAutomationPageState extends State<McpAutomationPage>
 
   // ==================== MCP 连接状态指示器 ====================
 
+  /// 状态指示器 + 运行开关：
+  /// 未拉取到首次状态前显示"检测中…"，避免进入页面先闪"已停止"再变"运行中"。
   Widget _buildStatusIndicator() {
     final running = _mcpRunning;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: (running ? Colors.green : Colors.grey).withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.circle, size: 8, color: running ? Colors.green : Colors.grey),
-          const SizedBox(width: 6),
-          Text(running ? '运行中' : '已停止',
-              style: TextStyle(fontSize: 12, color: running ? Colors.green : Colors.grey)),
-        ],
-      ),
+    final Color color;
+    final String text;
+    if (running == null) {
+      color = Colors.orange;
+      text = '检测中…';
+    } else if (running) {
+      color = Colors.green;
+      text = '运行中';
+    } else {
+      color = Colors.grey;
+      text = '已停止';
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.circle, size: 8, color: color),
+              const SizedBox(width: 6),
+              Text(text, style: TextStyle(fontSize: 12, color: color)),
+            ],
+          ),
+        ),
+        // 运行开关：桌面/移动端均可直接启停 MCP 服务
+        Switch(
+          value: running == true,
+          onChanged: running == null
+              ? null // 状态未确认前禁用，避免误操作
+              : (v) async {
+                  final prev = _mcpRunning;
+                  // 乐观更新，操作失败再回滚
+                  setState(() => _mcpRunning = v);
+                  final ok = await _setMcpRunning(v);
+                  if (!mounted) return;
+                  setState(() => _mcpRunning = ok);
+                  if (v && !ok) {
+                    FlutterToastr.show('MCP 服务启动失败，请检查设置中是否已启用 MCP 服务',
+                        context, duration: 2, backgroundColor: Colors.red);
+                  } else if (!v) {
+                    FlutterToastr.show('MCP 服务已停止', context, duration: 2,
+                        backgroundColor: Colors.green);
+                  } else {
+                    FlutterToastr.show('MCP 服务已启动', context, duration: 2,
+                        backgroundColor: Colors.green);
+                  }
+                  if (ok != prev) _refreshMcpData();
+                },
+        ),
+      ],
     );
   }
 
@@ -263,8 +451,12 @@ class _McpAutomationPageState extends State<McpAutomationPage>
       case 5:
         return FloatingActionButton(
             heroTag: 'fab_workflow', onPressed: () => _showWorkflowDialog(context, null), child: const Icon(Icons.add));
+      case 4:
+        // Roots：自由添加/编辑/删除
+        return FloatingActionButton(
+            heroTag: 'fab_root', onPressed: () => _showRootDialog(context, null), child: const Icon(Icons.add));
       default:
-        return null; // Roots：只读，无添加
+        return null;
     }
   }
 
@@ -405,7 +597,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   if (actionType == 1)
                     _optionDropdown(toolNames, selectedTool, '选择 MCP 工具',
                         (v) => setDialogState(() => selectedTool = v),
-                        emptyHint: _mcpRunning ? '暂无工具' : 'MCP 未启动，无法获取工具'),
+                        emptyHint: _mcpRunning == true ? '暂无工具' : 'MCP 未启动，无法获取工具'),
                   if (actionType == 2)
                     _optionDropdown(workflowNames, selectedWorkflow, '选择工作流',
                         (v) => setDialogState(() => selectedWorkflow = v),
@@ -784,10 +976,18 @@ class _McpAutomationPageState extends State<McpAutomationPage>
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: Text(isEdit ? '编辑规则' : '添加规则'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: SingleChildScrollView(
-              child: Column(
+          // 限制弹窗最大宽度/高度：避免宽屏下弹窗撑满整个屏幕、
+          // 内容超高时 actions 被顶出屏幕外（内部可滚动）
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          content: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 560,
+              maxHeight: MediaQuery.sizeOf(context).height * 0.75,
+            ),
+            child: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -801,6 +1001,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   const SizedBox(height: 8),
                   DropdownButtonFormField<RulePriority>(
                     value: priority,
+                    isExpanded: true,
                     decoration: const InputDecoration(labelText: '优先级', border: OutlineInputBorder(), isDense: true),
                     items: RulePriority.values.map((p) => DropdownMenuItem(value: p, child: Text(p.name))).toList(),
                     onChanged: (v) => setDialogState(() => priority = v ?? RulePriority.normal),
@@ -822,7 +1023,11 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                       title: Column(children: [
                         // 条件类型选择
                         DropdownButtonFormField<ConditionType>(
-                          value: c.type,
+                          // custom 类型不在候选列表，编辑持久化规则时退化为 httpRequest，避免断言崩溃
+                          value: (c.type != ConditionType.custom && ConditionType.values.contains(c.type))
+                              ? c.type
+                              : ConditionType.httpRequest,
+                          isExpanded: true,
                           decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), labelText: '条件类型'),
                           items: [
                             for (final t in ConditionType.values)
@@ -841,6 +1046,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                         Row(children: [
                           Expanded(child: DropdownButtonFormField<String>(
                             value: fields.contains(c.field) ? c.field : (fields.isNotEmpty ? fields.first : 'url'),
+                            isExpanded: true,
                             decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
                             items: fields.map((f) => DropdownMenuItem(value: f, child: Text(_ConditionRow.fieldDisplayName(c.type, f)))).toList(),
                             onChanged: (v) => setDialogState(() => c.field = v ?? fields.first),
@@ -848,6 +1054,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                           const SizedBox(width: 6),
                           Expanded(child: DropdownButtonFormField<Operator>(
                             value: c.operator,
+                            isExpanded: true,
                             decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
                             items: Operator.values.map((o) => DropdownMenuItem(value: o, child: Text(_formatOperator(o)))).toList(),
                             onChanged: (v) => setDialogState(() => c.operator = v ?? Operator.equals),
@@ -866,6 +1073,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                     return _removableTile(
                       title: DropdownButtonFormField<ActionType>(
                         value: a.type,
+                        isExpanded: true,
                         decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
                         items: ActionType.values.map((t) => DropdownMenuItem(value: t, child: Text(_formatActionType(t)))).toList(),
                         onChanged: (v) => setDialogState(() => a.type = v ?? ActionType.log),
@@ -884,6 +1092,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                 ],
               ),
             ),
+          ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
@@ -991,6 +1200,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     if (opts != null && (c.operator == Operator.equals || c.operator == Operator.notEquals)) {
       return DropdownButtonFormField<String>(
         value: opts.contains(c.valueController.text) ? c.valueController.text : null,
+        isExpanded: true,
         decoration: const InputDecoration(isDense: true, labelText: '值', border: OutlineInputBorder()),
         items: opts
             .map((v) => DropdownMenuItem(value: v, child: Text(_ConditionRow.valueDisplayName(c.type, v))))
@@ -1044,7 +1254,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
 
   Widget _buildPromptsTab() {
     if (_prompts.isEmpty) {
-      return _emptyState(Icons.chat, '暂无 Prompts', _mcpRunning ? '点击 + 调用 Prompt' : 'MCP 服务未启动，请先在连接页启动');
+      return _emptyState(Icons.chat, '暂无 Prompts', _mcpRunning == true ? '点击 + 调用 Prompt' : 'MCP 服务未启动，请先在连接页启动');
     }
     return ListView.builder(
       padding: const EdgeInsets.all(12),
@@ -1053,14 +1263,17 @@ class _McpAutomationPageState extends State<McpAutomationPage>
         final p = _prompts[index];
         final name = p['name']?.toString() ?? '';
         final desc = p['description']?.toString() ?? '';
-        final args = (p['arguments'] as List?) ?? [];
+        // 防御：arguments 可能不是 List（异常数据直接白屏），统一安全转换
+        final args = p['arguments'] is List ? (p['arguments'] as List) : const [];
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
             leading: const CircleAvatar(backgroundColor: Colors.teal, child: Icon(Icons.chat, color: Colors.white, size: 20)),
             title: Text(name),
             subtitle: Text(
-              args.isEmpty ? desc : '$desc\n参数: ${args.map((a) => a['name']).join(', ')}',
+              args.isEmpty
+                  ? desc
+                  : '$desc\n参数: ${args.map((a) => a is Map ? a['name'] : a).join(', ')}',
               style: const TextStyle(fontSize: 12),
             ),
             isThreeLine: args.isNotEmpty,
@@ -1080,10 +1293,19 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     Map<String, dynamic> selected = prompt ?? prompts.first;
     final argControllers = <String, TextEditingController>{};
 
+    // 按 name 查找 prompt（下拉框用 String 值，避免 Map 引用比较带来的断言风险）
+    Map<String, dynamic>? promptByName(String name) {
+      for (final p in prompts) {
+        if ((p['name']?.toString() ?? '') == name) return p;
+      }
+      return null;
+    }
+
     void buildControllers(Map<String, dynamic> p) {
       argControllers.clear();
-      final args = (p['arguments'] as List?) ?? [];
+      final args = p['arguments'] is List ? (p['arguments'] as List) : const [];
       for (final a in args) {
+        if (a is! Map) continue;
         final name = (a['name'] ?? '').toString();
         if (name.isNotEmpty) argControllers[name] = TextEditingController();
       }
@@ -1103,17 +1325,22 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  DropdownButtonFormField<Map<String, dynamic>>(
-                    value: selected,
+                  DropdownButtonFormField<String>(
+                    value: selected['name']?.toString(),
+                    isExpanded: true,
                     decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
                     items: prompts
-                        .map((p) => DropdownMenuItem(value: p, child: Text(p['name']?.toString() ?? '')))
+                        .map((p) => DropdownMenuItem(
+                            value: p['name']?.toString() ?? '',
+                            child: Text(p['name']?.toString() ?? '未命名')))
                         .toList(),
                     onChanged: (v) {
                       if (v == null) return;
+                      final found = promptByName(v);
+                      if (found == null) return;
                       setDialogState(() {
-                        selected = v;
-                        buildControllers(v);
+                        selected = found;
+                        buildControllers(found);
                       });
                     },
                   ),
@@ -1124,8 +1351,14 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                     const Text('该 Prompt 无需参数', style: TextStyle(fontSize: 13))
                   else
                     ...argControllers.entries.map((e) {
-                      final argDef = ((selected['arguments'] as List?) ?? [])
-                          .firstWhere((a) => (a['name'] ?? '') == e.key, orElse: () => <String, dynamic>{});
+                      final argDefs = selected['arguments'] is List ? (selected['arguments'] as List) : const [];
+                      Map<String, dynamic> argDef = const {};
+                      for (final a in argDefs) {
+                        if (a is Map && (a['name'] ?? '') == e.key) {
+                          argDef = Map<String, dynamic>.from(a);
+                          break;
+                        }
+                      }
                       final required = argDef['required'] == true;
                       return Padding(
                         padding: const EdgeInsets.only(top: 8),
@@ -1152,11 +1385,13 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                 for (final e in argControllers.entries) {
                   args[e.key] = e.value.text;
                 }
-                // 必填校验
-                final argDefs = (selected['arguments'] as List?) ?? [];
+                // 必填校验（防御：参数定义可能不是标准 Map 结构）
+                final argDefs = selected['arguments'] is List ? (selected['arguments'] as List) : const [];
                 for (final ad in argDefs) {
-                  if (ad['required'] == true && (args[ad['name']] ?? '').toString().isEmpty) {
-                    FlutterToastr.show('请填写必填参数: ${ad['name']}', context, duration: 2, backgroundColor: Colors.red);
+                  if (ad is! Map) continue;
+                  final adName = (ad['name'] ?? '').toString();
+                  if (ad['required'] == true && (args[adName] ?? '').toString().isEmpty) {
+                    FlutterToastr.show('请填写必填参数: $adName', context, duration: 2, backgroundColor: Colors.red);
                     return;
                   }
                 }
@@ -1182,14 +1417,16 @@ class _McpAutomationPageState extends State<McpAutomationPage>
   }
 
   void _showPromptResult(BuildContext context, String name, Map<String, dynamic>? result) {
-    final messages = (result?['messages'] as List?) ?? [];
+    // 防御：messages 可能缺失或元素不是标准 Map（异常数据直接白屏）
+    final messages = result?['messages'] is List ? (result?['messages'] as List) : const [];
     final text = messages.isEmpty
         ? (result?.toString() ?? '无返回内容')
         : messages.map((m) {
+            if (m is! Map) return m.toString();
             final role = m['role'] ?? '';
             final content = m['content'];
             if (content is List) {
-              return '[$role]\n${content.map((c) => c['text'] ?? c.toString()).join('\n')}';
+              return '[$role]\n${content.map((c) => c is Map ? (c['text'] ?? c.toString()) : c.toString()).join('\n')}';
             }
             return '[$role] $content';
           }).join('\n\n');
@@ -1212,7 +1449,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
 
   Widget _buildRootsTab() {
     if (_roots.isEmpty) {
-      return _emptyState(Icons.folder_open, '暂无 Roots', _mcpRunning ? 'MCP 未暴露任何资源根' : 'MCP 服务未启动');
+      return _emptyState(Icons.folder_open, '暂无 Roots', '点击右下角 + 添加 Root\n可添加 proxypin:// 或 file:// 资源根，自由编辑');
     }
     return ListView.builder(
       padding: const EdgeInsets.all(12),
@@ -1227,6 +1464,21 @@ class _McpAutomationPageState extends State<McpAutomationPage>
             leading: const CircleAvatar(backgroundColor: Colors.indigo, child: Icon(Icons.folder, color: Colors.white, size: 20)),
             title: Text(name),
             subtitle: Text(uri, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.edit, size: 20),
+                  tooltip: '编辑',
+                  onPressed: () => _showRootDialog(context, r),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                  tooltip: '删除',
+                  onPressed: () => _deleteRoot(r),
+                ),
+              ],
+            ),
             onTap: () => _readRoot(context, uri, name),
           ),
         );

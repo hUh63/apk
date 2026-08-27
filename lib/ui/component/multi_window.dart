@@ -318,6 +318,16 @@ void registerMethodHandler() {
       return {'running': server.isRunning, 'port': server.port};
     }
 
+    // 供 MCP 自动化子窗口开关主窗口 MCP 服务（子窗口为独立 isolate，其单例未运行）
+    if (call.method == 'startMcp') {
+      await McpServer().start();
+      return {'running': McpServer().isRunning};
+    }
+    if (call.method == 'stopMcp') {
+      await McpServer().stop();
+      return {'running': McpServer().isRunning};
+    }
+
     // 供 MCP 自动化子窗口将 MCP 协议请求代理到主窗口运行中的 McpServer
     //（子窗口为独立 isolate，其 McpServer 单例未运行）
     if (call.method == 'mcpSendRequest') {
@@ -331,6 +341,15 @@ void registerMethodHandler() {
     // 供 MCP 自动化子窗口通知主窗口重载已持久化的规则（使桌面端即时生效）
     if (call.method == 'refreshMcpRules') {
       await McpRuleEngine().loadRules();
+      return 'done';
+    }
+
+    // 供 MCP 自动化子窗口同步自定义 Roots 到主窗口 MCP 服务（roots/list 即时生效）
+    if (call.method == 'refreshMcpRoots') {
+      final roots = call.arguments?['roots'];
+      if (roots is List) {
+        McpServer().setRoots(roots.map((e) => Map<String, dynamic>.from(e as Map)).toList());
+      }
       return 'done';
     }
     if (call.method == 'refreshRequestRewrite') {

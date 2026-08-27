@@ -90,6 +90,27 @@ class McpServer {
   // 状态变化回调
   VoidCallback? onStatusChanged;
 
+  /// 用户自定义 Roots（UI 编辑后经 [setRoots] 注入，优先于内置默认值展示）
+  List<Map<String, dynamic>> _customRoots = [];
+
+  /// 更新自定义 Roots 列表（由自动化配置页在增删改后调用，立即对 roots/list 生效）
+  void setRoots(List<Map<String, dynamic>> roots) {
+    _customRoots = List<Map<String, dynamic>>.from(roots);
+  }
+
+  /// 当前生效的 Roots 列表（自定义 + 内置默认，按 uri 去重）
+  List<Map<String, dynamic>> getRoots() {
+    final seen = <String>{};
+    final result = <Map<String, dynamic>>[];
+    for (final r in [..._customRoots, ..._getRootsList()]) {
+      final uri = r['uri']?.toString() ?? '';
+      if (uri.isEmpty || seen.contains(uri)) continue;
+      seen.add(uri);
+      result.add(r);
+    }
+    return result;
+  }
+
   bool get isRunning => _server != null;
 
   /// 重启 MCP 服务器（用于端口变更后）
@@ -781,7 +802,7 @@ class McpServer {
         // MCP 2026-07-28: Roots 支持
         case 'roots/list':
           return response({
-            'roots': _getRootsList(),
+            'roots': getRoots(),
           });
 
         // MCP 2026-07-28: Completions 支持
@@ -832,9 +853,6 @@ class McpServer {
 
   /// 获取 Prompts 列表（供 UI 调用）
   List<Map<String, dynamic>> getPrompts() => _getPromptsList();
-
-  /// 获取 Roots 列表（供 UI 调用）
-  List<Map<String, dynamic>> getRoots() => _getRootsList();
 
   /// 获取具体提示模板（供 UI 调用，返回 messages/arguments）
   Map<String, dynamic>? getPrompt(String name) => _getPrompt(name);
