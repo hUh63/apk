@@ -584,7 +584,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   const SizedBox(height: 8),
                   // 一次性 / 每天 / 每周：选择执行时刻
                   if (repeatMode != 'interval') ...[
-                    const Text(repeatMode == 'none' ? '执行日期与时间:' : '执行时间:'),
+                    Text(repeatMode == 'none' ? '执行日期与时间:' : '执行时间:'),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
