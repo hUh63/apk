@@ -17,6 +17,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:proxypin/network/mcp/script_workflow_engine.dart';
+import 'package:proxypin/ui/component/guide_center.dart';
 import 'package:toastification/toastification.dart';
 
 /// 脚本工作流管理器页面
@@ -58,6 +59,11 @@ class _ScriptWorkflowManagerPageState extends State<ScriptWorkflowManagerPage> {
       appBar: AppBar(
         title: const Text('脚本工作流管理'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            tooltip: '使用教程',
+            onPressed: () => showGuideArticle(context, 'workflow_tutorial'),
+          ),
           IconButton(
             icon: const Icon(Icons.add),
             tooltip: '新建工作流',

@@ -11,6 +11,7 @@ import 'package:proxypin/network/mcp/mcp_scheduler.dart';
 import 'package:proxypin/network/mcp/mcp_server.dart';
 import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/storage/path.dart';
+import 'package:proxypin/ui/component/guide_center.dart';
 import 'package:proxypin/ui/component/multi_window_compat.dart';
 import 'package:proxypin/utils/platform.dart';
 
@@ -324,6 +325,11 @@ class _McpAutomationPageState extends State<McpAutomationPage>
         ),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            tooltip: '使用教程',
+            onPressed: () => showGuideArticle(context, 'mcp_automation'),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: '刷新',

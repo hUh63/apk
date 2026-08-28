@@ -65,3 +65,11 @@ flutter:
     - assets/icon.ico
     - assets/icon_foreground.png
     - assets/js/
+    - docs/quick_start.md
+    - docs/certificate_https.md
+    - docs/features_tips.md
+    - docs/MCP_AUTOMATION_GUIDE.md
+    - docs/WORKFLOW_TUTORIAL.md
+    - CHANGELOG.md
+    - README_CN.md
+    - AGENTS.md

@@ -3,6 +3,7 @@ import 'package:proxypin/l10n/app_localizations.dart';
 import 'package:proxypin/network/bin/server.dart';
 import 'package:proxypin/network/http/http.dart';
 import 'package:proxypin/ui/component/api_endpoint_page.dart';
+import 'package:proxypin/ui/component/guide_center.dart';
 import 'package:proxypin/ui/component/multi_window.dart';
 import 'package:proxypin/ui/mobile/request/request_editor.dart';
 import 'package:proxypin/ui/mobile/setting/mcp_connection.dart';
@@ -279,6 +280,11 @@ class _ToolboxState extends State<Toolbox> {
                       icon: Icons.api,
                       text: 'API 端点',
                       tooltip: '从抓包数据提取 API 端点'),
+                  IconText(
+                      onTap: () => showGuideCenter(context),
+                      icon: Icons.menu_book_outlined,
+                      text: '使用文档',
+                      tooltip: '功能教程 / 规范文档 / 开发文档'),
                 ],
               ),
             ],

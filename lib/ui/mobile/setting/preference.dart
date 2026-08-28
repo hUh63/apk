@@ -8,6 +8,7 @@ import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/network/bin/server.dart';
 import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/storage/path.dart';
+import 'package:proxypin/ui/component/guide_center.dart';
 import 'package:proxypin/ui/component/widgets.dart';
 import 'package:proxypin/ui/configuration.dart';
 import 'package:proxypin/ui/mobile/setting/config_management.dart';
@@ -248,6 +249,22 @@ class _PreferenceState extends State<Preference> {
               child: themeColor(context),
             ),
           ]),
+          const SizedBox(height: 12),
+          Card(
+            color: Colors.transparent,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              side: BorderSide(color: dividerColor),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: ListTile(
+              leading: const Icon(Icons.menu_book_outlined, size: 20),
+              title: const Text('使用文档'),
+              subtitle: const Text('功能教程 · 规范文档 · 开发文档（离线内置）', style: TextStyle(fontSize: 12)),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () => showGuideCenter(context),
+            ),
+          ),
           const SizedBox(height: 12),
           _buildSplashSection(dividerColor),
           const SizedBox(height: 12),
