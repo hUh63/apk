@@ -95,7 +95,7 @@ class EventBus {
   EventBus._internal();
 
   final Map<String, List<_Subscription>> _subscriptions = {};
-  final List<AppEvent> _history = ListQueue<AppEvent>(100);
+  final List<AppEvent> _history = [];
   final StreamController<AppEvent> _controller = StreamController<AppEvent>.broadcast();
 
   /// 获取事件流
@@ -112,7 +112,8 @@ class EventBus {
     final subscription = _Subscription(handler, filter: filter);
     _subscriptions.putIfAbsent(eventType ?? '*', () => []);
     _subscriptions[eventType ?? '*'!]!.add(subscription);
-    return subscription;
+    // 返回公有订阅句柄（与内部 _Subscription 共享 id，取消时按 id 移除）
+    return Subscription._(subscription.id, this);
   }
 
   /// 取消订阅
@@ -177,6 +178,11 @@ class _Subscription {
   void cancel() {
     _active = false;
   }
+}
+
+/// 通用事件（任意类型 + 数据负载），供各模块直接发布
+class GenericEvent extends AppEvent {
+  GenericEvent(String type, {Map<String, dynamic> data = const {}}) : super(type, data: data);
 }
 
 /// 订阅接口

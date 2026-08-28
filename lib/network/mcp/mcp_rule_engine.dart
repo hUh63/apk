@@ -381,7 +381,7 @@ class Action {
       final message = target ?? parameters?['message'] as String? ?? '规则触发通知';
       logger.i('规则动作[notify]: $title - $message');
       try {
-        EventBus().publish(AppEvent('notification', data: {'title': title, 'message': message}));
+        EventBus().publish(GenericEvent('notification', data: {'title': title, 'message': message}));
       } catch (e) {
         logger.e('规则动作[notify] 发布失败：$e');
       }
@@ -390,7 +390,7 @@ class Action {
       final action = type == ActionType.stopCapture ? 'stop' : 'start';
       logger.i('规则动作[${type.name}]: 发布抓包控制事件');
       try {
-        EventBus().publish(AppEvent('mcp_capture_control', data: {'action': action}));
+        EventBus().publish(GenericEvent('mcp_capture_control', data: {'action': action}));
       } catch (e) {
         logger.e('规则动作[${type.name}] 发布失败：$e');
       }

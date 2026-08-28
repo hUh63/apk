@@ -27,7 +27,7 @@ class Toolbox extends StatefulWidget {
   final ProxyServer? proxyServer;
 
   /// 当前抓包请求容器（由调用方传入，用于 API 端点提取等需要数据源的工具）
-  final List<HttpRequest>? requestContainer;
+  final Iterable<HttpRequest>? requestContainer;
 
   const Toolbox({super.key, this.proxyServer, this.requestContainer});
 
@@ -273,8 +273,8 @@ class _ToolboxState extends State<Toolbox> {
                   IconText(
                       onTap: () {
                         // 从当前抓包数据提取 API 端点
-                        final source = widget.requestContainer ?? const <HttpRequest>[];
-                        ApiEndpointUtils.showEndpoints(context, List<HttpRequest>.from(source));
+                        final source = (widget.requestContainer ?? const <HttpRequest>[]).toList();
+                        ApiEndpointUtils.showEndpoints(context, source);
                       },
                       icon: Icons.api,
                       text: 'API 端点',

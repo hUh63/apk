@@ -394,7 +394,7 @@ class _LogViewerPageState extends State<LogViewerPage> {
                           ),
                         ),
                         trailing: log.stackTrace != null
-                            ? const Icon(Icons.stack_overflow, size: 20)
+                            ? const Icon(Icons.bug_report_outlined, size: 20)
                             : null,
                         onTap: () => _showLogDetail(log),
                       );

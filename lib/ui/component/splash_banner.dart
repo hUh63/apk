@@ -19,7 +19,7 @@ class SplashBanner extends StatefulWidget {
   /// 背景模式：default 蓝色渐变 / custom 自定义图片 / transparent 跟随主题背景
   final String backgroundMode;
 
-  /// 自定义背景图片文件（backgroundMode == custom 时使用）
+  /// 自定义背景图片文件（widget.backgroundMode == custom 时使用）
   final File? backgroundImage;
 
   /// 自定义小字文本（为空时显示版本信息）
@@ -100,17 +100,17 @@ class _SplashBannerState extends State<SplashBanner> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final foregroundColor = backgroundMode == 'transparent' ? (isDark ? Colors.white : Colors.blue.shade700) : Colors.white;
+    final foregroundColor = widget.backgroundMode == 'transparent' ? (isDark ? Colors.white : Colors.blue.shade700) : Colors.white;
 
     Widget? backgroundLayer;
-    if (backgroundMode == 'custom' && backgroundImage != null) {
+    if (widget.backgroundMode == 'custom' && widget.backgroundImage != null) {
       // 自定义图片背景 + 深色遮罩，保证文字可读
       backgroundLayer = Container(
         decoration: BoxDecoration(
-          image: DecorationImage(image: FileImage(backgroundImage!), fit: BoxFit.cover),
+          image: DecorationImage(image: FileImage(widget.backgroundImage!), fit: BoxFit.cover),
         ),
       );
-    } else if (backgroundMode == 'default') {
+    } else if (widget.backgroundMode == 'default') {
       backgroundLayer = Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -127,13 +127,13 @@ class _SplashBannerState extends State<SplashBanner> with SingleTickerProviderSt
     }
 
     return Scaffold(
-      backgroundColor: backgroundMode == 'transparent' ? Theme.of(context).scaffoldBackgroundColor : null,
+      backgroundColor: widget.backgroundMode == 'transparent' ? Theme.of(context).scaffoldBackgroundColor : null,
       body: Stack(
         fit: StackFit.expand,
         children: [
           if (backgroundLayer != null) backgroundLayer,
           // 自定义图片上加遮罩，保证文字可读
-          if (backgroundMode == 'custom' && backgroundImage != null)
+          if (widget.backgroundMode == 'custom' && widget.backgroundImage != null)
             Container(color: Colors.black.withValues(alpha: 0.45)),
           SafeArea(
             child: Column(
@@ -151,11 +151,11 @@ class _SplashBannerState extends State<SplashBanner> with SingleTickerProviderSt
                       width: 120,
                       height: 120,
                       decoration: BoxDecoration(
-                        color: backgroundMode == 'transparent'
+                        color: widget.backgroundMode == 'transparent'
                             ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12)
                             : Colors.white,
                         borderRadius: BorderRadius.circular(30),
-                        boxShadow: backgroundMode == 'transparent'
+                        boxShadow: widget.backgroundMode == 'transparent'
                             ? null
                             : [
                                 BoxShadow(
@@ -169,7 +169,7 @@ class _SplashBannerState extends State<SplashBanner> with SingleTickerProviderSt
                         child: Icon(
                           Icons.security,
                           size: 70,
-                          color: backgroundMode == 'transparent'
+                          color: widget.backgroundMode == 'transparent'
                               ? Theme.of(context).colorScheme.primary
                               : Colors.blue.shade700,
                         ),

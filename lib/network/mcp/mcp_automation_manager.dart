@@ -25,7 +25,6 @@ import '../mcp/mcp_bridge.dart';
 import '../http/http.dart';
 import '../http/http_client.dart';
 import '../util/logger.dart';
-import '../../utils/file_utils.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import '../components/manager/script_manager.dart';
@@ -583,8 +582,8 @@ class MCPAutomationManager {
     }
     
     // 标记请求为已阻止
-    httpRequest.metadata['blocked'] = true;
-    httpRequest.metadata['blockedBy'] = task.name;
+    httpRequest.attributes['blocked'] = true;
+    httpRequest.attributes['blockedBy'] = task.name;
     logger.i('[MCP Automation] Blocked request for task: ${task.name}');
   }
 
@@ -609,7 +608,7 @@ class MCPAutomationManager {
     
     try {
       // 使用 HttpClient 重新发送请求
-      final client = HttpClient();
+      final client = io.HttpClient();
       final uri = Uri.parse(httpRequest.requestUrl);
       
       var ioRequest = await client.openUrl(httpRequest.method.name, uri);
@@ -773,7 +772,7 @@ class MCPAutomationManager {
         // 项目无 Dart 运行时，内联 Dart 脚本无法执行：明确告知用户，避免静默失败
         logger.w('[MCP Automation] Dart 内联脚本不支持自动执行（无 Dart 运行时），请改用 JavaScript 或按名称引用已注册脚本');
         try {
-          EventBus().publish(AppEvent('notification', data: {
+          EventBus().publish(GenericEvent('notification', data: {
             'title': 'MCP Automation',
             'message': 'Dart 内联脚本不支持自动执行，请改用 JavaScript 脚本',
           }));
@@ -803,7 +802,7 @@ class MCPAutomationManager {
     // 通过 EventBus 发布通知事件，由桌面/移动端主界面订阅后展示 toast 通知。
     // 未订阅（如后台无界面）时仅记录日志，不抛异常。
     try {
-      EventBus().publish(AppEvent('notification', data: {'title': title, 'message': message}));
+      EventBus().publish(GenericEvent('notification', data: {'title': title, 'message': message}));
     } catch (e) {
       logger.e('[MCP Automation] Failed to send notification: $e');
     }

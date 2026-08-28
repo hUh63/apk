@@ -127,7 +127,7 @@ class ApiExtractor {
   final Map<String, _EndpointStats> _stats = {};
 
   /// 从请求列表提取 API 端点
-  List<ApiEndpoint> extract(List<Request> requests, {List<Response>? responses}) {
+  List<ApiEndpoint> extract(List<HttpRequest> requests, {List<HttpResponse>? responses}) {
     _stats.clear();
 
     for (var i = 0; i < requests.length; i++) {
@@ -157,7 +157,7 @@ class ApiExtractor {
         basePath: e.key,
         endpoints: e.value,
         totalCalls: totalCalls,
-        avgResponseTime: avgTime,
+        avgResponseTime: avgTime.toDouble(),
       );
     }).toList()
       ..sort((a, b) => b.totalCalls.compareTo(a.totalCalls));
@@ -304,44 +304,52 @@ class ApiExtractor {
     };
   }
 
-  void _processRequest(Request request, Response? response) {
-    final uri = Uri.parse(request.url);
+  void _processRequest(HttpRequest request, HttpResponse? response) {
+    final url = request.requestUrl ?? '';
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
     final domain = uri.host;
     final path = uri.path;
-    final key = '${request.method}:${domain}:${path}';
+    final methodName = request.method.name;
+    final key = '$methodName:$domain:$path';
 
     final stats = _stats.putIfAbsent(key, () => _EndpointStats(
       path: path,
-      method: request.method,
+      method: methodName,
       domain: domain,
       basePath: _extractBasePath(path),
       firstSeen: DateTime.now(),
+      lastSeen: DateTime.now(),
     ));
 
     stats.callCount++;
     stats.lastSeen = DateTime.now();
 
     if (response != null) {
-      if (response.statusCode >= 200 && response.statusCode < 400) {
+      final statusCode = response.status.code;
+      if (statusCode >= 200 && statusCode < 400) {
         stats.successCount++;
       } else {
         stats.errorCount++;
       }
-      stats.totalResponseTime += response.elapsedTime.inMilliseconds;
-      
+      final elapsed = response.request != null
+          ? response.responseTime.difference(response.request!.requestTime).inMilliseconds
+          : 0;
+      stats.totalResponseTime += elapsed > 0 ? elapsed : 0;
+
       if (stats.sampleResponse.isEmpty) {
         stats.sampleResponse = {
-          'statusCode': response.statusCode,
-          'headers': response.headers,
-          'body': _truncate(response.body, 1000),
+          'statusCode': statusCode,
+          'headers': response.headers.toMap(),
+          'body': _truncate(response.body == null ? '' : String.fromCharCodes(response.body!), 1000),
         };
       }
     }
 
     if (stats.sampleRequest.isEmpty) {
       stats.sampleRequest = {
-        'headers': request.headers,
-        'body': _truncate(request.body, 1000),
+        'headers': request.headers.toMap(),
+        'body': _truncate(request.body == null ? '' : String.fromCharCodes(request.body!), 1000),
       };
     }
   }
