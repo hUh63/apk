@@ -9,6 +9,7 @@
  */
 
 import 'dart:convert';
+import 'dart:math';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -311,6 +312,32 @@ class EnvironmentManager extends ChangeNotifier {
   }
 
   /// 解析单个变量。激活环境优先,回退到 Global。返回 null 表示未定义。
+  /// 内置通用变量（上游 issue #900）：时间戳/日期/UUID 等动态值。
+  /// key 不带 {{}}；用户自定义变量优先级更高（resolve 先查用户变量再回落内置）。
+  static String? _builtinValue(String name) {
+    final now = DateTime.now();
+    switch (name) {
+      case 'timestamp':
+        return (now.millisecondsSinceEpoch ~/ 1000).toString();
+      case 'timestamp_ms':
+        return now.millisecondsSinceEpoch.toString();
+      case 'datetime':
+        return now.toIso8601String();
+      case 'date':
+        return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      case 'time':
+        return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+      case 'unix_date':
+        return now.millisecondsSinceEpoch ~/ 86400000 == 0 ? '0' : (now.millisecondsSinceEpoch ~/ 86400000).toString();
+      case 'uuid':
+        final r = Random();
+        String hex(int n) => List.generate(n, (_) => r.nextInt(16).toRadixString(16)).join();
+        return '${hex(8)}-${hex(4)}-4${hex(3)}-${hex(4)}-${hex(12)}';
+      default:
+        return null;
+    }
+  }
+
   String? resolve(String name) {
     if (!enabled) return null;
     final act = active;
@@ -322,7 +349,8 @@ class EnvironmentManager extends ChangeNotifier {
     for (final v in global.variables) {
       if (v.enabled && v.key == name) return v.value;
     }
-    return null;
+    // 用户未定义时回落到内置通用变量（时间戳/日期/UUID 等）
+    return _builtinValue(name);
   }
 
   /// 展平当前生效变量(用于 script 注入)。同 key 时 active 覆盖 global。

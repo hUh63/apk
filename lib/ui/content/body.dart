@@ -31,6 +31,8 @@ import 'package:proxypin/network/components/manager/rewrite_rule.dart';
 import 'package:proxypin/network/http/content_type.dart';
 import 'package:proxypin/network/http/http.dart';
 import 'package:proxypin/network/util/logger.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:proxypin/ui/component/json/json_viewer.dart';
 import 'package:proxypin/ui/component/json/theme.dart';
 import 'package:proxypin/ui/component/multi_window.dart';
@@ -424,6 +426,23 @@ class HttpBodyState extends State<HttpBodyWidget> {
             String? path = await ImagePickers.saveByteDataImageToGallery(bytes);
             if (path != null && mounted) {
               FlutterToastr.show(localizations.saveSuccess, context, duration: 2, rootNavigator: true);
+            }
+            return;
+          }
+
+          // Android：file_picker 的 saveFile 不写入 bytes（上游 issue #902 保存图片无效），
+          // 改为写临时文件后调起系统分享面板，由用户保存到相册/文件。
+          if (Platform.isAndroid) {
+            try {
+              final tempDir = await getTemporaryDirectory();
+              final file = File('${tempDir.path}${Platform.pathSeparator}$fileName');
+              await file.writeAsBytes(bytes);
+              await Share.shareXFiles([XFile(file.path)], text: fileName);
+            } catch (e) {
+              logger.e('保存图片失败', error: e);
+              if (mounted) {
+                FlutterToastr.show('保存失败 / Save failed: $e', context, duration: 2, rootNavigator: true);
+              }
             }
             return;
           }

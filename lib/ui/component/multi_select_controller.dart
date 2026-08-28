@@ -34,6 +34,13 @@ class MultiSelectController {
     }
   }
 
+  /// 全选（上游 issue #906）：选中当前列表的全部请求 ID
+  void selectAll(Iterable<String> ids) {
+    selectionMode.value = true;
+    selectedIds.clear();
+    selectedIds.addAll(ids);
+  }
+
   void selectOnly(String requestId) {
     selectionMode.value = true;
     selectedIds

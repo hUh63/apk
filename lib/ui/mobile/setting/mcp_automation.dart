@@ -474,17 +474,26 @@ class _McpAutomationPageState extends State<McpAutomationPage>
         final task = tasks[index];
         final isInterval = task.repeatMode == 'interval';
         final isDaily = task.repeatMode == 'daily';
+        final isWeekly = task.repeatMode == 'weekly';
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
             leading: CircleAvatar(
-              backgroundColor: isDaily ? Colors.blue : (isInterval ? Colors.deepPurple : Colors.green),
+              backgroundColor: isDaily
+                  ? Colors.blue
+                  : isWeekly
+                      ? Colors.teal
+                      : isInterval
+                          ? Colors.deepPurple
+                          : Colors.green,
               child: Icon(
                   isDaily
                       ? Icons.repeat
-                      : isInterval
-                          ? Icons.timer_outlined
-                          : Icons.play_circle_outline,
+                      : isWeekly
+                          ? Icons.date_range
+                          : isInterval
+                              ? Icons.timer_outlined
+                              : Icons.play_circle_outline,
                   color: Colors.white,
                   size: 20),
             ),
@@ -508,10 +517,11 @@ class _McpAutomationPageState extends State<McpAutomationPage>
   Future<void> _showAddTaskDialog(BuildContext context) async {
     final nameController = TextEditingController();
     DateTime selectedTime = DateTime.now().add(const Duration(minutes: 1));
-    // 定时方式：none 一次性 / daily 每天 / interval 固定间隔
+    // 定时方式：none 一次性 / daily 每天 / weekly 每周 / interval 固定间隔
     String repeatMode = 'none';
     int? repeatCount;
     int intervalMinutes = 30;
+    List<int> selectedWeekdays = [];
     final repeatCountController = TextEditingController();
     final intervalController = TextEditingController(text: '30');
     int actionType = 1; // 0 执行脚本 1 调用MCP工具 2 执行工作流 3 发送Webhook
@@ -563,6 +573,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                     segments: const [
                       ButtonSegment(value: 'none', label: Text('一次性'), icon: Icon(Icons.play_circle_outline, size: 16)),
                       ButtonSegment(value: 'daily', label: Text('每天'), icon: Icon(Icons.repeat, size: 16)),
+                      ButtonSegment(value: 'weekly', label: Text('每周'), icon: Icon(Icons.date_range, size: 16)),
                       ButtonSegment(value: 'interval', label: Text('间隔'), icon: Icon(Icons.timer_outlined, size: 16)),
                     ],
                     selected: {repeatMode},
@@ -571,31 +582,99 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                     style: const ButtonStyle(visualDensity: VisualDensity.compact),
                   ),
                   const SizedBox(height: 8),
-                  // 一次性 / 每天：选择执行时刻
+                  // 一次性 / 每天 / 每周：选择执行时刻
                   if (repeatMode != 'interval') ...[
-                    const Text('执行时间:'),
+                    const Text(repeatMode == 'none' ? '执行日期与时间:' : '执行时间:'),
                     const SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        final picked = await showTimePicker(
-                          context: context,
-                          initialTime: TimeOfDay.fromDateTime(selectedTime),
-                        );
-                        if (picked != null) {
-                          setDialogState(() {
-                            selectedTime = DateTime(
-                              selectedTime.year, selectedTime.month, selectedTime.day,
-                              picked.hour, picked.minute,
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        // 一次性任务：日历选择日期
+                        if (repeatMode == 'none')
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              final picked = await showDatePicker(
+                                context: context,
+                                initialDate: selectedTime,
+                                firstDate: DateTime.now(),
+                                lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+                                helpText: '选择执行日期',
+                              );
+                              if (picked != null) {
+                                setDialogState(() {
+                                  selectedTime = DateTime(
+                                    picked.year, picked.month, picked.day,
+                                    selectedTime.hour, selectedTime.minute,
+                                  );
+                                  if (selectedTime.isBefore(DateTime.now())) {
+                                    // 选了今天但时间已过，自动顺延到明天同一时刻由时间选择决定
+                                    selectedTime = picked;
+                                  }
+                                });
+                              }
+                            },
+                            icon: const Icon(Icons.calendar_month),
+                            label: Text('${selectedTime.year}-${selectedTime.month.toString().padLeft(2, '0')}-${selectedTime.day.toString().padLeft(2, '0')}'),
+                          ),
+                        // 时间选择（所有非间隔模式）
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final picked = await showTimePicker(
+                              context: context,
+                              initialTime: TimeOfDay.fromDateTime(selectedTime),
                             );
-                            if (selectedTime.isBefore(DateTime.now())) {
-                              selectedTime = selectedTime.add(const Duration(days: 1));
+                            if (picked != null) {
+                              setDialogState(() {
+                                selectedTime = DateTime(
+                                  selectedTime.year, selectedTime.month, selectedTime.day,
+                                  picked.hour, picked.minute,
+                                );
+                                if (repeatMode == 'none' && selectedTime.isBefore(DateTime.now())) {
+                                  selectedTime = selectedTime.add(const Duration(days: 1));
+                                }
+                              });
                             }
-                          });
-                        }
-                      },
-                      icon: const Icon(Icons.access_time),
-                      label: Text('${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}'),
+                          },
+                          icon: const Icon(Icons.access_time),
+                          label: Text('${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}'),
+                        ),
+                      ],
                     ),
+                  ],
+                  // 每周模式：星期多选
+                  if (repeatMode == 'weekly') ...[
+                    const SizedBox(height: 8),
+                    const Text('重复于:', style: TextStyle(fontSize: 13)),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        for (final entry in const {1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 6: '六', 7: '日'}.entries)
+                          FilterChip(
+                            label: Text('周${entry.value}', style: const TextStyle(fontSize: 12)),
+                            selected: selectedWeekdays.contains(entry.key),
+                            showCheckmark: false,
+                            visualDensity: VisualDensity.compact,
+                            onSelected: (sel) {
+                              setDialogState(() {
+                                if (sel) {
+                                  selectedWeekdays.add(entry.key);
+                                } else {
+                                  selectedWeekdays.remove(entry.key);
+                                }
+                                selectedWeekdays.sort();
+                              });
+                            },
+                          ),
+                      ],
+                    ),
+                    if (selectedWeekdays.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Text('请至少选择一个星期', style: TextStyle(fontSize: 12, color: Colors.orange)),
+                      ),
                   ],
                   // 固定间隔：间隔分钟数
                   if (repeatMode == 'interval') ...[
@@ -672,16 +751,28 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   FlutterToastr.show('请输入有效的间隔分钟数', context, duration: 2, backgroundColor: Colors.red);
                   return;
                 }
+                if (repeatMode == 'weekly' && selectedWeekdays.isEmpty) {
+                  FlutterToastr.show('请至少选择一个星期', context, duration: 2, backgroundColor: Colors.red);
+                  return;
+                }
                 final descriptor = _buildTaskDescriptor(actionType, nameController.text,
                     script: selectedScript, tool: selectedTool, workflow: selectedWorkflow, webhookUrl: webhookUrlController.text);
                 if (descriptor == null) {
                   FlutterToastr.show('请完善执行任务配置', context, duration: 2, backgroundColor: Colors.red);
                   return;
                 }
-                // 一次性任务从当前时间起算；重复任务按所选时刻执行
+                // 一次性任务从所选日期时间起算；间隔任务从当前时间起算；每周任务从所选时刻起算
                 var executeAt = selectedTime;
                 if (repeatMode == 'interval') {
                   executeAt = DateTime.now().add(Duration(minutes: intervalMinutes));
+                } else if (repeatMode == 'weekly' && executeAt.isBefore(DateTime.now())) {
+                  // 时刻已过：推进到下一个选中的星期
+                  var next = executeAt.add(const Duration(days: 1));
+                  for (int i = 0; i < 8; i++) {
+                    if (selectedWeekdays.contains(next.weekday)) break;
+                    next = next.add(const Duration(days: 1));
+                  }
+                  executeAt = next;
                 }
                 _scheduler.scheduleTask(
                   name: nameController.text,
@@ -690,6 +781,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   repeatMode: repeatMode,
                   repeatCount: repeatCount,
                   intervalMinutes: repeatMode == 'interval' ? intervalMinutes : null,
+                  weekdays: repeatMode == 'weekly' ? selectedWeekdays : null,
                 );
                 await _scheduler.saveTasks();
                 Navigator.pop(context);

@@ -5,11 +5,13 @@ import 'package:proxypin/utils/listenable_list.dart';
 
 class SelectionActionBar extends StatelessWidget {
   final MultiSelectController selectionController;
+  final VoidCallback? onSelectAll;
   final VoidCallback? onRepeat;
   final VoidCallback? onExport;
   final VoidCallback? onDelete;
 
-  const SelectionActionBar({super.key, required this.selectionController, this.onRepeat, this.onExport, this.onDelete});
+  const SelectionActionBar(
+      {super.key, required this.selectionController, this.onSelectAll, this.onRepeat, this.onExport, this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -21,6 +23,11 @@ class SelectionActionBar extends StatelessWidget {
           const SizedBox(width: 8),
           _SelectLabel(selectionController: selectionController),
           const Spacer(),
+          if (onSelectAll != null)
+            IconButton(
+                onPressed: onSelectAll,
+                tooltip: '全选 / Select All',
+                icon: const Icon(Icons.select_all, size: 18)),
           if (onRepeat != null)
             IconButton(onPressed: onRepeat, tooltip: localizations?.repeat, icon: const Icon(Icons.repeat, size: 18)),
           if (onExport != null)

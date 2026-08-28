@@ -44,8 +44,8 @@ class McpScheduler {
   /// [action] 仅本会话即时触发（闭包不可序列化）；[actionDescriptor] 可持久化，
   /// 重启加载后由 [setActionExecutor] 注册的执行器触发。二者任一非空即可。
   ///
-  /// [repeatMode] 重复方式：none 一次性 / daily 每天 / interval 固定间隔；
-  /// [intervalMinutes] interval 模式的间隔分钟数；
+  /// [repeatMode] 重复方式：none 一次性 / daily 每天 / weekly 每周 / interval 固定间隔；
+  /// [weekdays] weekly 模式选中的星期（1=周一 ... 7=周日）；
   /// [repeatCount] 重复次数，null 表示无限重复。
   void scheduleTask({
     required String name,
@@ -56,6 +56,7 @@ class McpScheduler {
     String repeatMode = 'none',
     int? repeatCount,
     int? intervalMinutes,
+    List<int>? weekdays,
   }) {
     // 兼容旧参数：未显式指定 repeatMode 时按 repeatDaily 推断
     final mode = (repeatMode == 'none' && repeatDaily) ? 'daily' : repeatMode;
@@ -67,6 +68,7 @@ class McpScheduler {
       repeatMode: mode,
       repeatCount: repeatCount,
       intervalMinutes: intervalMinutes,
+      weekdays: weekdays,
     );
     _tasks.add(task);
     logger.i('添加定时任务：$name，执行时间：$executeAt，模式：$mode，次数：${repeatCount ?? '无限'}');
@@ -108,6 +110,16 @@ class McpScheduler {
               task.executeAt.minute,
               task.executeAt.second,
             );
+            logger.d('定时任务 ${task.name} 下次执行时间：${task.executeAt}');
+          } else if (task.repeatMode == 'weekly' && task.weekdays != null && task.weekdays!.isNotEmpty) {
+            // 从明天开始找第一个选中的星期
+            var next = DateTime(now.year, now.month, now.day + 1, task.executeAt.hour, task.executeAt.minute,
+                task.executeAt.second);
+            for (int i = 0; i < 8; i++) {
+              if (task.weekdays!.contains(next.weekday)) break;
+              next = next.add(const Duration(days: 1));
+            }
+            task.executeAt = next;
             logger.d('定时任务 ${task.name} 下次执行时间：${task.executeAt}');
           } else if (task.repeatMode == 'interval' && task.intervalMinutes != null && task.intervalMinutes! > 0) {
             task.executeAt = now.add(Duration(minutes: task.intervalMinutes!));
@@ -220,14 +232,17 @@ class ScheduledTask {
   final VoidCallback? action; // 本会话闭包（不持久化）
   final Map<String, dynamic>? actionDescriptor; // 可序列化动作描述
 
-  /// 重复方式：none 一次性 / daily 每天 / interval 固定间隔
+  /// 重复方式：none 一次性 / daily 每天 / weekly 每周 / interval 固定间隔
   final String repeatMode;
 
-  /// 重复次数上限，null 表示无限（仅 daily/interval 模式有效）
+  /// 重复次数上限，null 表示无限（仅 daily/weekly/interval 模式有效）
   final int? repeatCount;
 
   /// interval 模式的间隔分钟数
   final int? intervalMinutes;
+
+  /// weekly 模式选中的星期（1=周一 ... 7=周日）
+  final List<int> weekdays;
 
   DateTime? lastExecuted;
   int executedCount = 0;
@@ -244,9 +259,11 @@ class ScheduledTask {
     String repeatMode = 'none',
     this.repeatCount,
     this.intervalMinutes,
+    List<int>? weekdays,
     this.lastExecuted,
     bool repeatDaily = false,
-  }) : repeatMode = (repeatMode == 'none' && repeatDaily) ? 'daily' : repeatMode;
+  })  : repeatMode = (repeatMode == 'none' && repeatDaily) ? 'daily' : repeatMode,
+        weekdays = weekdays ?? const [];
 
   Map<String, dynamic> toJson() => {
         'name': name,
@@ -255,6 +272,7 @@ class ScheduledTask {
         'repeatDaily': repeatDaily, // 兼容旧版本读取
         if (repeatCount != null) 'repeatCount': repeatCount,
         if (intervalMinutes != null) 'intervalMinutes': intervalMinutes,
+        if (weekdays.isNotEmpty) 'weekdays': weekdays,
         'executedCount': executedCount,
         if (actionDescriptor != null) 'action': actionDescriptor,
         if (lastExecuted != null) 'lastExecuted': lastExecuted!.toIso8601String(),
@@ -275,6 +293,7 @@ class ScheduledTask {
       repeatMode: mode,
       repeatCount: json['repeatCount'] is int ? json['repeatCount'] as int : null,
       intervalMinutes: json['intervalMinutes'] is int ? json['intervalMinutes'] as int : null,
+      weekdays: (json['weekdays'] as List?)?.whereType<int>().toList(),
       lastExecuted: json['lastExecuted'] == null ? null : DateTime.tryParse(json['lastExecuted'] as String),
     );
     task.executedCount = json['executedCount'] is int ? json['executedCount'] as int : 0;
@@ -283,9 +302,13 @@ class ScheduledTask {
 
   /// 重复方式描述（供 UI 展示）
   String get repeatLabel {
+    const weekdayNames = {1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 6: '六', 7: '日'};
     switch (repeatMode) {
       case 'daily':
         return '每天${repeatCount == null ? '' : ' · 共${repeatCount}次'}';
+      case 'weekly':
+        final days = weekdays.map((w) => weekdayNames[w] ?? w).join('、');
+        return '每周$days${repeatCount == null ? '' : ' · 共${repeatCount}次'}';
       case 'interval':
         return '每${intervalMinutes ?? 0}分钟${repeatCount == null ? '' : ' · 共${repeatCount}次'}';
       default:
@@ -295,6 +318,6 @@ class ScheduledTask {
 
   @override
   String toString() {
-    return 'ScheduledTask(name: $name, executeAt: $executeAt, repeatMode: $repeatMode, repeatCount: $repeatCount)';
+    return 'ScheduledTask(name: $name, executeAt: $executeAt, repeatMode: $repeatMode, weekdays: $weekdays, repeatCount: $repeatCount)';
   }
 }

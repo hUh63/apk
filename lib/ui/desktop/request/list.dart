@@ -134,6 +134,8 @@ class DesktopRequestListState extends State<DesktopRequestListWidget> with Autom
                         Obx(() => selectionController.selectionMode.value
                             ? SelectionActionBar(
                                 selectionController: selectionController,
+                                onSelectAll: () =>
+                                    selectionController.selectAll(container.source.map((r) => r.requestId)),
                                 onRepeat: repeatSelected,
                                 onExport: exportSelected,
                                 onDelete: deleteSelected)

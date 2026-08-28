@@ -227,6 +227,7 @@ class RequestSequenceState extends State<RequestSequence> with AutomaticKeepAliv
         if (selectionMode)
           SelectionActionBar(
               selectionController: selectionController,
+              onSelectAll: () => selectionController.selectAll(view.map((r) => r.requestId)),
               onRepeat: repeatSelected,
               onExport: exportSelected,
               onDelete: deleteSelected),
