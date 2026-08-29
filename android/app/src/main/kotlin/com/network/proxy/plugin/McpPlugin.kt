@@ -618,7 +618,8 @@ class McpPlugin : FlutterPlugin {
 
     /**
      * 通过 Shizuku 执行 shell 命令（无需 root）
-     * 使用标准 API Shizuku.newProcess()，要求已通过 Shizuku 授权
+     * 注：Shizuku API 13 起官方移除直接 newProcess，需改为 User Service；
+     * 此处保留运行时反射以兼容旧版 Shizuku，API 13+ 将走 root/su 路径。
      */
     private fun shellViaShizuku(command: String, timeoutMs: Long): Map<String, Any> {
         try {
@@ -626,7 +627,19 @@ class McpPlugin : FlutterPlugin {
             if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
                 throw IllegalStateException("Shizuku permission not granted")
             }
-            val process = Shizuku.newProcess(arrayOf("sh", "-c", command), null, arrayOf<String>())
+            val process = try {
+                // 兼容旧版 Shizuku（< API 13）：反射调用 newProcess
+                val clazz = Class.forName("rikka.shizuku.Shizuku")
+                val newProcess = clazz.getMethod(
+                    "newProcess",
+                    Array<String>::class.java,
+                    Array<String>::class.java,
+                    String::class.java
+                )
+                newProcess.invoke(null, arrayOf("sh", "-c", command), null, null) as java.lang.Process
+            } catch (e: Exception) {
+                throw IllegalStateException("Shizuku newProcess unavailable (API 13+), use root mode")
+            }
             val stdout = process.inputStream.bufferedReader().readText()
             val stderr = process.getErrorStream().bufferedReader().readText()
             val completed = process.waitFor(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
