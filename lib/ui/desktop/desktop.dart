@@ -153,7 +153,7 @@ class _DesktopHomePagePageState extends State<DesktopHomePage> implements EventL
     _remoteHistorySubscription?.cancel();
     final eventSub = _eventBusSubscription;
     if (eventSub != null) EventBus().unsubscribe(eventSub);
-    McpServer().stop();
+    McpServer().stop(persistState: false);
     super.dispose();
   }
 

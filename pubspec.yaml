@@ -14,6 +14,7 @@ dependencies:
     sdk: flutter
   intl: any
   cupertino_icons: ^1.0.9
+  dynamic_color: ^1.7.0
   pointycastle: ^4.0.0
   logger: ^2.7.0
   date_format: ^2.0.9
@@ -68,6 +69,10 @@ flutter:
     - docs/quick_start.md
     - docs/certificate_https.md
     - docs/features_tips.md
+    - docs/script_guide.md
+    - docs/rewrite_guide.md
+    - docs/environment_guide.md
+    - docs/report_server.md
     - docs/MCP_AUTOMATION_GUIDE.md
     - docs/WORKFLOW_TUTORIAL.md
     - CHANGELOG.md

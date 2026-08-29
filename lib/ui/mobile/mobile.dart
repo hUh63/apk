@@ -196,7 +196,7 @@ class MobileHomeState extends State<MobileHomePage> implements EventListener, Li
     _remoteHistorySubscription?.cancel();
     final eventSub = _eventBusSubscription;
     if (eventSub != null) EventBus().unsubscribe(eventSub);
-    McpServer().stop();
+    McpServer().stop(persistState: false);
     super.dispose();
   }
 

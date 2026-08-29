@@ -19,6 +19,7 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:proxypin/ui/component/guide_center.dart';
 import 'package:proxypin/l10n/app_localizations.dart';
 import 'package:flutter_toastr/flutter_toastr.dart';
 import 'package:proxypin/network/components/manager/request_rewrite_manager.dart';
@@ -465,11 +466,7 @@ class _RewriteRuleState extends State<RewriteRule> {
                 text: localizations.useGuide,
                 style: const TextStyle(color: Colors.blue, fontSize: 14),
                 recognizer: TapGestureRecognizer()
-                  ..onTap = () => launchUrl(
-                      mode: LaunchMode.externalApplication,
-                      Uri.parse(isCN
-                          ? 'https://gitee.com/wanghongenpin/proxypin/wikis/%E8%AF%B7%E6%B1%82%E9%87%8D%E5%86%99'
-                          : 'https://github.com/wanghongenpin/proxypin/wiki/Request-Rewrite')))),
+                  ..onTap = () => showGuideArticle(context, 'rewrite'))),
           ]),
           actions: [
             TextButton(

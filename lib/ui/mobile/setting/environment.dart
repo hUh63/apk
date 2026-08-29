@@ -10,6 +10,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_toastr/flutter_toastr.dart';
+import 'package:proxypin/ui/component/guide_center.dart';
 import 'package:proxypin/l10n/app_localizations.dart';
 import 'package:proxypin/network/components/manager/environment_manager.dart';
 import 'package:proxypin/network/util/random.dart';
@@ -154,16 +155,8 @@ class _MobileEnvironmentPageState extends State<MobileEnvironmentPage> {
   }
 
   Future<void> _openGuide() async {
-    final cn = 'https://github.com/wanghongenpin/proxypin/wiki/%E7%8E%AF%E5%A2%83%E5%8F%98%E9%87%8F';
-    final en = 'https://github.com/wanghongenpin/proxypin/wiki/Environment-Variables';
-    final url = localizations.localeName.startsWith('zh') ? cn : en;
-    try {
-      if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) {
-        if (mounted) FlutterToastr.show('Open guide failed', context);
-      }
-    } catch (_) {
-      if (mounted) FlutterToastr.show('Open guide failed', context);
-    }
+    // 内置文档，不再跳转网页
+    showGuideArticle(context, 'environment');
   }
 
   @override

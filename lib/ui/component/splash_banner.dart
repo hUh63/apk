@@ -1,25 +1,32 @@
 /*
- * 启动横幅 - 美观的应用启动界面
- * 显示应用信息、版本、加载状态
+ * 启动页 - 克制、有质感的品牌呈现
+ *
+ * 设计原则（去"AI 味"）：
+ * - 不做花哨轮播/弹跳动效，只保留一次干净的淡入上移
+ * - 配色从主题 colorScheme.primary 派生（开启莫奈取色时自动跟随壁纸色）
+ * - 层级：Logo → 名称 → 一行小字 → 底部细进度条，留白呼吸
+ *
+ * 背景模式（splashBackground）：
+ * - off          原生启动页（默认，不叠加自定义启动页）
+ * - gradient     主题色渐变（莫奈取色时跟随壁纸）
+ * - custom       自定义图片（加深色遮罩保证可读）
+ * - transparent  跟随应用主题背景
  */
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'dart:async';
 import 'package:proxypin/ui/configuration.dart';
 
-/// 启动横幅页面
 class SplashBanner extends StatefulWidget {
   final VoidCallback? onComplete;
   final Duration duration;
-  final bool showVersion;
-  final bool showFeatures;
 
-  /// 背景模式：default 蓝色渐变 / custom 自定义图片 / transparent 跟随主题背景
+  /// 背景模式：gradient 主题色渐变 / custom 自定义图片 / transparent 跟随主题
   final String backgroundMode;
 
-  /// 自定义背景图片文件（widget.backgroundMode == custom 时使用）
+  /// 自定义背景图片文件（backgroundMode == custom 时使用）
   final File? backgroundImage;
 
   /// 自定义小字文本（为空时显示版本信息）
@@ -28,10 +35,8 @@ class SplashBanner extends StatefulWidget {
   const SplashBanner({
     super.key,
     this.onComplete,
-    this.duration = const Duration(seconds: 2),
-    this.showVersion = true,
-    this.showFeatures = true,
-    this.backgroundMode = 'default',
+    this.duration = const Duration(milliseconds: 1800),
+    this.backgroundMode = 'gradient',
     this.backgroundImage,
     this.subtitle,
   });
@@ -40,305 +45,191 @@ class SplashBanner extends StatefulWidget {
   State<SplashBanner> createState() => _SplashBannerState();
 }
 
-class _SplashBannerState extends State<SplashBanner> with SingleTickerProviderStateMixin {
-  double _logoScale = 0.5;
-  double _opacity = 0.0;
-  int _currentFeatureIndex = 0;
-  Timer? _featureTimer;
-  
-  final List<String> _features = [
-    'HTTP/HTTPS 抓包',
-    '请求重放与分析',
-    '代码生成 (9 种语言)',
-    'API 端点识别',
-    'HAR 导入导出',
-    '性能监控',
-  ];
+class _SplashBannerState extends State<SplashBanner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacity;
+  late final Animation<double> _offset;
+  bool _exiting = false;
+  Timer? _doneTimer;
 
   @override
   void initState() {
     super.initState();
-    _startAnimation();
-  }
+    _controller = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 620));
+    final curve =
+        CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+    _opacity = Tween(begin: 0.0, end: 1.0).animate(curve);
+    _offset = Tween(begin: 14.0, end: 0.0).animate(curve);
+    _controller.forward();
 
-  void _startAnimation() {
-    // Logo 缩放动画
-    Future.delayed(const Duration(milliseconds: 100), () {
-      setState(() {
-        _logoScale = 1.0;
-        _opacity = 1.0;
+    // 展示时长到达后：先淡出 260ms，再交还主页面，避免切换生硬
+    _doneTimer = Timer(widget.duration, () {
+      if (!mounted) return;
+      setState(() => _exiting = true);
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) widget.onComplete?.call();
       });
-    });
-
-    // 特性轮播
-    if (widget.showFeatures) {
-      _featureTimer = Timer.periodic(const Duration(milliseconds: 800), (timer) {
-        if (!mounted) {
-          timer.cancel();
-          return;
-        }
-        setState(() {
-          _currentFeatureIndex = (_currentFeatureIndex + 1) % _features.length;
-        });
-      });
-    }
-
-    // 完成后回调
-    Future.delayed(widget.duration, () {
-      if (mounted && widget.onComplete != null) {
-        widget.onComplete!();
-      }
     });
   }
 
   @override
   void dispose() {
-    _featureTimer?.cancel();
+    _doneTimer?.cancel();
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final foregroundColor = widget.backgroundMode == 'transparent' ? (isDark ? Colors.white : Colors.blue.shade700) : Colors.white;
+    final mode = widget.backgroundMode;
+    final hasImage = mode == 'custom' && widget.backgroundImage != null;
+
+    // 前景色：浅色背景上用白，透明模式跟随主题
+    final Color foreground =
+        (mode == 'transparent') ? cs.onSurface : Colors.white;
 
     Widget? backgroundLayer;
-    if (widget.backgroundMode == 'custom' && widget.backgroundImage != null) {
-      // 自定义图片背景 + 深色遮罩，保证文字可读
-      backgroundLayer = Container(
-        decoration: BoxDecoration(
-          image: DecorationImage(image: FileImage(widget.backgroundImage!), fit: BoxFit.cover),
+    if (hasImage) {
+      backgroundLayer = Stack(fit: StackFit.expand, children: [
+        Image.file(widget.backgroundImage!, fit: BoxFit.cover),
+        // 遮罩 + 底部渐晕，保证文字与小字可读且不生硬
+        Container(color: Colors.black.withValues(alpha: 0.45)),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              stops: const [0.5, 1.0],
+              colors: [
+                Colors.transparent,
+                Colors.black.withValues(alpha: 0.35),
+              ],
+            ),
+          ),
         ),
-      );
-    } else if (widget.backgroundMode == 'default') {
-      backgroundLayer = Container(
+      ]);
+    } else if (mode == 'gradient') {
+      // 主题色（莫奈取色时为壁纸派生色）135° 深浅渐变，克制而有层次
+      final base = cs.primary;
+      final deep = Color.lerp(base, Colors.black, 0.42)!;
+      final mid = Color.lerp(base, Colors.black, 0.18)!;
+      backgroundLayer = DecoratedBox(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Colors.blue.shade900,
-              Colors.blue.shade700,
-              Colors.lightBlue.shade400,
-            ],
+            stops: const [0.0, 0.55, 1.0],
+            colors: [deep, mid, base],
           ),
         ),
       );
     }
 
     return Scaffold(
-      backgroundColor: widget.backgroundMode == 'transparent' ? Theme.of(context).scaffoldBackgroundColor : null,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (backgroundLayer != null) backgroundLayer,
-          // 自定义图片上加遮罩，保证文字可读
-          if (widget.backgroundMode == 'custom' && widget.backgroundImage != null)
-            Container(color: Colors.black.withValues(alpha: 0.45)),
-          SafeArea(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Logo
-                AnimatedScale(
-                  scale: _logoScale,
-                  duration: const Duration(milliseconds: 500),
-                  curve: Curves.elasticOut,
-                  child: AnimatedOpacity(
-                    opacity: _opacity,
-                    duration: const Duration(milliseconds: 500),
-                    child: Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: widget.backgroundMode == 'transparent'
-                            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12)
-                            : Colors.white,
-                        borderRadius: BorderRadius.circular(30),
-                        boxShadow: widget.backgroundMode == 'transparent'
-                            ? null
-                            : [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.3),
-                                  blurRadius: 20,
-                                  spreadRadius: 5,
-                                ),
-                              ],
-                      ),
-                      child: Center(
+      backgroundColor: mode == 'transparent'
+          ? Theme.of(context).scaffoldBackgroundColor
+          : null,
+      body: Stack(fit: StackFit.expand, children: [
+        if (backgroundLayer != null) backgroundLayer,
+        SafeArea(
+          child: AnimatedOpacity(
+            opacity: _exiting ? 0.0 : 1.0,
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeOut,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(children: [
+                const Spacer(flex: 5),
+                FadeTransition(
+                  opacity: _opacity,
+                  child: AnimatedBuilder(
+                    animation: _offset,
+                    builder: (context, child) => Transform.translate(
+                      offset: Offset(0, _offset.value),
+                      child: child,
+                    ),
+                    child: Column(children: [
+                      // Logo：主色低饱和容器，去白底与重阴影
+                      Container(
+                        width: 76,
+                        height: 76,
+                        decoration: BoxDecoration(
+                          color: (mode == 'transparent'
+                                  ? cs.primary
+                                  : Colors.white)
+                              .withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(
+                            color: (mode == 'transparent'
+                                    ? cs.primary
+                                    : Colors.white)
+                                .withValues(alpha: 0.22),
+                            width: 1,
+                          ),
+                        ),
                         child: Icon(
                           Icons.security,
-                          size: 70,
-                          color: widget.backgroundMode == 'transparent'
-                              ? Theme.of(context).colorScheme.primary
-                              : Colors.blue.shade700,
+                          size: 38,
+                          color: mode == 'transparent'
+                              ? cs.primary
+                              : Colors.white,
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 30),
+                      // 应用名：细字重 + 宽字距，安静高级
+                      Text(
+                        'ProxyPin',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w300,
+                          color: foreground,
+                          letterSpacing: 7,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        widget.subtitle?.isNotEmpty == true
+                            ? widget.subtitle!
+                            : 'v${AppConfiguration.version} · 开源免费抓包工具',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: foreground.withValues(alpha: 0.72),
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ]),
                   ),
                 ),
-              
-              const SizedBox(height: 40),
-              
-              // 应用名称
-              AnimatedOpacity(
-                opacity: _opacity,
-                duration: const Duration(milliseconds: 500),
-                child: Text(
-                  'ProxyPin',
+                const Spacer(flex: 6),
+                // 底部：细进度条 + 版权，替代"特性轮播"
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    minHeight: 3,
+                    valueColor:
+                        AlwaysStoppedAnimation(foreground.withValues(alpha: 0.85)),
+                    backgroundColor: foreground.withValues(alpha: 0.14),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'ProxyPin Open Source',
                   style: TextStyle(
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
-                    color: foregroundColor,
-                    letterSpacing: 2,
+                    fontSize: 11,
+                    color: foreground.withValues(alpha: 0.45),
+                    letterSpacing: 1,
                   ),
                 ),
-              ),
-
-              if (widget.showVersion) ...[
-                const SizedBox(height: 10),
-                AnimatedOpacity(
-                  opacity: _opacity,
-                  duration: const Duration(milliseconds: 500),
-                  child: Text(
-                    widget.subtitle?.isNotEmpty == true
-                        ? widget.subtitle!
-                        : 'v${AppConfiguration.version} · 开源免费抓包工具',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: foregroundColor.withOpacity(0.8),
-                    ),
-                  ),
-                ),
-              ],
-              
-              const SizedBox(height: 60),
-              
-              // 特性轮播
-              if (widget.showFeatures) ...[
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 500),
-                  transitionBuilder: (Widget child, Animation<double> animation) {
-                    return FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(
-                        position: Tween<Offset>(
-                          begin: const Offset(0, 0.3),
-                          end: Offset.zero,
-                        ).animate(animation),
-                        child: child,
-                      ),
-                    );
-                  },
-                  child: Text(
-                    _features[_currentFeatureIndex],
-                    key: ValueKey(_currentFeatureIndex),
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: foregroundColor.withOpacity(0.9),
-                      fontWeight: FontWeight.w500,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                
-                const SizedBox(height: 20),
-                
-                // 指示器
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(
-                    _features.length,
-                    (index) => Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: index == _currentFeatureIndex
-                            ? foregroundColor
-                            : foregroundColor.withOpacity(0.3),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 60),
-
-              // 加载指示器
-              AnimatedOpacity(
-                opacity: _opacity,
-                duration: const Duration(milliseconds: 500),
-                child: Column(
-                  children: [
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(foregroundColor),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      '正在启动...',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: foregroundColor.withOpacity(0.7),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const Spacer(),
-
-              // 底部信息
-              AnimatedOpacity(
-                opacity: _opacity,
-                duration: const Duration(milliseconds: 500),
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 40),
-                  child: Text(
-                    '© 2023 Hongen Wang. All rights reserved.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: foregroundColor.withOpacity(0.5),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+                const SizedBox(height: 22),
+              ]),
+            ),
           ),
         ),
-      ],
-    ));
-  }
-}
-
-/// 启动横幅管理器
-class SplashBannerManager {
-  static final SplashBannerManager _instance = SplashBannerManager._internal();
-  factory SplashBannerManager() => _instance;
-  SplashBannerManager._internal();
-
-  bool _hasShown = false;
-  DateTime? _lastShownAt;
-
-  /// 是否需要显示启动横幅
-  bool shouldShow() {
-    // 首次启动或距离上次启动超过 24 小时
-    if (!_hasShown) return true;
-    if (_lastShownAt == null) return true;
-    
-    final hoursSinceLastShow = DateTime.now().difference(_lastShownAt!).inHours;
-    return hoursSinceLastShow >= 24;
-  }
-
-  /// 标记已显示
-  void markAsShown() {
-    _hasShown = true;
-    _lastShownAt = DateTime.now();
-  }
-
-  /// 重置状态 (用于重新显示)
-  void reset() {
-    _hasShown = false;
+      ]),
+    );
   }
 }

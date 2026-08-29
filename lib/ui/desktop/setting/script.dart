@@ -17,6 +17,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:proxypin/ui/component/guide_center.dart';
 import 'package:proxypin/ui/component/multi_window_compat.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
@@ -446,9 +447,7 @@ class _ScriptEditState extends State<ScriptEdit> {
             text: localizations.useGuide,
             style: const TextStyle(color: Colors.blue, fontSize: 14),
             recognizer: TapGestureRecognizer()
-              ..onTap = () => launchUrl(Uri.parse(isCN
-                  ? 'https://gitee.com/wanghongenpin/proxypin/wikis/%E8%84%9A%E6%9C%AC'
-                  : 'https://github.com/wanghongenpin/proxypin/wiki/Script')))),
+              ..onTap = () => showGuideArticle(context, 'script'))),
         const Expanded(child: Align(alignment: Alignment.topRight, child: CloseButton()))
       ]),
       contentPadding: const EdgeInsets.only(left: 15, right: 15),

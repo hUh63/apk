@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart' hide Action;
 import 'package:flutter_toastr/flutter_toastr.dart';
 import 'package:http/http.dart' as http;
+import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/network/components/manager/script_manager.dart';
 import 'package:proxypin/network/mcp/mcp_event_automation.dart';
 import 'package:proxypin/network/mcp/mcp_rule_engine.dart';
@@ -91,6 +92,8 @@ class _McpAutomationPageState extends State<McpAutomationPage>
         return res is Map && res['running'] == true;
       }
       if (target) {
+        // 启动视为用户主动启用，先解锁总开关（McpServer.start 会校验 mcpEnabled）
+        Configuration.loaded?.mcpEnabled = true;
         await _mcpServer.start();
       } else {
         await _mcpServer.stop();
@@ -407,30 +410,43 @@ class _McpAutomationPageState extends State<McpAutomationPage>
             ],
           ),
         ),
-        // 运行开关：桌面/移动端均可直接启停 MCP 服务
-        Switch(
-          value: running == true,
-          onChanged: running == null
-              ? null // 状态未确认前禁用，避免误操作
-              : (v) async {
-                  final prev = _mcpRunning;
-                  // 乐观更新，操作失败再回滚
-                  setState(() => _mcpRunning = v);
-                  final ok = await _setMcpRunning(v);
-                  if (!mounted) return;
-                  setState(() => _mcpRunning = ok);
-                  if (v && !ok) {
-                    FlutterToastr.show('MCP 服务启动失败，请检查设置中是否已启用 MCP 服务',
-                        context, duration: 2, backgroundColor: Colors.red);
-                  } else if (!v) {
-                    FlutterToastr.show('MCP 服务已停止', context, duration: 2,
-                        backgroundColor: Colors.green);
-                  } else {
-                    FlutterToastr.show('MCP 服务已启动', context, duration: 2,
-                        backgroundColor: Colors.green);
-                  }
-                  if (ok != prev) _refreshMcpData();
-                },
+        // 运行开关：电源图标随状态变色，点击启停（替代过大的 Switch）
+        Tooltip(
+          message: running == true ? '点击停止 MCP 自动化' : '点击启动 MCP 自动化',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: running == null
+                ? null // 状态未确认前禁用，避免误操作
+                : () async {
+                    final prev = _mcpRunning;
+                    // 乐观更新，操作失败再回滚
+                    setState(() => _mcpRunning = !running!);
+                    final ok = await _setMcpRunning(!running);
+                    if (!mounted) return;
+                    setState(() => _mcpRunning = ok);
+                    if (!running && !ok) {
+                      FlutterToastr.show('MCP 服务启动失败，请检查设置中是否已启用 MCP 服务',
+                          context, duration: 2, backgroundColor: Colors.red);
+                    } else if (running) {
+                      FlutterToastr.show('MCP 服务已停止', context, duration: 2,
+                          backgroundColor: Colors.green);
+                    } else {
+                      FlutterToastr.show('MCP 服务已启动', context, duration: 2,
+                          backgroundColor: Colors.green);
+                    }
+                    if (ok != prev) _refreshMcpData();
+                  },
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(
+                Icons.power_settings_new,
+                size: 20,
+                color: running == true
+                    ? Colors.green
+                    : (running == null ? Colors.grey.shade400 : Colors.grey),
+              ),
+            ),
+          ),
         ),
       ],
     );

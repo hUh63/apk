@@ -19,6 +19,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:code_forge/code_forge.dart';
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/network/components/manager/environment_manager.dart';
@@ -106,6 +107,11 @@ class _SplashGateState extends State<SplashGate> {
     if (!_showSplash) return widget.child;
 
     final config = widget.appConfiguration;
+    // 开关关闭 或 背景选"原生启动页(off)"时不叠加自定义启动页
+    if (!config.splashEnabled || config.splashBackground == 'off') {
+      return widget.child;
+    }
+
     final backgroundFile =
         config.splashBackground == 'custom' && config.splashBackgroundPath != null
             ? File(config.splashBackgroundPath!)
@@ -134,18 +140,37 @@ class FluentApp extends StatelessWidget {
     return ValueListenableBuilder<bool>(
         valueListenable: appConfiguration.globalChange,
         builder: (_, current, __) {
-          return MaterialApp(
-            title: 'ProxyPin',
-            debugShowCheckedModeBanner: false,
-            navigatorKey: navigatorHelper.navigatorKey,
-            theme: theme(Brightness.light),
-            darkTheme: theme(Brightness.dark),
-            themeMode: appConfiguration.themeMode,
-            locale: appConfiguration.language,
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: home,
-          );
+          // 莫奈取色：Android 12+ 从壁纸提取动态色板（monetEnabled 关闭或低版本回退到固定主题）
+          return DynamicColorBuilder(
+              builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+            final useMonet = appConfiguration.monetEnabled;
+            final ThemeData lightTheme;
+            final ThemeData darkTheme;
+            if (useMonet && lightDynamic != null) {
+              lightTheme = theme(Brightness.light)
+                  .copyWith(colorScheme: lightDynamic.harmonized());
+            } else {
+              lightTheme = theme(Brightness.light);
+            }
+            if (useMonet && darkDynamic != null) {
+              darkTheme = theme(Brightness.dark)
+                  .copyWith(colorScheme: darkDynamic.harmonized());
+            } else {
+              darkTheme = theme(Brightness.dark);
+            }
+            return MaterialApp(
+              title: 'ProxyPin',
+              debugShowCheckedModeBanner: false,
+              navigatorKey: navigatorHelper.navigatorKey,
+              theme: lightTheme,
+              darkTheme: darkTheme,
+              themeMode: appConfiguration.themeMode,
+              locale: appConfiguration.language,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: home,
+            );
+          });
         });
   }
 

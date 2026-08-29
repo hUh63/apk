@@ -102,4 +102,7 @@ flutter {
 
 
 dependencies {
+    // Shizuku 标准 API：支持应用内弹出系统授权弹窗，并在 Shizuku 应用管理中可见
+    implementation 'dev.rikka.shizuku:api:13.1.5'
+    implementation 'dev.rikka.shizuku:provider:13.1.5'
 }

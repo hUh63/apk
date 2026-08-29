@@ -17,6 +17,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/ui/component/multi_window_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:proxypin/l10n/app_localizations.dart';
@@ -320,6 +321,11 @@ void registerMethodHandler() {
 
     // 供 MCP 自动化子窗口开关主窗口 MCP 服务（子窗口为独立 isolate，其单例未运行）
     if (call.method == 'startMcp') {
+      // 自动化页启动视为用户主动启用，先解锁 mcpEnabled，避免被总开关守护拒绝
+      try {
+        var config = await Configuration.instance;
+        config.mcpEnabled = true;
+      } catch (_) {}
       await McpServer().start();
       return {'running': McpServer().isRunning};
     }

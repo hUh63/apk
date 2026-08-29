@@ -2,6 +2,7 @@ package com.network.proxy.plugin
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Base64
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -9,6 +10,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONArray
 import org.json.JSONObject
+import rikka.shizuku.Shizuku
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.Inet4Address
@@ -41,6 +43,7 @@ class McpPlugin : FlutterPlugin {
 
     companion object {
         private const val CHANNEL_NAME = "com.proxy/mcpScreen"
+        private const val SHIZUKU_REQUEST_CODE = 631
     }
 
     private var context: Context? = null
@@ -453,36 +456,44 @@ class McpPlugin : FlutterPlugin {
     }
 
     /**
-     * 请求 Shizuku 授权
-     * Shizuku 12.0+ 需要在 Shizuku 应用中手动授权
-     * 此方法打开 Shizuku 应用的授权页面
+     * 请求 Shizuku 授权（标准 API）
+     * 已授权返回 true；未授权时在应用内直接弹出 Shizuku 的系统授权弹窗，
+     * 等待用户操作后返回授权结果（最长等待 90 秒）。
+     * 使用标准 binder API 后，ProxyPin 会出现在 Shizuku 的应用管理列表中。
      */
     private fun requestShizukuAuthorization(): Boolean {
         return try {
-            val pm = context?.packageManager ?: return false
-            val shizukuPkg = "moe.shizuku.privileged.api"
-            
-            // 检查 Shizuku 是否已安装
-            pm.getPackageInfo(shizukuPkg, 0)
-            
-            // 打开 Shizuku 的授权页面（不是主页）
-            // Shizuku 提供了专门的授权 Activity
-            val intent = Intent("moe.shizuku.manager.action.PERMISSION").apply {
-                setPackage(shizukuPkg)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            if (context == null) return false
+            if (!Shizuku.pingBinder()) return false
+
+            if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+                return true
             }
-            context?.startActivity(intent)
-            true
-        } catch (e: Exception) {
-            // 如果授权页面 Intent 失败，打开 Shizuku 应用主页
+            if (Shizuku.shouldShowRequestPermissionRationale()) {
+                // 用户曾拒绝且勾选"不再询问"，只能引导去 Shizuku 应用手动授权
+                return false
+            }
+
+            var granted = false
+            val latch = CountDownLatch(1)
+            val listener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+                if (requestCode == SHIZUKU_REQUEST_CODE) {
+                    granted = grantResult == PackageManager.PERMISSION_GRANTED
+                    latch.countDown()
+                }
+            }
+            Shizuku.addRequestPermissionResultListener(listener)
             try {
-                val pm = context?.packageManager ?: return false
-                val launch = pm.getLaunchIntentForPackage("moe.shizuku.privileged.api")
-                if (launch != null) {
-                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context?.startActivity(launch)
-                    true
-                } else false
+                Shizuku.requestPermission(SHIZUKU_REQUEST_CODE)
+                latch.await(90, TimeUnit.SECONDS)
+            } finally {
+                Shizuku.removeRequestPermissionResultListener(listener)
+            }
+            granted
+        } catch (e: Throwable) {
+            // 标准流程不可用时回退：打开 Shizuku 的授权页面
+            return try {
+                openShizukuSettings()
             } catch (e2: Exception) {
                 false
             }
@@ -544,17 +555,6 @@ class McpPlugin : FlutterPlugin {
 
     // ==================== Shizuku / Dhizuku ====================
 
-    private val shizukuBinder: android.os.IBinder? by lazy {
-        try {
-            // Shizuku 通过系统服务 user 的 binder 提供
-            val clazz = Class.forName("moe.shizuku.api.Shizuku")
-            val binderMethod = clazz.getMethod("binderReceived")
-            binderMethod.invoke(null) as? android.os.IBinder
-        } catch (e: Exception) {
-            null
-        }
-    }
-
     /**
      * 检测 Shizuku 是否可用：
      * 1. Shizuku 应用已安装
@@ -570,17 +570,14 @@ class McpPlugin : FlutterPlugin {
         val now = System.currentTimeMillis()
         if (shizukuStatus != null && now - shizukuCheckTime < 5000) return shizukuStatus!!
         val result = try {
-            // 方式1：反射检查 binder
-            val clazz = Class.forName("moe.shizuku.api.Shizuku")
-            val ping = clazz.getMethod("pingBinder")
-            if (ping.invoke(null) == true) {
+            // 优先使用标准 API 检测 binder 是否存活
+            if (Shizuku.pingBinder()) {
                 true
             } else {
-                // 方式2：检查 Shizuku 应用是否安装且授权（ping 可能因进程隔离失败）
+                // Shizuku 未运行时，检查应用是否已安装（提示用户先启动 Shizuku）
                 val pm = context?.packageManager ?: return false
                 pm.getPackageInfo("moe.shizuku.privileged.api", 0)
-                val binder = shizukuBinder
-                binder != null
+                false
             }
         } catch (e: Exception) {
             false
@@ -621,13 +618,15 @@ class McpPlugin : FlutterPlugin {
 
     /**
      * 通过 Shizuku 执行 shell 命令（无需 root）
+     * 使用标准 API Shizuku.newProcess()，要求已通过 Shizuku 授权
      */
     private fun shellViaShizuku(command: String, timeoutMs: Long): Map<String, Any> {
         try {
-            val binder = shizukuBinder ?: throw IllegalStateException("Shizuku binder not connected")
-            val clazz = Class.forName("moe.shizuku.api.Shizuku")
-            val newProcess = clazz.getMethod("newProcess", Array<String>::class.java, String::class.java, Array<String>::class.java)
-            val process = newProcess.invoke(null, arrayOf("sh", "-c", command), null, arrayOf<String>()) as java.lang.Process
+            if (!Shizuku.pingBinder()) throw IllegalStateException("Shizuku binder not connected")
+            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+                throw IllegalStateException("Shizuku permission not granted")
+            }
+            val process = Shizuku.newProcess(arrayOf("sh", "-c", command), null, arrayOf<String>())
             val stdout = process.inputStream.bufferedReader().readText()
             val stderr = process.getErrorStream().bufferedReader().readText()
             val completed = process.waitFor(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)

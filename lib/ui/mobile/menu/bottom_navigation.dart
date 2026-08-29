@@ -25,6 +25,7 @@ import 'package:proxypin/network/components/manager/request_rewrite_manager.dart
 import 'package:proxypin/network/util/system_proxy.dart';
 import 'package:proxypin/storage/histories.dart';
 import 'package:proxypin/ui/component/proxy_port_setting.dart';
+import 'package:proxypin/ui/component/guide_center.dart';
 import 'package:proxypin/ui/configuration.dart';
 import 'package:proxypin/ui/mobile/menu/drawer.dart';
 import 'package:proxypin/ui/mobile/menu/weak_network_tile.dart';
@@ -358,6 +359,15 @@ class SettingPage extends StatelessWidget {
                 title: Text(localizations.about),
                 trailing: const Icon(Icons.keyboard_arrow_right),
                 onTap: () => navigator(context, const About())),
+          ]),
+          const SizedBox(height: 12),
+          section([
+            ListTile(
+                leading: const Icon(Icons.menu_book_outlined, size: 20),
+                title: const Text('使用文档'),
+                subtitle: const Text('功能教程 · 规范文档 · 开发文档（离线内置）', style: TextStyle(fontSize: 12)),
+                trailing: const Icon(Icons.keyboard_arrow_right),
+                onTap: () => showGuideCenter(context)),
           ]),
           const SizedBox(height: 8),
         ]));

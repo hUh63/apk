@@ -22,6 +22,7 @@ import 'package:flutter/services.dart';
 import 'package:code_forge/code_forge.dart';
 import 'package:http/http.dart' as http;
 import 'package:get/get.dart';
+import 'package:proxypin/ui/component/guide_center.dart';
 import 'package:proxypin/l10n/app_localizations.dart';
 import 'package:re_highlight/styles/monokai-sublime.dart';
 import 'package:flutter_toastr/flutter_toastr.dart';
@@ -492,11 +493,7 @@ class _ScriptEditState extends State<ScriptEdit> {
                   text: localizations.useGuide,
                   style: const TextStyle(color: Colors.blue, fontSize: 14),
                   recognizer: TapGestureRecognizer()
-                    ..onTap = () => launchUrl(
-                        mode: LaunchMode.externalApplication,
-                        Uri.parse(isCN
-                            ? 'https://gitee.com/wanghongenpin/proxypin/wikis/%E8%84%9A%E6%9C%AC'
-                            : 'https://github.com/wanghongenpin/proxypin/wiki/Script')))),
+                    ..onTap = () => showGuideArticle(context, 'script'))),
             ]),
             actions: [
               TextButton(

@@ -103,14 +103,18 @@ class AppConfiguration {
   /// 启动页展示时长（毫秒）
   int splashDurationMs = 1800;
 
-  /// 启动页背景：default 蓝色渐变 / custom 自定义图片 / transparent 跟随主题（透明）
-  String splashBackground = "default";
+  /// 启动页背景：off 原生启动页（默认，不叠加自定义启动页）/ gradient 主题色渐变 /
+  /// custom 自定义图片 / transparent 跟随主题背景
+  String splashBackground = "off";
 
   /// 自定义背景图片路径（splashBackground == custom 时使用）
   String? splashBackgroundPath;
 
   /// 启动页自定义小字（为空时显示默认副标题）
   String? splashSubtitle;
+
+  /// 莫奈取色（Android 12+ Material You，跟随壁纸派生主题色与启动页配色）
+  bool monetEnabled = true;
 
   //桌面window大小
   Size? windowSize;
@@ -245,9 +249,12 @@ class AppConfiguration {
       clearConfirm = config['clearConfirm'] ?? false;
       splashEnabled = config['splashEnabled'] ?? true;
       splashDurationMs = config['splashDurationMs'] ?? 1800;
-      splashBackground = config['splashBackground'] ?? "default";
+      splashBackground = config['splashBackground'] ?? "off";
+      // 旧版本 "default"（渐变）迁移为 "gradient"，新默认值为 "off"（原生启动页）
+      if (splashBackground == "default") splashBackground = "gradient";
       splashBackgroundPath = config['splashBackgroundPath'];
       splashSubtitle = config['splashSubtitle'];
+      monetEnabled = config['monetEnabled'] ?? true;
 
       windowSize = config['windowSize'] == null
           ? null
@@ -300,6 +307,7 @@ class AppConfiguration {
       "splashEnabled": splashEnabled,
       "splashDurationMs": splashDurationMs,
       "splashBackground": splashBackground,
+      "monetEnabled": monetEnabled,
       if (splashBackgroundPath != null) "splashBackgroundPath": splashBackgroundPath,
       if (splashSubtitle != null) "splashSubtitle": splashSubtitle,
       if (memoryCleanupThreshold != null)

@@ -189,13 +189,19 @@ class McpServer {
 
       // 通知状态变化
       onStatusChanged?.call();
+
+      // 运行状态持久化：启动成功后同步启用标记，避免重启后状态与预期不一致
+      config.mcpEnabled = true;
+      Configuration.markChanged();
     } catch (e) {
       _lastError = e.toString();
       logger.e('Failed to start MCP server', error: e);
     }
   }
 
-  Future<void> stop() async {
+  /// [persistState] 为 true 时将"手动停止"写入配置（重启不自动拉起）；
+  /// 应用退出清理等场景传 false，避免误把自动清理当成用户操作。
+  Future<void> stop({bool persistState = true}) async {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
 
@@ -221,6 +227,17 @@ class McpServer {
     _lastError = null;
     // 通知状态变化
     onStatusChanged?.call();
+
+    // 运行状态持久化：手动停止后写入配置，重启应用不再自动拉起
+    if (persistState) {
+      try {
+        var config = await Configuration.instance;
+        config.mcpEnabled = false;
+        Configuration.markChanged();
+      } catch (e) {
+        logger.w('Failed to persist MCP stop state', error: e);
+      }
+    }
   }
 
   void _handleOptions(io.HttpRequest request) {

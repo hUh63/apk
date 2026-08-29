@@ -8,7 +8,6 @@ import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/network/bin/server.dart';
 import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/storage/path.dart';
-import 'package:proxypin/ui/component/guide_center.dart';
 import 'package:proxypin/ui/component/widgets.dart';
 import 'package:proxypin/ui/configuration.dart';
 import 'package:proxypin/ui/mobile/setting/config_management.dart';
@@ -57,7 +56,7 @@ class _PreferenceState extends State<Preference> {
     super.dispose();
   }
 
-  /// 启动页设置区块：开关 / 展示时长 / 背景（默认·自定义图片·透明）/ 自定义小字
+  /// 启动页设置区块：开关 / 背景（原启动页·渐变·自定义图片·透明）/ 时长 / 自定义小字
   Widget _buildSplashSection(Color dividerColor) {
     return Card(
       color: Colors.transparent,
@@ -69,7 +68,7 @@ class _PreferenceState extends State<Preference> {
       child: Column(children: [
         ListTile(
           title: const Text('启动页'),
-          subtitle: const Text('应用启动时展示品牌动画', style: TextStyle(fontSize: 12)),
+          subtitle: const Text('默认使用系统原生启动页，可切换为自定义品牌页', style: TextStyle(fontSize: 12)),
           trailing: SwitchWidget(
             value: appConfiguration.splashEnabled,
             scale: 0.8,
@@ -79,7 +78,7 @@ class _PreferenceState extends State<Preference> {
             },
           ),
         ),
-        if (appConfiguration.splashEnabled) ...[
+        if (appConfiguration.splashEnabled && appConfiguration.splashBackground != 'off') ...[
           Divider(height: 0, thickness: 0.3, color: dividerColor),
           ListTile(
             title: const Text('展示时长'),
@@ -109,7 +108,8 @@ class _PreferenceState extends State<Preference> {
               value: appConfiguration.splashBackground,
               underline: const SizedBox(),
               items: const [
-                DropdownMenuItem(value: 'default', child: Text('默认渐变')),
+                DropdownMenuItem(value: 'off', child: Text('原启动页（默认）')),
+                DropdownMenuItem(value: 'gradient', child: Text('渐变品牌页')),
                 DropdownMenuItem(value: 'custom', child: Text('自定义图片')),
                 DropdownMenuItem(value: 'transparent', child: Text('透明（跟随主题）')),
               ],
@@ -248,23 +248,23 @@ class _PreferenceState extends State<Preference> {
               padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
               child: themeColor(context),
             ),
+            Divider(height: 0, thickness: 0.3, color: dividerColor),
+            ListTile(
+              title: const Text('莫奈取色'),
+              subtitle: const Text(
+                'Android 12+ 跟随壁纸配色（主题与启动页自动取色）',
+                style: TextStyle(fontSize: 12),
+              ),
+              trailing: SwitchWidget(
+                value: appConfiguration.monetEnabled,
+                scale: 0.8,
+                onChanged: (value) {
+                  setState(() => appConfiguration.monetEnabled = value);
+                  appConfiguration.flushConfig();
+                },
+              ),
+            ),
           ]),
-          const SizedBox(height: 12),
-          Card(
-            color: Colors.transparent,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              side: BorderSide(color: dividerColor),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: ListTile(
-              leading: const Icon(Icons.menu_book_outlined, size: 20),
-              title: const Text('使用文档'),
-              subtitle: const Text('功能教程 · 规范文档 · 开发文档（离线内置）', style: TextStyle(fontSize: 12)),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: () => showGuideCenter(context),
-            ),
-          ),
           const SizedBox(height: 12),
           _buildSplashSection(dividerColor),
           const SizedBox(height: 12),
