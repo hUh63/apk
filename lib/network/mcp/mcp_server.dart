@@ -192,7 +192,7 @@ class McpServer {
 
       // 运行状态持久化：启动成功后同步启用标记，避免重启后状态与预期不一致
       config.mcpEnabled = true;
-      Configuration.markChanged();
+      ConfigAutoSave.markChanged();
     } catch (e) {
       _lastError = e.toString();
       logger.e('Failed to start MCP server', error: e);
@@ -233,7 +233,7 @@ class McpServer {
       try {
         var config = await Configuration.instance;
         config.mcpEnabled = false;
-        Configuration.markChanged();
+        ConfigAutoSave.markChanged();
       } catch (e) {
         logger.w('Failed to persist MCP stop state', error: e);
       }
