@@ -4,6 +4,7 @@
  */
 
 import 'dart:convert';
+import 'dart:io' show HttpClient, HttpHeaders;
 
 import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/network/http/http.dart';
