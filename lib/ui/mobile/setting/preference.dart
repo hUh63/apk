@@ -264,6 +264,24 @@ class _PreferenceState extends State<Preference> {
                 },
               ),
             ),
+            Divider(height: 0, thickness: 0.3, color: dividerColor),
+            if (Platform.isAndroid) ...[
+              ListTile(
+                title: const Text('拦截 QUIC (UDP:443)'),
+                subtitle: const Text(
+                  '丢弃 UDP 443 强制应用回落 TCP，使 HTTPS 流量可抓包',
+                  style: TextStyle(fontSize: 12),
+                ),
+                trailing: SwitchWidget(
+                  value: configuration.blockQuic,
+                  scale: 0.8,
+                  onChanged: (value) {
+                    setState(() => configuration.blockQuic = value);
+                    configuration.flushConfig();
+                  },
+                ),
+              ),
+            ],
           ]),
           const SizedBox(height: 12),
           _buildSplashSection(dividerColor),

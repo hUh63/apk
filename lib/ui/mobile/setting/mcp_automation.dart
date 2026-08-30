@@ -10,6 +10,7 @@ import 'package:proxypin/network/mcp/mcp_event_automation.dart';
 import 'package:proxypin/network/mcp/mcp_rule_engine.dart';
 import 'package:proxypin/network/mcp/mcp_scheduler.dart';
 import 'package:proxypin/network/mcp/mcp_server.dart';
+import 'package:proxypin/network/util/cron_expression.dart';
 import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/storage/path.dart';
 import 'package:proxypin/ui/component/guide_center.dart';
@@ -546,6 +547,8 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     List<int> selectedWeekdays = [];
     final repeatCountController = TextEditingController();
     final intervalController = TextEditingController(text: '30');
+    final cronController = TextEditingController();
+    DateTime? cronPreview;
     int actionType = 1; // 0 执行脚本 1 调用MCP工具 2 执行工作流 3 发送Webhook
     // 子配置
     String? selectedScript;
@@ -597,6 +600,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                       ButtonSegment(value: 'daily', label: Text('每天'), icon: Icon(Icons.repeat, size: 16)),
                       ButtonSegment(value: 'weekly', label: Text('每周'), icon: Icon(Icons.date_range, size: 16)),
                       ButtonSegment(value: 'interval', label: Text('间隔'), icon: Icon(Icons.timer_outlined, size: 16)),
+                      ButtonSegment(value: 'cron', label: Text('Cron'), icon: Icon(Icons.code, size: 16)),
                     ],
                     selected: {repeatMode},
                     onSelectionChanged: (v) => setDialogState(() => repeatMode = v.first),
@@ -604,8 +608,49 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                     style: const ButtonStyle(visualDensity: VisualDensity.compact),
                   ),
                   const SizedBox(height: 8),
+                  // Cron 表达式模式：表达式输入 + 下次执行预览
+                  if (repeatMode == 'cron') ...[
+                    TextField(
+                      controller: cronController,
+                      decoration: const InputDecoration(
+                        labelText: 'Cron 表达式',
+                        border: OutlineInputBorder(),
+                        hintText: '分 时 日 月 星期，如 0 9 * * 1-5',
+                        helperText: '支持 * , - / 通配符',
+                      ),
+                      onChanged: (v) => setDialogState(() => cronPreview = CronExpression(v).next(DateTime.now())),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      cronPreview == null
+                          ? (cronController.text.isEmpty ? '请输入 Cron 表达式' : '表达式无效，请检查')
+                          : '下次执行: ${cronPreview!.year}-${cronPreview!.month.toString().padLeft(2, '0')}-${cronPreview!.day.toString().padLeft(2, '0')} ${cronPreview!.hour.toString().padLeft(2, '0')}:${cronPreview!.minute.toString().padLeft(2, '0')}',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: cronPreview == null ? Colors.orange : Colors.green),
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        for (final (expr, desc) in const [
+                          ('0 9 * * 1-5', '工作日9点'),
+                          ('*/30 * * * *', '每30分钟'),
+                          ('0 0 * * *', '每天零点'),
+                        ])
+                          ActionChip(
+                            label: Text(desc, style: const TextStyle(fontSize: 11)),
+                            onPressed: () => setDialogState(() {
+                              cronController.text = expr;
+                              cronPreview = CronExpression(expr).next(DateTime.now());
+                            }),
+                          ),
+                      ],
+                    ),
+                  ],
                   // 一次性 / 每天 / 每周：选择执行时刻
-                  if (repeatMode != 'interval') ...[
+                  if (repeatMode != 'interval' && repeatMode != 'cron') ...[
                     Text(repeatMode == 'none' ? '执行日期与时间:' : '执行时间:'),
                     const SizedBox(height: 8),
                     Wrap(
@@ -777,16 +822,22 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   FlutterToastr.show('请至少选择一个星期', context, duration: 2, backgroundColor: Colors.red);
                   return;
                 }
+                if (repeatMode == 'cron' && CronExpression(cronController.text.trim()).next(DateTime.now()) == null) {
+                  FlutterToastr.show('Cron 表达式无效', context, duration: 2, backgroundColor: Colors.red);
+                  return;
+                }
                 final descriptor = _buildTaskDescriptor(actionType, nameController.text,
                     script: selectedScript, tool: selectedTool, workflow: selectedWorkflow, webhookUrl: webhookUrlController.text);
                 if (descriptor == null) {
                   FlutterToastr.show('请完善执行任务配置', context, duration: 2, backgroundColor: Colors.red);
                   return;
                 }
-                // 一次性任务从所选日期时间起算；间隔任务从当前时间起算；每周任务从所选时刻起算
+                // 一次性任务从所选日期时间起算；间隔任务从当前时间起算；每周任务从所选时刻起算；Cron 由表达式计算
                 var executeAt = selectedTime;
                 if (repeatMode == 'interval') {
                   executeAt = DateTime.now().add(Duration(minutes: intervalMinutes));
+                } else if (repeatMode == 'cron') {
+                  executeAt = CronExpression(cronController.text.trim()).next(DateTime.now()) ?? selectedTime;
                 } else if (repeatMode == 'weekly' && executeAt.isBefore(DateTime.now())) {
                   // 时刻已过：推进到下一个选中的星期
                   var next = executeAt.add(const Duration(days: 1));
@@ -804,6 +855,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   repeatCount: repeatCount,
                   intervalMinutes: repeatMode == 'interval' ? intervalMinutes : null,
                   weekdays: repeatMode == 'weekly' ? selectedWeekdays : null,
+                  cronExpression: repeatMode == 'cron' ? cronController.text.trim() : null,
                 );
                 await _scheduler.saveTasks();
                 Navigator.pop(context);

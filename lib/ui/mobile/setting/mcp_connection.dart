@@ -519,23 +519,14 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
                       icon: const Icon(Icons.security),
                       label: const Text('请求 Shizuku 授权'),
                       onPressed: () async {
-                        await McpScreen.requestShizukuAuthorization();
-                        // 授权后重新检测状态
-                        await _loadDeviceInfo();
-                        if (mounted) setState(() {});
-                      },
-                    ),
-                  ),
-                ],
-                if (McpScreen.isSupported && !hasDhizuku) ...[
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.verified_user),
-                      label: const Text('请求 Dhizuku 授权'),
-                      onPressed: () async {
-                        await McpScreen.requestDhizukuAuthorization();
+                        final ok = await McpScreen.requestShizukuAuthorization();
+                        if (!mounted) return;
+                        FlutterToastr.show(
+                          ok ? 'Shizuku 已授权' : '授权未完成：请确认 Shizuku 已运行，或到 Shizuku 应用中手动授权',
+                          context,
+                          duration: 3,
+                          backgroundColor: ok ? Colors.green : Colors.orange,
+                        );
                         // 授权后重新检测状态
                         await _loadDeviceInfo();
                         if (mounted) setState(() {});
@@ -551,8 +542,37 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
                       icon: const Icon(Icons.admin_panel_settings),
                       label: const Text('请求 Root 授权'),
                       onPressed: () async {
-                        await McpScreen.requestRootAuthorization();
+                        final ok = await McpScreen.requestRootAuthorization();
+                        if (!mounted) return;
+                        FlutterToastr.show(
+                          ok ? 'Root 已授权' : '授权未完成：请在 Magisk/KernelSU 弹窗中允许，或确认设备已 Root',
+                          context,
+                          duration: 3,
+                          backgroundColor: ok ? Colors.green : Colors.orange,
+                        );
                         // 授权后重新检测状态
+                        await _loadDeviceInfo();
+                        if (mounted) setState(() {});
+                      },
+                    ),
+                  ),
+                ],
+                if (McpScreen.isSupported && !hasDhizuku) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.verified_user),
+                      label: const Text('配置 Dhizuku'),
+                      onPressed: () async {
+                        await McpScreen.requestDhizukuAuthorization();
+                        if (!mounted) return;
+                        FlutterToastr.show(
+                          '已打开 Dhizuku，请在其中完成本应用的授权',
+                          context,
+                          duration: 3,
+                          backgroundColor: Colors.orange,
+                        );
                         await _loadDeviceInfo();
                         if (mounted) setState(() {});
                       },

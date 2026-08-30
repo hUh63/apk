@@ -16,6 +16,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'package:proxypin/network/util/cron_expression.dart';
 import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/storage/path.dart';
 
@@ -44,7 +45,7 @@ class McpScheduler {
   /// [action] 仅本会话即时触发（闭包不可序列化）；[actionDescriptor] 可持久化，
   /// 重启加载后由 [setActionExecutor] 注册的执行器触发。二者任一非空即可。
   ///
-  /// [repeatMode] 重复方式：none 一次性 / daily 每天 / weekly 每周 / interval 固定间隔；
+  /// [repeatMode] 重复方式：none 一次性 / daily 每天 / weekly 每周 / interval 固定间隔 / cron 表达式；
   /// [weekdays] weekly 模式选中的星期（1=周一 ... 7=周日）；
   /// [repeatCount] 重复次数，null 表示无限重复。
   void scheduleTask({
@@ -57,6 +58,7 @@ class McpScheduler {
     int? repeatCount,
     int? intervalMinutes,
     List<int>? weekdays,
+    String? cronExpression,
   }) {
     // 兼容旧参数：未显式指定 repeatMode 时按 repeatDaily 推断
     final mode = (repeatMode == 'none' && repeatDaily) ? 'daily' : repeatMode;
@@ -69,6 +71,7 @@ class McpScheduler {
       repeatCount: repeatCount,
       intervalMinutes: intervalMinutes,
       weekdays: weekdays,
+      cronExpression: cronExpression,
     );
     _tasks.add(task);
     logger.i('添加定时任务：$name，执行时间：$executeAt，模式：$mode，次数：${repeatCount ?? '无限'}');
@@ -124,6 +127,16 @@ class McpScheduler {
           } else if (task.repeatMode == 'interval' && task.intervalMinutes != null && task.intervalMinutes! > 0) {
             task.executeAt = now.add(Duration(minutes: task.intervalMinutes!));
             logger.d('定时任务 ${task.name} 下次执行时间：${task.executeAt}');
+          } else if (task.repeatMode == 'cron' && task.cronExpression != null) {
+            // Cron 表达式：计算下一个匹配时间；解析失败则结束任务
+            final next = CronExpression(task.cronExpression!).next(now);
+            if (next == null) {
+              task.isCancelled = true;
+              logger.w('定时任务 ${task.name} Cron 表达式无效：${task.cronExpression}');
+            } else {
+              task.executeAt = next;
+              logger.d('定时任务 ${task.name} 下次执行时间：${task.executeAt}');
+            }
           } else {
             task.isCancelled = true;
             logger.d('一次性任务 ${task.name} 已完成');
@@ -213,8 +226,38 @@ class McpScheduler {
       for (final e in list) {
         final t = ScheduledTask.fromJson(e as Map<String, dynamic>);
         if (t.isCancelled) continue;
-        // 跳过已过期的非重复任务
-        if (!t.repeatDaily && t.executeAt.isBefore(now)) continue;
+        final isRepeating = t.repeatMode != 'none';
+        // 重复任务过期（应用停用一段时间后）推进到下一个执行点，避免永不执行；
+        // cron 解析失败或一次性任务过期则丢弃
+        if (isRepeating && t.executeAt.isBefore(now)) {
+          DateTime? next;
+          switch (t.repeatMode) {
+            case 'daily':
+              next = DateTime(now.year, now.month, now.day, t.executeAt.hour, t.executeAt.minute, t.executeAt.second);
+              if (!next.isAfter(now)) next = next!.add(const Duration(days: 1));
+              break;
+            case 'weekly':
+              if (t.weekdays.isNotEmpty) {
+                next = DateTime(now.year, now.month, now.day, t.executeAt.hour, t.executeAt.minute);
+                for (int i = 0; i < 9; i++) {
+                  if (t.weekdays.contains(next!.weekday) && next.isAfter(now)) break;
+                  next = next.add(const Duration(days: 1));
+                }
+              }
+              break;
+            case 'interval':
+              next = now.add(Duration(minutes: t.intervalMinutes ?? 30));
+              break;
+            case 'cron':
+              next = t.cronExpression == null ? null : CronExpression(t.cronExpression!).next(now);
+              break;
+          }
+          if (next == null || !next.isAfter(now)) continue;
+          t.executeAt = next;
+        } else if (!t.repeatDaily && t.executeAt.isBefore(now)) {
+          // 一次性任务已过期
+          continue;
+        }
         _tasks.add(t);
       }
       _startCheckTimer();
@@ -232,8 +275,11 @@ class ScheduledTask {
   final VoidCallback? action; // 本会话闭包（不持久化）
   final Map<String, dynamic>? actionDescriptor; // 可序列化动作描述
 
-  /// 重复方式：none 一次性 / daily 每天 / weekly 每周 / interval 固定间隔
+  /// 重复方式：none 一次性 / daily 每天 / weekly 每周 / interval 固定间隔 / cron 表达式
   final String repeatMode;
+
+  /// cron 模式的表达式（分 时 日 月 星期）
+  final String? cronExpression;
 
   /// 重复次数上限，null 表示无限（仅 daily/weekly/interval 模式有效）
   final int? repeatCount;
@@ -262,6 +308,7 @@ class ScheduledTask {
     List<int>? weekdays,
     this.lastExecuted,
     bool repeatDaily = false,
+    this.cronExpression,
   })  : repeatMode = (repeatMode == 'none' && repeatDaily) ? 'daily' : repeatMode,
         weekdays = weekdays ?? const [];
 
@@ -273,6 +320,7 @@ class ScheduledTask {
         if (repeatCount != null) 'repeatCount': repeatCount,
         if (intervalMinutes != null) 'intervalMinutes': intervalMinutes,
         if (weekdays.isNotEmpty) 'weekdays': weekdays,
+        if (cronExpression != null) 'cronExpression': cronExpression,
         'executedCount': executedCount,
         if (actionDescriptor != null) 'action': actionDescriptor,
         if (lastExecuted != null) 'lastExecuted': lastExecuted!.toIso8601String(),
@@ -295,6 +343,7 @@ class ScheduledTask {
       intervalMinutes: json['intervalMinutes'] is int ? json['intervalMinutes'] as int : null,
       weekdays: (json['weekdays'] as List?)?.whereType<int>().toList(),
       lastExecuted: json['lastExecuted'] == null ? null : DateTime.tryParse(json['lastExecuted'] as String),
+      cronExpression: json['cronExpression'] as String?,
     );
     task.executedCount = json['executedCount'] is int ? json['executedCount'] as int : 0;
     return task;
@@ -311,6 +360,8 @@ class ScheduledTask {
         return '每周$days${repeatCount == null ? '' : ' · 共${repeatCount}次'}';
       case 'interval':
         return '每${intervalMinutes ?? 0}分钟${repeatCount == null ? '' : ' · 共${repeatCount}次'}';
+      case 'cron':
+        return 'Cron: ${cronExpression ?? ''}';
       default:
         return '一次性';
     }

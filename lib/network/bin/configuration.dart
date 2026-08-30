@@ -76,6 +76,15 @@ class Configuration {
   //默认是否启动
   bool startup = false;
 
+  //AI 分析（OpenAI 兼容接口，上游 #582）
+  bool aiEnabled = false;
+  String aiBaseUrl = "https://api.openai.com/v1";
+  String aiApiKey = "";
+  String aiModel = "gpt-4o-mini";
+
+  //QUIC 拦截（Android VPN 层丢弃 UDP:443，强制应用回落 TCP HTTP 以便可抓包，上游 #489）
+  bool blockQuic = true;
+
   //自动备份配置
   bool autoBackupEnabled = true; // 是否启用自动备份
   int autoBackupIntervalHours = 24; // 自动备份间隔（小时）
@@ -106,6 +115,11 @@ class Configuration {
     port = config['port'] ?? port;
     enableSsl = config['enableSsl'] == true;
     startup = config['startup'] ?? Platforms.isDesktop();
+    aiEnabled = config['aiEnabled'] ?? false;
+    aiBaseUrl = config['aiBaseUrl'] ?? "https://api.openai.com/v1";
+    aiApiKey = config['aiApiKey'] ?? "";
+    aiModel = config['aiModel'] ?? "gpt-4o-mini";
+    blockQuic = config['blockQuic'] ?? true;
     enableSystemProxy = config['enableSystemProxy'] ?? (config['enableDesktop'] ?? true);
     enableSocks5 = config['enableSocks5'] ?? true;
     enabledHttp2 = config['enabledHttp2'] ?? false;
@@ -170,6 +184,11 @@ class Configuration {
       'port': port,
       'enableSsl': enableSsl,
       'startup': startup,
+      'aiEnabled': aiEnabled,
+      'aiBaseUrl': aiBaseUrl,
+      'aiApiKey': aiApiKey,
+      'aiModel': aiModel,
+      'blockQuic': blockQuic,
       'enableSystemProxy': enableSystemProxy,
       'enableSocks5': enableSocks5,
       'proxyPassDomains': proxyPassDomains,

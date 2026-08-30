@@ -25,6 +25,7 @@ class VpnServicePlugin : AndroidFlutterPlugin() {
                     val disallowApps = call.argument<ArrayList<String>>("disallowApps")
                     val setSystemProxy = call.argument<Boolean>("setSystemProxy") ?: true
                     val proxyPassDomains = call.argument<ArrayList<String>>("proxyPassDomains")
+                    val blockQuic = call.argument<Boolean>("blockQuic") ?: ProxyVpnService.blockQuic
 
                     val prepareVpn = ProxyVpnService.prepareVpn(
                         activity,
@@ -36,7 +37,7 @@ class VpnServicePlugin : AndroidFlutterPlugin() {
                         proxyPassDomains
                     )
                     if (prepareVpn) {
-                        startVpn(host, port, allowApps, disallowApps, setSystemProxy, proxyPassDomains)
+                        startVpn(host, port, allowApps, disallowApps, setSystemProxy, proxyPassDomains, blockQuic)
                     }
                     result.success(prepareVpn)
                 }
@@ -54,8 +55,9 @@ class VpnServicePlugin : AndroidFlutterPlugin() {
                     val setSystemProxy = call.argument<Boolean>("setSystemProxy") ?: true
                     val proxyPassDomains = call.argument<ArrayList<String>>("proxyPassDomains")
 
+                    val blockQuic = call.argument<Boolean>("blockQuic") ?: ProxyVpnService.blockQuic
                     stopVpn()
-                    startVpn(host!!, port!!, allowApps, disallowApps, setSystemProxy, proxyPassDomains)
+                    startVpn(host!!, port!!, allowApps, disallowApps, setSystemProxy, proxyPassDomains, blockQuic)
                     result.success(null)
                 }
 
@@ -75,7 +77,8 @@ class VpnServicePlugin : AndroidFlutterPlugin() {
         allowApps: ArrayList<String>? = arrayListOf(),
         disallowApps: ArrayList<String>? = arrayListOf(),
         setSystemProxy: Boolean = true,
-        proxyPassDomains: ArrayList<String>? = null
+        proxyPassDomains: ArrayList<String>? = null,
+        blockQuic: Boolean = ProxyVpnService.blockQuic
     ) {
         val intent = ProxyVpnService.startVpnIntent(
             activity,
@@ -84,7 +87,8 @@ class VpnServicePlugin : AndroidFlutterPlugin() {
             allowApps,
             disallowApps,
             setSystemProxy,
-            proxyPassDomains
+            proxyPassDomains,
+            blockQuic
         )
         activity.startService(intent)
     }

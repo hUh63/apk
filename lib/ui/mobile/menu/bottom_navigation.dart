@@ -22,6 +22,8 @@ import 'package:proxypin/network/bin/server.dart';
 import 'package:proxypin/network/components/manager/hosts_manager.dart';
 import 'package:proxypin/network/components/manager/request_block_manager.dart';
 import 'package:proxypin/network/components/manager/request_rewrite_manager.dart';
+import 'package:proxypin/network/bin/configuration.dart';
+import 'package:proxypin/ui/component/ai_analysis.dart';
 import 'package:proxypin/network/util/system_proxy.dart';
 import 'package:proxypin/storage/histories.dart';
 import 'package:proxypin/ui/component/proxy_port_setting.dart';
@@ -346,6 +348,20 @@ class SettingPage extends StatelessWidget {
                   leading: const Icon(Icons.cast_connected, color: Colors.pink),
                   trailing: const Icon(Icons.keyboard_arrow_right),
                   onTap: () => navigator(context, const McpConnectionPage())),
+              Divider(height: 0, thickness: 0.3, color: Theme.of(context).dividerColor.withValues(alpha: 0.22)),
+              ListTile(
+                  leading: const Icon(Icons.auto_awesome, color: Colors.deepPurple),
+                  title: const Text('AI 分析'),
+                  subtitle: Text(
+                    Configuration.loaded?.aiEnabled == true && (Configuration.loaded?.aiApiKey.isNotEmpty ?? false)
+                        ? '已启用 · ${Configuration.loaded?.aiModel}'
+                        : '未配置 · 接入 OpenAI 兼容接口分析抓包请求',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.keyboard_arrow_right),
+                  onTap: () async {
+                    await showAiSettingsDialog(context);
+                  }),
             ]),
           if (Platform.isAndroid) const SizedBox(height: 12),
           section([

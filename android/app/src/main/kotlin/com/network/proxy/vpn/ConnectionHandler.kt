@@ -1,6 +1,7 @@
 package com.network.proxy.vpn
 
 import android.util.Log
+import com.network.proxy.ProxyVpnService
 import com.network.proxy.vpn.Connection.Companion.getConnectionKey
 import com.network.proxy.vpn.socket.ClientPacketWriter
 import com.network.proxy.vpn.socket.SocketNIODataService
@@ -70,6 +71,12 @@ class ConnectionHandler(
     @Throws(IOException::class)
     private fun handleUDPPacket(clientPacketData: ByteBuffer, ipHeader: IP4Header) {
         val udpHeader = UDPPacketFactory.createUDPHeader(clientPacketData)
+
+        // QUIC 拦截（上游 #489）：丢弃 UDP:443，客户端握手失败后回落 TCP HTTP，流量即可被代理抓取
+        if (ProxyVpnService.blockQuic && udpHeader.destinationPort == 443) {
+            return
+        }
+
         var connection = manager.getConnection(
             Protocol.UDP,
             ipHeader.destinationIP, udpHeader.destinationPort,

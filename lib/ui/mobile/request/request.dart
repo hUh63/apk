@@ -35,6 +35,7 @@ import 'package:proxypin/ui/component/widgets.dart';
 import 'package:proxypin/ui/configuration.dart';
 import 'package:proxypin/ui/content/panel.dart';
 import 'package:proxypin/ui/desktop/request/request.dart';
+import 'package:proxypin/ui/component/ai_analysis.dart';
 import 'package:proxypin/ui/mobile/request/repeat.dart';
 import 'package:proxypin/ui/mobile/request/request_editor.dart';
 import 'package:proxypin/ui/mobile/setting/request_rewrite.dart';
@@ -328,6 +329,24 @@ class RequestRowState extends State<RequestRow> {
                           onPressed: () => showCustomRepeat(request),
                           label: localizations.customRepeat,
                           icon: Icons.repeat),
+                    ),
+                    //AI 分析（上游 #582）
+                    menuItem(
+                      left: itemButton(
+                          onPressed: () async {
+                            await Navigator.maybePop(getContext());
+                            if (context.mounted) showAiAnalysis(context, request);
+                          },
+                          label: 'AI 分析',
+                          icon: Icons.auto_awesome,
+                          iconSize: 20),
+                      right: itemButton(
+                          onPressed: () async {
+                            await Navigator.maybePop(getContext());
+                            if (context.mounted) showAiSettingsDialog(context);
+                          },
+                          label: 'AI 设置',
+                          icon: Icons.tune),
                     ),
                     //favorite and edit
                     menuItem(

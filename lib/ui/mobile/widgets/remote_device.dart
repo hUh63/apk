@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -111,6 +112,43 @@ class _RemoteDevicePageState extends State<RemoteDevicePage> {
   AppLocalizations get localizations => AppLocalizations.of(context)!;
 
   bool syncConfig = false;
+
+  /// 连接保活心跳（上游 #521 假连）：定期 ping 远程设备，连续失败自动置为断开
+  Timer? _heartbeatTimer;
+  int _heartbeatFailures = 0;
+
+  void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatFailures = 0;
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
+      final device = widget.remoteDevice.value;
+      if (!device.connect || device.host == null || device.port == null) {
+        timer.cancel();
+        return;
+      }
+      try {
+        final resp = await HttpClients.get(
+          "http://${device.host}:${device.port}/ping",
+          timeout: const Duration(milliseconds: 3000),
+        );
+        if (resp.bodyAsString == "pong") {
+          _heartbeatFailures = 0;
+        } else {
+          _heartbeatFailures++;
+        }
+      } catch (_) {
+        _heartbeatFailures++;
+      }
+      // 连续 2 次失败判定假连，自动断开并提示
+      if (_heartbeatFailures >= 2 && mounted) {
+        timer.cancel();
+        setState(() {
+          widget.remoteDevice.value = RemoteModel(connect: false);
+        });
+        CustomToast.error('远程设备连接已断开').show(context);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -292,6 +330,7 @@ class _RemoteDevicePageState extends State<RemoteDevicePage> {
               ),
               icon: const Icon(Icons.cancel_outlined),
               onPressed: () {
+                _heartbeatTimer?.cancel();
                 widget.remoteDevice.value = RemoteModel(connect: false);
                 setState(() {});
               },
@@ -428,6 +467,8 @@ class _RemoteDevicePageState extends State<RemoteDevicePage> {
                   "${localizations.connectSuccess}${Vpn.isVpnStarted ? '' : ', ${localizations.remoteConnectSuccessTips}'}")
               .show(context);
         }
+        // 连接成功后启动保活心跳，检测假连（上游 #521）
+        _startHeartbeat();
       }
       return true;
     } catch (e) {

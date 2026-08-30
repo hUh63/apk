@@ -61,6 +61,7 @@ class ProxyVpnService : VpnService(), ProtectSocket {
         const val DISALLOW_APPS_KEY = "DisallowApps" //禁止的名单
         const val SET_SYSTEM_PROXY_KEY = "SetSystemProxy"
         const val PROXY_PASS_DOMAINS_KEY = "ProxyPassDomains"
+        const val BLOCK_QUIC_KEY = "BlockQuic" //拦截 QUIC (UDP:443) 强制回落 TCP
 
         /**
          * 动作：断开连接
@@ -83,6 +84,10 @@ class ProxyVpnService : VpnService(), ProtectSocket {
 
         var proxyPassDomains: ArrayList<String>? = null
 
+        /** 拦截 QUIC：丢弃 UDP:443，让客户端回落 TCP HTTP 以便可抓包（上游 #489） */
+        @Volatile
+        var blockQuic: Boolean = true
+
         fun stopVpnIntent(context: Context): Intent {
             return Intent(context, ProxyVpnService::class.java).also {
                 it.action = ACTION_DISCONNECT
@@ -96,7 +101,8 @@ class ProxyVpnService : VpnService(), ProtectSocket {
             allowApps: ArrayList<String>? = this.allowApps,
             disallowApps: ArrayList<String>? = this.disallowApps,
             setSystemProxy: Boolean = true,
-            proxyPassDomains: ArrayList<String>? = null
+            proxyPassDomains: ArrayList<String>? = null,
+            blockQuic: Boolean = this.blockQuic
         ): Intent {
             return Intent(context, ProxyVpnService::class.java).also {
                 it.putExtra(PROXY_HOST_KEY, proxyHost)
@@ -105,6 +111,7 @@ class ProxyVpnService : VpnService(), ProtectSocket {
                 it.putStringArrayListExtra(DISALLOW_APPS_KEY, disallowApps)
                 it.putExtra(SET_SYSTEM_PROXY_KEY, setSystemProxy)
                 it.putStringArrayListExtra(PROXY_PASS_DOMAINS_KEY, proxyPassDomains)
+                it.putExtra(BLOCK_QUIC_KEY, blockQuic)
             }
         }
 
@@ -159,6 +166,7 @@ class ProxyVpnService : VpnService(), ProtectSocket {
                 intent.getStringArrayListExtra(DISALLOW_APPS_KEY) ?: disallowApps ?: ArrayList()
             val setSystemProxy = intent.getBooleanExtra(SET_SYSTEM_PROXY_KEY, setSystemProxy)
             val proxyPassDomains = intent.getStringArrayListExtra(PROXY_PASS_DOMAINS_KEY)
+            blockQuic = intent.getBooleanExtra(BLOCK_QUIC_KEY, blockQuic)
 
             connect(
                 proxyHost,

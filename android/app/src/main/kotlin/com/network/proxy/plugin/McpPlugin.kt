@@ -538,15 +538,15 @@ class McpPlugin : FlutterPlugin {
      */
     private fun requestRootAuthorization(): Boolean {
         return try {
-            // 执行简单的 su 命令会触发 Superuser 授权弹窗
-            // 使用 su -c "id" 是最常用的检测/请求方式
+            // 执行简单的 su 命令触发 Magisk/KernelSU/SuperSU 的标准授权弹窗
+            // 用户同意 → 退出码 0；拒绝或超时 → 非 0 / 未完成
             val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
-            // 等待授权完成（最多 10 秒）
-            val completed = process.waitFor(10, TimeUnit.SECONDS)
+            val completed = process.waitFor(15, TimeUnit.SECONDS)
             if (!completed) {
                 process.destroy()
+                return false
             }
-            true
+            process.exitValue() == 0
         } catch (e: Exception) {
             // su 不可用或执行失败
             false

@@ -45,24 +45,11 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
-      - name: Generate debug keystore
+      - name: Verify fixed signing key (CN=Taffy, C=CN)
         run: |
-          keytool -genkey -v \
-            -keystore android/app/debug-keystore.jks \
-            -storetype JKS \
-            -keyalg RSA \
-            -dname "CN=Debug,OU=Debug,O=Debug,L=Debug,ST=Debug,C=US" \
-            -alias androiddebugkey \
-            -keypass android \
-            -storepass android \
-            -validity 10000
-
-      - name: Create key.properties
-        run: |
-          echo "storePassword=android" > android/key.properties
-          echo "keyPassword=android" >> android/key.properties
-          echo "keyAlias=androiddebugkey" >> android/key.properties
-          echo "storeFile=debug-keystore.jks" >> android/key.properties
+          test -f android/app/proxypin-release.jks
+          test -f android/key.properties
+          keytool -list -keystore android/app/proxypin-release.jks -storepass taffy2024 -alias proxypin | grep "CN=Taffy"
 
       - name: Build Universal APK (all architectures)
         run: flutter build apk --release

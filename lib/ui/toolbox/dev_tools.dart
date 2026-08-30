@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
+import 'package:proxypin/network/util/cron_expression.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_toastr/flutter_toastr.dart';
@@ -102,10 +103,11 @@ class _CronToolPageState extends State<CronToolPage> {
   }
 
   void _evaluate(String input) {
+    final cron = CronExpression(input);
     final times = <DateTime>[];
-    var t = DateTime.now().add(const Duration(minutes: 1));
+    var t = DateTime.now();
     for (var i = 0; i < 6; i++) {
-      final next = _nextFire(input, t);
+      final next = cron.next(t);
       if (next == null) {
         setState(() {
           _nextTimes = [];
@@ -114,7 +116,7 @@ class _CronToolPageState extends State<CronToolPage> {
         return;
       }
       times.add(next);
-      t = next.add(const Duration(minutes: 1));
+      t = next;
     }
     setState(() {
       _nextTimes = times;
@@ -122,61 +124,6 @@ class _CronToolPageState extends State<CronToolPage> {
     });
   }
 
-  /// 逐分钟推进查找下一个匹配时间（最多扫 366 天）
-  DateTime? _nextFire(String cron, DateTime from) {
-    final parts = cron.trim().split(RegExp(r'\s+'));
-    if (parts.length != 5) return null;
-    var t = DateTime(from.year, from.month, from.day, from.hour, from.minute);
-    final limit = t.add(const Duration(days: 366));
-    while (t.isBefore(limit)) {
-      if (_match(parts, t)) return t;
-      t = t.add(const Duration(minutes: 1));
-    }
-    return null;
-  }
-
-  bool _match(List<String> parts, DateTime t) {
-    return _fieldMatch(parts[0], t.minute) &&
-        _fieldMatch(parts[1], t.hour) &&
-        _fieldMatch(parts[2], t.day) &&
-        _fieldMatch(parts[3], t.month) &&
-        _fieldMatch(parts[4], t.weekday == 7 ? 0 : t.weekday); // 星期日=0（也兼容 7）
-  }
-
-  bool _fieldMatch(String expr, int value) {
-    for (final seg in expr.split(',')) {
-      // 步进 */n 或 a-b/n
-      var step = 1;
-      var body = seg;
-      if (seg.contains('/')) {
-        final idx = seg.indexOf('/');
-        body = seg.substring(0, idx);
-        step = int.tryParse(seg.substring(idx + 1)) ?? 1;
-        if (step <= 0) return false;
-      }
-      int? lo, hi;
-      if (body == '*' || body == '?') {
-        lo = 0;
-        hi = 59;
-      } else if (body.contains('-')) {
-        final p = body.split('-');
-        lo = int.tryParse(p[0]);
-        hi = int.tryParse(p[1]);
-      } else {
-        final v = int.tryParse(body);
-        if (v == null) return false;
-        if (step == 1) {
-          if (value == v) return true;
-          continue;
-        }
-        lo = v;
-        hi = 59;
-      }
-      if (lo == null || hi == null) return false;
-      if (value >= lo && value <= hi && (value - lo) % step == 0) return true;
-    }
-    return false;
-  }
 
   @override
   Widget build(BuildContext context) {

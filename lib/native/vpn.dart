@@ -29,6 +29,7 @@ class Vpn {
       "ipProxy": ipProxy,
       "setSystemProxy": configuration.enableSystemProxy,
       "proxyPassDomains": proxyPassDomains,
+      "blockQuic": configuration.blockQuic,
     });
     isVpnStarted = true;
   }
@@ -55,6 +56,7 @@ class Vpn {
       "ipProxy": ipProxy,
       "setSystemProxy": configuration.enableSystemProxy,
       "proxyPassDomains": proxyPassDomains,
+      "blockQuic": configuration.blockQuic,
     });
 
     isVpnStarted = true;
