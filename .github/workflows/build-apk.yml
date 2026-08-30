@@ -49,7 +49,7 @@ jobs:
         run: |
           test -f android/app/proxypin-release.jks
           test -f android/key.properties
-          keytool -list -keystore android/app/proxypin-release.jks -storepass taffy2024 -alias proxypin | grep "CN=Taffy"
+          keytool -list -v -keystore android/app/proxypin-release.jks -storepass taffy2024 -alias proxypin | grep -i "Taffy"
 
       - name: Build Universal APK (all architectures)
         run: flutter build apk --release
