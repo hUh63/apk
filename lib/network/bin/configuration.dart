@@ -82,6 +82,9 @@ class Configuration {
   String aiApiKey = "";
   String aiModel = "gpt-4o-mini";
 
+  //AI Agent 模式：允许 AI 自动调用 ProxyPin 功能（MCP 工具），关闭时仅对话
+  bool aiAgentEnabled = false;
+
   //QUIC 拦截（Android VPN 层丢弃 UDP:443，强制应用回落 TCP HTTP 以便可抓包，上游 #489）
   bool blockQuic = true;
 
@@ -124,6 +127,7 @@ class Configuration {
     aiBaseUrl = config['aiBaseUrl'] ?? "https://api.openai.com/v1";
     aiApiKey = config['aiApiKey'] ?? "";
     aiModel = config['aiModel'] ?? "gpt-4o-mini";
+    aiAgentEnabled = config['aiAgentEnabled'] ?? false;
     blockQuic = config['blockQuic'] ?? true;
     mtlsEnabled = config['mtlsEnabled'] ?? false;
     mtlsChainPath = config['mtlsChainPath'];
@@ -196,6 +200,7 @@ class Configuration {
       'aiBaseUrl': aiBaseUrl,
       'aiApiKey': aiApiKey,
       'aiModel': aiModel,
+      'aiAgentEnabled': aiAgentEnabled,
       'blockQuic': blockQuic,
       'mtlsEnabled': mtlsEnabled,
       if (mtlsChainPath != null) 'mtlsChainPath': mtlsChainPath,

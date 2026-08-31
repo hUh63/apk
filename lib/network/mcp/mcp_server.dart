@@ -845,6 +845,10 @@ class McpServer {
   /// 获取全部可用工具列表（供 UI 页面展示，不经过启用过滤）
   List<Map<String, dynamic>> getTools() => _getToolsList();
 
+  /// 供 AI Agent 对话页执行 MCP 工具（文本协议自动调用）
+  Future<dynamic> executeTool(String name, Map<String, dynamic> args) =>
+      _executeTool(name, args);
+
   /// 获取全部可用工具列表（别名，供 UI 页面调用）
   List<Map<String, dynamic>> getToolList() => _getToolsList();
 

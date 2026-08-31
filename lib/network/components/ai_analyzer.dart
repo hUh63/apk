@@ -8,6 +8,7 @@ import 'dart:io' show HttpClient, HttpHeaders;
 
 import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/network/http/http.dart';
+import 'package:proxypin/network/mcp/mcp_server.dart';
 
 class AiAnalyzer {
   AiAnalyzer._();
@@ -23,8 +24,9 @@ class AiAnalyzer {
     return config != null && config.aiEnabled && config.aiApiKey.isNotEmpty;
   }
 
-  /// 多轮对话：messages 为 [{role, content}]
-  static Future<String> chat(List<Map<String, String>> messages) async {
+  /// 多轮对话：messages 为 [{role, content}]；agentMode 时注入 ProxyPin 工具协议
+  static Future<String> chat(List<Map<String, String>> messages,
+      {bool agentMode = false}) async {
     final config = Configuration.loaded;
     if (config == null || !config.aiEnabled || config.aiApiKey.isEmpty) {
       throw Exception('尚未配置 AI 服务：请到「设置 → MCP Connection → AI 分析」填写接口地址与 API Key');
@@ -43,7 +45,7 @@ class AiAnalyzer {
         'model': config.aiModel,
         'temperature': 0.3,
         'messages': [
-          {'role': 'system', 'content': systemPrompt},
+          {'role': 'system', 'content': agentPrompt(agentMode)},
           ...messages,
         ],
       })));
@@ -61,6 +63,29 @@ class AiAnalyzer {
       return content;
     } finally {
       client.close();
+    }
+  }
+
+  /// Agent 模式附加的工具协议说明（工具清单来自 MCP Server）
+  static String agentPrompt(bool agentMode) {
+    if (!agentMode) return systemPrompt;
+    try {
+      final tools = McpServer().getTools();
+      final buf = StringBuffer(systemPrompt);
+      buf.writeln();
+      buf.writeln('\n## ProxyPin 工具调用');
+      buf.writeln('当需要查看 ProxyPin 内的抓包数据/配置时，你可以在回复中单独一行输出（可多次）：');
+      buf.writeln('<tool>{"name":"工具名","arguments":{...}}</tool>');
+      buf.writeln('系统会执行并把结果以 tool_result 回喂给你，之后请基于结果继续回答。仅在你确实需要数据时调用。');
+      buf.writeln('可用工具：');
+      for (final t in tools) {
+        final name = t['name'] ?? '';
+        final desc = (t['description'] ?? '').toString();
+        buf.writeln('- $name: ${desc.length > 120 ? '${desc.substring(0, 120)}…' : desc}');
+      }
+      return buf.toString();
+    } catch (_) {
+      return systemPrompt;
     }
   }
 

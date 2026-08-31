@@ -42,6 +42,7 @@ class GuideCenter {
     GuideDoc('rewrite', '请求重写指南', '功能指南', 'docs/rewrite_guide.md', Icons.edit_note_outlined),
     GuideDoc('environment', '环境变量指南', '功能指南', 'docs/environment_guide.md', Icons.text_snippet_outlined),
     GuideDoc('report_server', '上报服务器指南', '功能指南', 'docs/report_server.md', Icons.cloud_upload_outlined),
+    GuideDoc('ai_analysis', 'AI 分析使用指南', '功能指南', 'docs/ai_analysis.md', Icons.auto_awesome_outlined),
     GuideDoc('mcp_automation', 'MCP 自动化指南', '自动化', 'docs/MCP_AUTOMATION_GUIDE.md', Icons.smart_toy_outlined),
     GuideDoc('workflow_tutorial', '工作流编排教程', '自动化', 'docs/WORKFLOW_TUTORIAL.md', Icons.account_tree_outlined),
     GuideDoc('changelog', '更新日志', '文档', 'CHANGELOG.md', Icons.history),

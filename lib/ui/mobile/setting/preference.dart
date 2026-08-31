@@ -397,29 +397,6 @@ class _PreferenceState extends State<Preference> {
               ),
             ),
             Divider(height: 0, thickness: 0.3, color: dividerColor),
-            if (Platform.isAndroid) ...[
-              ListTile(
-                title: const Text('拦截 QUIC (UDP:443)'),
-                subtitle: Text(
-                  _quicCount > 0
-                      ? '已拦截 $_quicCount 个 QUIC 包，强制回落 TCP 使流量可抓包'
-                      : '丢弃 UDP 443 强制应用回落 TCP，使 HTTPS 流量可抓包',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                trailing: SwitchWidget(
-                  value: configuration.blockQuic,
-                  scale: 0.8,
-                  onChanged: (value) {
-                    setState(() => configuration.blockQuic = value);
-                    configuration.flushConfig();
-                    if (!value) {
-                      FlutterToastr.show('已关闭，重新启动抓包后生效', context);
-                    }
-                  },
-                ),
-              ),
-            ],
-            Divider(height: 0, thickness: 0.3, color: dividerColor),
             ListTile(
               title: const Text('双向认证 (mTLS)'),
               subtitle: Text(
@@ -463,6 +440,29 @@ class _PreferenceState extends State<Preference> {
                 },
               ),
             ),
+            if (Platform.isAndroid) ...[
+              Divider(height: 0, thickness: 0.3, color: dividerColor),
+              ListTile(
+                title: const Text('拦截 QUIC (UDP:443)'),
+                subtitle: Text(
+                  _quicCount > 0
+                      ? '已拦截 $_quicCount 个 QUIC 包，强制回落 TCP 使流量可抓包'
+                      : '丢弃 UDP 443 强制应用回落 TCP，使 HTTPS 流量可抓包',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                trailing: SwitchWidget(
+                  value: configuration.blockQuic,
+                  scale: 0.8,
+                  onChanged: (value) {
+                    setState(() => configuration.blockQuic = value);
+                    configuration.flushConfig();
+                    if (!value) {
+                      FlutterToastr.show('已关闭，重新启动抓包后生效', context);
+                    }
+                  },
+                ),
+              ),
+            ],
             Divider(height: 0, thickness: 0.3, color: dividerColor),
             if (Platform.isAndroid) ...[
               ListTile(

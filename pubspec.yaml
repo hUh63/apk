@@ -69,6 +69,7 @@ flutter:
     - docs/quick_start.md
     - docs/certificate_https.md
     - docs/features_tips.md
+    - docs/ai_analysis.md
     - docs/script_guide.md
     - docs/rewrite_guide.md
     - docs/environment_guide.md

@@ -1,8 +1,11 @@
 /*
  * AI 分析对话页（上游 #582）
- * - 完整页面：消息气泡对话 + 附加抓包请求作为上下文 + AI 配置入口
- * - 请求来源：McpBridge 的最近请求容器（与 MCP 工具同源）
+ * - 完整页面：消息气泡对话 + 多类型多选附件 + AI 配置入口
+ * - Agent 模式（开关）：AI 可自动调用 ProxyPin 的 MCP 工具（文本协议 + 自动执行 + 结果回喂）
+ * - 附件类型：抓包请求（多选）/ API 端点清单 / 自定义文本
  */
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_toastr/flutter_toastr.dart';
@@ -10,6 +13,68 @@ import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/network/components/ai_analyzer.dart';
 import 'package:proxypin/network/http/http.dart';
 import 'package:proxypin/network/mcp/mcp_bridge.dart';
+import 'package:proxypin/network/mcp/mcp_server.dart';
+import 'package:proxypin/network/util/api_extractor.dart';
+
+/// 附件：多类型
+class _Attachment {
+  final String kind; // requests / endpoints / text
+  final String label;
+  final List<HttpRequest> requests;
+  final String content;
+
+  _Attachment.requests(this.requests)
+      : kind = 'requests',
+        label = '${requests.length} 条请求',
+        content = requests
+            .map((r) => '【请求】${AiAnalyzer.requestSummary(r)}')
+            .join('\n\n');
+
+  _Attachment.endpoints(List<HttpRequest> source)
+      : kind = 'endpoints',
+        label = 'API 端点清单',
+        content = _endpointsText(source);
+
+  _Attachment.text(String title, this.content)
+      : kind = 'text',
+        label = title,
+        requests = const [];
+
+  static String _endpointsText(List<HttpRequest> source) {
+    final endpoints = ApiExtractor().extract(source);
+    if (endpoints.isEmpty) return '（未提取到 API 端点）';
+    final buf = StringBuffer('API 端点清单（${endpoints.length} 个，按调用量排序）：\n');
+    for (final e in endpoints.take(50)) {
+      buf.writeln(
+          '- [${e.method}] ${e.domain}${e.path} · 调用 ${e.callCount} 次 · 平均 ${e.avgResponseTime.toStringAsFixed(0)}ms · 成功 ${e.successCount}/错误 ${e.errorCount}');
+    }
+    if (endpoints.length > 50) buf.writeln('…（其余 ${endpoints.length - 50} 个省略）');
+    return buf.toString();
+  }
+}
+
+/// 对话消息
+class _ChatMessage {
+  final String role;
+  final String content;
+  final List<_Attachment> attachments;
+  final List<(String, String)> toolCalls; // (工具名, 结果摘要)
+  final bool isError;
+
+  /// 发送给 API 的内容：附件内容并入
+  String get apiContent {
+    if (attachments.isEmpty) return content;
+    return '$content\n\n---\n${attachments.map((a) => a.content).join('\n\n')}';
+  }
+
+  _ChatMessage({
+    required this.role,
+    required this.content,
+    this.attachments = const [],
+    this.toolCalls = const [],
+    this.isError = false,
+  });
+}
 
 class AiChatPage extends StatefulWidget {
   /// 进入页面时自动附加的请求（如从请求长按菜单进入）
@@ -25,18 +90,19 @@ class _AiChatPageState extends State<AiChatPage> {
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  /// 对话消息（role: user / assistant）
   final List<_ChatMessage> _messages = [];
-
-  /// 待附加的抓包请求（随下一条消息发送）
-  HttpRequest? _attachedRequest;
-
+  final List<_Attachment> _attachments = [];
   bool _sending = false;
+  bool _agentMode = false;
 
   @override
   void initState() {
     super.initState();
-    _attachedRequest = widget.initialRequest;
+    _agentMode = Configuration.loaded?.aiAgentEnabled ?? false;
+    final initial = widget.initialRequest;
+    if (initial != null) {
+      _attachments.add(_Attachment.requests([initial]));
+    }
   }
 
   @override
@@ -46,6 +112,145 @@ class _AiChatPageState extends State<AiChatPage> {
     super.dispose();
   }
 
+  // ==================== 附件选择 ====================
+
+  Future<void> _pickAttachment() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Padding(
+              padding: EdgeInsets.all(12),
+              child: Text('选择要附加的信息', style: TextStyle(fontWeight: FontWeight.w600))),
+          ListTile(
+            leading: const Icon(Icons.receipt_long_outlined),
+            title: const Text('抓包请求'),
+            subtitle: const Text('从最近 30 条中多选', style: TextStyle(fontSize: 12)),
+            onTap: () => Navigator.pop(context, 'requests'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.api),
+            title: const Text('API 端点清单'),
+            subtitle: const Text('自动提取全部端点与统计', style: TextStyle(fontSize: 12)),
+            onTap: () => Navigator.pop(context, 'endpoints'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.notes),
+            title: const Text('自定义文本'),
+            subtitle: const Text('粘贴任意内容作为上下文', style: TextStyle(fontSize: 12)),
+            onTap: () => Navigator.pop(context, 'text'),
+          ),
+        ]),
+      ),
+    );
+    if (choice == 'requests') {
+      await _pickRequests();
+    } else if (choice == 'endpoints') {
+      final source = McpBridge().getRecentRequests(limit: 200);
+      if (source.isEmpty) {
+        if (mounted) FlutterToastr.show('暂无抓包请求', context);
+        return;
+      }
+      setState(() => _attachments.add(_Attachment.endpoints(source)));
+    } else if (choice == 'text') {
+      await _pickCustomText();
+    }
+  }
+
+  /// 多选抓包请求
+  Future<void> _pickRequests() async {
+    final requests = McpBridge().getRecentRequests(limit: 30);
+    if (requests.isEmpty) {
+      FlutterToastr.show('暂无抓包请求', context);
+      return;
+    }
+    final selected = <HttpRequest>{};
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheet) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.of(context).size.height * 0.7,
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(children: [
+                  const Text('选择抓包请求（可多选）', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  TextButton(
+                      onPressed: () => Navigator.pop(context, selected.isNotEmpty),
+                      child: const Text('确定')),
+                ]),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: requests.length,
+                  itemBuilder: (context, index) {
+                    final req = requests[index];
+                    final checked = selected.contains(req);
+                    return CheckboxListTile(
+                      dense: true,
+                      value: checked,
+                      controlAffinity: ListTileControlAffinity.trailing,
+                      secondary: Text(req.method.name,
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      title: Text(req.requestUrl,
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13)),
+                      subtitle: req.response != null
+                          ? Text('状态码 ${req.response!.status.code}',
+                              style: const TextStyle(fontSize: 11))
+                          : const Text('未响应', style: TextStyle(fontSize: 11)),
+                      onChanged: (v) => setSheet(() {
+                        v == true ? selected.add(req) : selected.remove(req);
+                      }),
+                    );
+                  },
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+    if (ok == true && selected.isNotEmpty) {
+      setState(() => _attachments.add(_Attachment.requests(selected.toList())));
+    }
+  }
+
+  /// 自定义文本附件
+  Future<void> _pickCustomText() async {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('自定义文本', style: TextStyle(fontSize: 16)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 6,
+          decoration: const InputDecoration(
+            hintText: '粘贴任意内容作为 AI 的上下文',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context, controller.text.trim()),
+              child: const Text('确定')),
+        ],
+      ),
+    );
+    if (text != null && text.isNotEmpty) {
+      setState(() => _attachments.add(_Attachment.text('文本', text)));
+    }
+  }
+
+  // ==================== 发送与 Agent 循环 ====================
+
   Future<void> _send() async {
     final text = _inputController.text.trim();
     if (text.isEmpty || _sending) return;
@@ -54,37 +259,88 @@ class _AiChatPageState extends State<AiChatPage> {
       if (saved != true || !AiAnalyzer.isConfigured) return;
     }
 
-    var content = text;
-    if (_attachedRequest != null) {
-      content = '$text\n\n---\n附加抓包请求：\n${AiAnalyzer.requestSummary(_attachedRequest!)}';
-    }
-
-    final attached = _attachedRequest;
+    final attachments = List<_Attachment>.from(_attachments);
     setState(() {
-      _messages.add(_ChatMessage(role: 'user', content: text, attachedRequest: attached));
-      _attachedRequest = null;
+      _messages.add(_ChatMessage(role: 'user', content: text, attachments: attachments));
+      _attachments.clear();
       _inputController.clear();
       _sending = true;
     });
     _scrollToBottom();
 
+    // 组装 API 消息（附件并入 user 内容）
+    final apiMessages = _messages.map((m) => {'role': m.role, 'content': m.apiContent}).toList();
+
     try {
-      // 组装多轮上下文（不含本地展示字段）
-      final apiMessages = _messages
-          .map((m) => {'role': m.role, 'content': m.apiContent})
-          .toList();
-      final reply = await AiAnalyzer.chat(apiMessages);
-      setState(() {
-        _messages.add(_ChatMessage(role: 'assistant', content: reply));
-        _sending = false;
-      });
+      var round = 0;
+      const maxRounds = 3; // Agent 模式工具循环上限，防失控
+      while (true) {
+        final reply = await AiAnalyzer.chat(apiMessages,
+            agentMode: _agentMode && round < maxRounds);
+
+        final calls = _agentMode ? _parseToolCalls(reply) : const <_ToolCall>[];
+        setState(() {
+          _messages.add(_ChatMessage(
+            role: 'assistant',
+            content: _stripToolTags(reply),
+            toolCalls: calls.map((c) => (c.name, '')).toList(),
+          ));
+        });
+        _scrollToBottom();
+
+        if (calls.isEmpty || !_agentMode) break;
+        round++;
+        if (round >= maxRounds) break;
+
+        // 执行工具并回喂结果
+        var resultText = '';
+        for (final call in calls) {
+          try {
+            final result = await McpServer().executeTool(call.name, call.arguments);
+            resultText += '<tool_result name="${call.name}">\n${_truncateJson(result)}\n</tool_result>\n';
+          } catch (e) {
+            resultText += '<tool_result name="${call.name}">执行失败: $e</tool_result>\n';
+          }
+        }
+        apiMessages.add({'role': 'assistant', 'content': reply});
+        apiMessages.add({'role': 'user', 'content': '工具执行结果：\n$resultText\n请基于以上结果继续回答。'});
+      }
     } catch (e) {
       setState(() {
         _messages.add(_ChatMessage(role: 'assistant', content: '分析失败：$e', isError: true));
-        _sending = false;
       });
+    } finally {
+      if (mounted) setState(() => _sending = false);
     }
     _scrollToBottom();
+  }
+
+  /// 解析 AI 回复中的 <tool>{...}</tool> 调用
+  List<_ToolCall> _parseToolCalls(String reply) {
+    final result = <_ToolCall>[];
+    final regex = RegExp(r'<tool>\s*(\{.*?\})\s*</tool>', dotAll: true);
+    for (final match in regex.allMatches(reply)) {
+      try {
+        final data = jsonDecode(match.group(1)!);
+        if (data is Map<String, dynamic> && data['name'] is String) {
+          result.add(_ToolCall(
+            data['name'] as String,
+            data['arguments'] is Map<String, dynamic>
+                ? data['arguments'] as Map<String, dynamic>
+                : <String, dynamic>{},
+          ));
+        }
+      } catch (_) {}
+    }
+    return result;
+  }
+
+  String _stripToolTags(String reply) =>
+      reply.replaceAll(RegExp(r'<tool>\s*\{.*?\}\s*</tool>', dotAll: true), '').trim();
+
+  String _truncateJson(dynamic result) {
+    var s = result is String ? result : jsonEncode(result);
+    return s.length <= 4000 ? s : '${s.substring(0, 4000)}…(已截断)';
   }
 
   void _scrollToBottom() {
@@ -98,41 +354,6 @@ class _AiChatPageState extends State<AiChatPage> {
     });
   }
 
-  /// 从最近抓包请求中选择要附加的请求
-  Future<void> _pickRequest() async {
-    final requests = McpBridge().getRecentRequests(limit: 30);
-    if (requests.isEmpty) {
-      FlutterToastr.show('暂无抓包请求', context);
-      return;
-    }
-    final selected = await showModalBottomSheet<HttpRequest>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: ListView.builder(
-          itemCount: requests.length,
-          itemBuilder: (context, index) {
-            final req = requests[index];
-            return ListTile(
-              dense: true,
-              leading: Text(req.method.name,
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-              title: Text(req.requestUrl,
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13)),
-              subtitle: req.response != null
-                  ? Text('状态码 ${req.response!.status.code}', style: const TextStyle(fontSize: 11))
-                  : const Text('未响应', style: TextStyle(fontSize: 11)),
-              onTap: () => Navigator.pop(context, req),
-            );
-          },
-        ),
-      ),
-    );
-    if (selected != null) {
-      setState(() => _attachedRequest = selected);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -141,10 +362,38 @@ class _AiChatPageState extends State<AiChatPage> {
         title: const Text('AI 分析', style: TextStyle(fontSize: 16)),
         centerTitle: true,
         actions: [
+          // Agent 模式开关：AI 自动调用 ProxyPin 功能
+          Tooltip(
+            message: _agentMode ? 'Agent 模式已开启：AI 可自动调用 ProxyPin 功能' : 'Agent 模式已关闭：仅接收手动消息',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () {
+                setState(() => _agentMode = !_agentMode);
+                final config = Configuration.loaded;
+                if (config != null) {
+                  config.aiAgentEnabled = _agentMode;
+                  config.flushConfig();
+                }
+                FlutterToastr.show(
+                  _agentMode ? 'Agent 模式已开启，AI 可自动调用 ProxyPin 功能' : 'Agent 模式已关闭，仅接收手动消息',
+                  context,
+                  backgroundColor: _agentMode ? Colors.green : Colors.grey,
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Icon(
+                  Icons.smart_toy_outlined,
+                  size: 22,
+                  color: _agentMode ? cs.primary : cs.outline,
+                ),
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.attach_file, size: 20),
-            tooltip: '附加抓包请求',
-            onPressed: _pickRequest,
+            tooltip: '附加信息（可多选）',
+            onPressed: _pickAttachment,
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined, size: 20),
@@ -157,8 +406,8 @@ class _AiChatPageState extends State<AiChatPage> {
         ],
       ),
       body: Column(children: [
-        // 附加请求提示条
-        if (_attachedRequest != null)
+        // 附件提示条
+        if (_attachments.isNotEmpty)
           Container(
             margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -166,21 +415,20 @@ class _AiChatPageState extends State<AiChatPage> {
               color: cs.primaryContainer.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Row(children: [
-              Icon(Icons.link, size: 14, color: cs.primary),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  '已附加：${_attachedRequest!.method.name} ${_attachedRequest!.requestUrl}',
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ),
-              GestureDetector(
-                onTap: () => setState(() => _attachedRequest = null),
-                child: Icon(Icons.close, size: 15, color: cs.outline),
-              ),
-            ]),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                for (final a in _attachments)
+                  InputChip(
+                    label: Text('${a.kind == 'requests' ? '📎' : a.kind == 'endpoints' ? '📊' : '📝'} ${a.label}',
+                        style: const TextStyle(fontSize: 11)),
+                    visualDensity: VisualDensity.compact,
+                    onDeleted: () => setState(() => _attachments.remove(a)),
+                  ),
+              ],
+            ),
           ),
         // 消息区
         Expanded(
@@ -215,7 +463,7 @@ class _AiChatPageState extends State<AiChatPage> {
                   textInputAction: TextInputAction.send,
                   onSubmitted: (_) => _send(),
                   decoration: InputDecoration(
-                    hintText: '输入问题，可先附加请求作为上下文',
+                    hintText: _agentMode ? '提问（Agent 模式：AI 可自动查数据）' : '输入问题',
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -241,7 +489,10 @@ class _AiChatPageState extends State<AiChatPage> {
         const SizedBox(height: 12),
         const Text('与 AI 对话分析抓包数据', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
         const SizedBox(height: 6),
-        Text('点击右上角 📎 附加一条抓包请求，或直接提问',
+        Text('点击右上角 📎 附加多条请求 / 端点清单 / 文本',
+            style: TextStyle(fontSize: 12, color: cs.outline)),
+        const SizedBox(height: 4),
+        Text('开启 🤖 Agent 模式可让 AI 自动调用 ProxyPin 功能',
             style: TextStyle(fontSize: 12, color: cs.outline)),
       ]),
     );
@@ -271,11 +522,12 @@ class _AiChatPageState extends State<AiChatPage> {
           border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (msg.attachedRequest != null)
+          // 附件标签
+          for (final a in msg.attachments)
             Padding(
-              padding: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.only(bottom: 4),
               child: Text(
-                '📎 ${msg.attachedRequest!.method.name} ${msg.attachedRequest!.requestUrl}',
+                '${a.kind == 'requests' ? '📎' : a.kind == 'endpoints' ? '📊' : '📝'} ${a.label}',
                 maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 11, color: cs.primary, fontStyle: FontStyle.italic),
               ),
@@ -284,6 +536,16 @@ class _AiChatPageState extends State<AiChatPage> {
             msg.content,
             style: TextStyle(fontSize: 13.5, height: 1.45, color: msg.isError ? cs.error : null),
           ),
+          // Agent 工具调用记录
+          for (final (name, _) in msg.toolCalls)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.build_circle_outlined, size: 12, color: cs.tertiary),
+                const SizedBox(width: 4),
+                Text('已调用工具 $name', style: TextStyle(fontSize: 11, color: cs.tertiary)),
+              ]),
+            ),
           if (!isUser && !msg.isError) ...[
             const SizedBox(height: 6),
             GestureDetector(
@@ -300,21 +562,10 @@ class _AiChatPageState extends State<AiChatPage> {
   }
 }
 
-class _ChatMessage {
-  final String role;
-  final String content;
-  final HttpRequest? attachedRequest;
-  final bool isError;
-
-  /// 发送给 API 的内容：附加请求的摘要并入 user 消息
-  String get apiContent {
-    if (role == 'user' && attachedRequest != null) {
-      return '$content\n\n---\n附加抓包请求：\n${AiAnalyzer.requestSummary(attachedRequest!)}';
-    }
-    return content;
-  }
-
-  _ChatMessage({required this.role, required this.content, this.attachedRequest, this.isError = false});
+class _ToolCall {
+  final String name;
+  final Map<String, dynamic> arguments;
+  _ToolCall(this.name, this.arguments);
 }
 
 /// AI 配置编辑（baseUrl / apiKey / model），返回 true 表示已保存
