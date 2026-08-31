@@ -17,6 +17,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:date_format/date_format.dart';
+import 'package:proxypin/ui/component/ai_analysis.dart';
 import 'package:proxypin/ui/component/multi_window_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -249,6 +250,7 @@ class _RequestWidgetState extends State<RequestWidget> {
       _menuAction(localizations.requestRewrite, _RequestMenuAction.requestRewrite),
       _menuAction(localizations.requestMap, _RequestMenuAction.requestMap),
       _menuAction(localizations.script, _RequestMenuAction.script),
+      _menuAction('AI 分析', _RequestMenuAction.aiAnalysis),
       MenuItem.separator(),
       _menuAction(localizations.favorite, _RequestMenuAction.favorite),
       MenuItem(label: localizations.highlight, type: 'submenu', submenu: highlightMenu()),
@@ -323,6 +325,11 @@ class _RequestWidgetState extends State<RequestWidget> {
         break;
       case _RequestMenuAction.script:
         await _openScriptDialog();
+        break;
+      case _RequestMenuAction.aiAnalysis:
+        if (!mounted) break;
+        Navigator.of(context).push(MaterialPageRoute(
+            builder: (context) => AiChatPage(initialRequest: widget.request)));
         break;
       case _RequestMenuAction.favorite:
         FavoriteStorage.addFavorite(widget.request);
@@ -594,6 +601,7 @@ enum _RequestMenuAction {
   requestRewrite,
   requestMap,
   script,
+  aiAnalysis,
   favorite,
   select,
   delete,

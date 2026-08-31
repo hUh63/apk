@@ -3,7 +3,10 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_toastr/flutter_toastr.dart';
 import 'package:proxypin/l10n/app_localizations.dart';
+import 'package:proxypin/native/vpn.dart';
+import 'package:proxypin/network/util/mtls.dart';
 import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/network/bin/server.dart';
 import 'package:proxypin/network/util/logger.dart';
@@ -37,6 +40,9 @@ class _PreferenceState extends State<Preference> {
   final memoryCleanupController = TextEditingController();
   final memoryCleanupList = [null, 512, 1024, 2048, 4096];
 
+  /// 已拦截的 QUIC 包数（Android VPN 层上报）
+  int _quicCount = 0;
+
   @override
   void initState() {
     super.initState();
@@ -48,6 +54,17 @@ class _PreferenceState extends State<Preference> {
       memoryCleanupController.text = appConfiguration.memoryCleanupThreshold
           .toString();
     }
+    _loadQuicCount();
+  }
+
+  Future<void> _loadQuicCount() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final count = await Vpn.quicBlockedCount();
+      if (mounted && count != _quicCount) {
+        setState(() => _quicCount = count);
+      }
+    } catch (_) {}
   }
 
   @override
@@ -78,6 +95,32 @@ class _PreferenceState extends State<Preference> {
             },
           ),
         ),
+        // 背景模式始终可见，便于直接切换
+        Divider(height: 0, thickness: 0.3, color: dividerColor),
+        ListTile(
+          title: const Text('背景'),
+          trailing: DropdownButton<String>(
+            value: appConfiguration.splashBackground,
+            underline: const SizedBox(),
+            items: const [
+              DropdownMenuItem(value: 'off', child: Text('原启动页（默认）')),
+              DropdownMenuItem(value: 'gradient', child: Text('渐变品牌页')),
+              DropdownMenuItem(value: 'custom', child: Text('自定义图片')),
+              DropdownMenuItem(value: 'transparent', child: Text('透明（跟随主题）')),
+            ],
+            onChanged: (v) {
+              if (v == null) return;
+              if (v == 'custom' && appConfiguration.splashBackgroundPath == null) {
+                // 首次切换到自定义图片时立即选图
+                _pickSplashBackground();
+                return;
+              }
+              setState(() => appConfiguration.splashBackground = v);
+              appConfiguration.flushConfig();
+            },
+          ),
+        ),
+        // 选择自定义品牌页后展示详细设置
         if (appConfiguration.splashEnabled && appConfiguration.splashBackground != 'off') ...[
           Divider(height: 0, thickness: 0.3, color: dividerColor),
           ListTile(
@@ -99,30 +142,6 @@ class _PreferenceState extends State<Preference> {
                   appConfiguration.flushConfig();
                 },
               ),
-            ),
-          ),
-          Divider(height: 0, thickness: 0.3, color: dividerColor),
-          ListTile(
-            title: const Text('背景'),
-            trailing: DropdownButton<String>(
-              value: appConfiguration.splashBackground,
-              underline: const SizedBox(),
-              items: const [
-                DropdownMenuItem(value: 'off', child: Text('原启动页（默认）')),
-                DropdownMenuItem(value: 'gradient', child: Text('渐变品牌页')),
-                DropdownMenuItem(value: 'custom', child: Text('自定义图片')),
-                DropdownMenuItem(value: 'transparent', child: Text('透明（跟随主题）')),
-              ],
-              onChanged: (v) {
-                if (v == null) return;
-                if (v == 'custom' && appConfiguration.splashBackgroundPath == null) {
-                  // 首次切换到自定义图片时立即选图
-                  _pickSplashBackground();
-                  return;
-                }
-                setState(() => appConfiguration.splashBackground = v);
-                appConfiguration.flushConfig();
-              },
             ),
           ),
           if (appConfiguration.splashBackground == 'custom') ...[
@@ -207,6 +226,117 @@ class _PreferenceState extends State<Preference> {
     appConfiguration.flushConfig();
   }
 
+  /// mTLS 证书配置弹窗：选择证书链与私钥（PEM），启用后对新连接生效
+  Future<bool> _showMtlsDialog() async {
+    final chainController = TextEditingController(text: configuration.mtlsChainPath ?? '');
+    final keyController = TextEditingController(text: configuration.mtlsKeyPath ?? '');
+    var loading = false;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('双向认证 (mTLS)', style: TextStyle(fontSize: 16)),
+          content: SizedBox(
+            width: 420,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                controller: chainController,
+                readOnly: true,
+                decoration: InputDecoration(
+                  labelText: '客户端证书链 (PEM)',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.file_open_outlined, size: 18),
+                    onPressed: () async {
+                      final file = await FilePicker.pickFile(type: FileType.any);
+                      if (file?.path != null) {
+                        final saved = await Mtls.persist(file!.path!, 'mtls_chain.pem');
+                        chainController.text = saved;
+                      }
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: keyController,
+                readOnly: true,
+                decoration: InputDecoration(
+                  labelText: '客户端私钥 (PEM，未加密)',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.file_open_outlined, size: 18),
+                    onPressed: () async {
+                      final file = await FilePicker.pickFile(type: FileType.any);
+                      if (file?.path != null) {
+                        final saved = await Mtls.persist(file!.path!, 'mtls_key.pem');
+                        keyController.text = saved;
+                      }
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                '证书链包含 -----BEGIN CERTIFICATE-----，私钥包含 -----BEGIN PRIVATE KEY-----（不支持加密私钥）。配置后对新建立的 HTTPS 连接生效。',
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+            ElevatedButton(
+              onPressed: () async {
+                final chain = chainController.text.trim();
+                final key = keyController.text.trim();
+                if (chain.isEmpty || key.isEmpty) {
+                  FlutterToastr.show('请先选择证书链与私钥文件', context, backgroundColor: Colors.orange);
+                  return;
+                }
+                if (!Mtls.looksLikePem(chain, 'CERTIFICATE')) {
+                  FlutterToastr.show('证书链文件格式不正确（需要 PEM）', context, backgroundColor: Colors.red);
+                  return;
+                }
+                if (!Mtls.looksLikePem(key, 'PRIVATE KEY') && !Mtls.looksLikePem(key, 'EC PRIVATE KEY') &&
+                    !Mtls.looksLikePem(key, 'RSA PRIVATE KEY')) {
+                  FlutterToastr.show('私钥文件格式不正确（需要未加密 PEM）', context, backgroundColor: Colors.red);
+                  return;
+                }
+                setState(() => loading = true);
+                final ok = await Mtls.load(chain, key);
+                if (!ok) {
+                  setState(() => loading = false);
+                  if (context.mounted) {
+                    FlutterToastr.show('证书加载失败，请检查文件内容', context, backgroundColor: Colors.red);
+                  }
+                  return;
+                }
+                configuration.mtlsChainPath = chain;
+                configuration.mtlsKeyPath = key;
+                configuration.mtlsEnabled = true;
+                configuration.flushConfig();
+                if (context.mounted) Navigator.pop(context, true);
+              },
+              child: loading
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('启用'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == true && mounted) {
+      setState(() {});
+      FlutterToastr.show('mTLS 已启用', context, backgroundColor: Colors.green);
+      return true;
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     AppLocalizations localizations = AppLocalizations.of(context)!;
@@ -261,6 +391,8 @@ class _PreferenceState extends State<Preference> {
                 onChanged: (value) {
                   setState(() => appConfiguration.monetEnabled = value);
                   appConfiguration.flushConfig();
+                  // 触发 MaterialApp 重建，莫奈取色立即生效
+                  appConfiguration.globalChange.value = !appConfiguration.globalChange.value;
                 },
               ),
             ),
@@ -268,9 +400,11 @@ class _PreferenceState extends State<Preference> {
             if (Platform.isAndroid) ...[
               ListTile(
                 title: const Text('拦截 QUIC (UDP:443)'),
-                subtitle: const Text(
-                  '丢弃 UDP 443 强制应用回落 TCP，使 HTTPS 流量可抓包',
-                  style: TextStyle(fontSize: 12),
+                subtitle: Text(
+                  _quicCount > 0
+                      ? '已拦截 $_quicCount 个 QUIC 包，强制回落 TCP 使流量可抓包'
+                      : '丢弃 UDP 443 强制应用回落 TCP，使 HTTPS 流量可抓包',
+                  style: const TextStyle(fontSize: 12),
                 ),
                 trailing: SwitchWidget(
                   value: configuration.blockQuic,
@@ -278,10 +412,37 @@ class _PreferenceState extends State<Preference> {
                   onChanged: (value) {
                     setState(() => configuration.blockQuic = value);
                     configuration.flushConfig();
+                    if (!value) {
+                      FlutterToastr.show('已关闭，重新启动抓包后生效', context);
+                    }
                   },
                 ),
               ),
             ],
+            Divider(height: 0, thickness: 0.3, color: dividerColor),
+            ListTile(
+              title: const Text('双向认证 (mTLS)'),
+              subtitle: Text(
+                configuration.mtlsEnabled
+                    ? '已启用 · 点击配置客户端证书'
+                    : '与上游服务器 TLS 握手时提供客户端证书（PEM）',
+                style: const TextStyle(fontSize: 12),
+              ),
+              trailing: SwitchWidget(
+                value: configuration.mtlsEnabled,
+                scale: 0.8,
+                onChanged: (value) async {
+                  if (value) {
+                    final ok = await _showMtlsDialog();
+                    if (!ok) return;
+                  } else {
+                    Mtls.unload();
+                    setState(() => configuration.mtlsEnabled = false);
+                    configuration.flushConfig();
+                  }
+                },
+              ),
+            ),
           ]),
           const SizedBox(height: 12),
           _buildSplashSection(dividerColor),

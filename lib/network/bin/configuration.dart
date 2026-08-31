@@ -85,6 +85,11 @@ class Configuration {
   //QUIC 拦截（Android VPN 层丢弃 UDP:443，强制应用回落 TCP HTTP 以便可抓包，上游 #489）
   bool blockQuic = true;
 
+  //双向认证 mTLS（与上游服务器 TLS 握手时提供客户端证书，上游 #366）
+  bool mtlsEnabled = false;
+  String? mtlsChainPath; // 客户端证书链 PEM
+  String? mtlsKeyPath;   // 客户端私钥 PEM（未加密）
+
   //自动备份配置
   bool autoBackupEnabled = true; // 是否启用自动备份
   int autoBackupIntervalHours = 24; // 自动备份间隔（小时）
@@ -120,6 +125,9 @@ class Configuration {
     aiApiKey = config['aiApiKey'] ?? "";
     aiModel = config['aiModel'] ?? "gpt-4o-mini";
     blockQuic = config['blockQuic'] ?? true;
+    mtlsEnabled = config['mtlsEnabled'] ?? false;
+    mtlsChainPath = config['mtlsChainPath'];
+    mtlsKeyPath = config['mtlsKeyPath'];
     enableSystemProxy = config['enableSystemProxy'] ?? (config['enableDesktop'] ?? true);
     enableSocks5 = config['enableSocks5'] ?? true;
     enabledHttp2 = config['enabledHttp2'] ?? false;
@@ -189,6 +197,9 @@ class Configuration {
       'aiApiKey': aiApiKey,
       'aiModel': aiModel,
       'blockQuic': blockQuic,
+      'mtlsEnabled': mtlsEnabled,
+      if (mtlsChainPath != null) 'mtlsChainPath': mtlsChainPath,
+      if (mtlsKeyPath != null) 'mtlsKeyPath': mtlsKeyPath,
       'enableSystemProxy': enableSystemProxy,
       'enableSocks5': enableSocks5,
       'proxyPassDomains': proxyPassDomains,

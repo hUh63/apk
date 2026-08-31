@@ -335,7 +335,9 @@ class RequestRowState extends State<RequestRow> {
                       left: itemButton(
                           onPressed: () async {
                             await Navigator.maybePop(getContext());
-                            if (context.mounted) showAiAnalysis(context, request);
+                            if (!context.mounted) return;
+                            Navigator.of(context).push(MaterialPageRoute(
+                                builder: (context) => AiChatPage(initialRequest: request)));
                           },
                           label: 'AI 分析',
                           icon: Icons.auto_awesome,

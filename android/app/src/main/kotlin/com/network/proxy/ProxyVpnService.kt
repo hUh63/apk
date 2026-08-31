@@ -88,6 +88,11 @@ class ProxyVpnService : VpnService(), ProtectSocket {
         @Volatile
         var blockQuic: Boolean = true
 
+        /** 已拦截的 QUIC 包计数 */
+        @Volatile
+        var quicBlockedCount: java.util.concurrent.atomic.AtomicLong =
+            java.util.concurrent.atomic.AtomicLong(0)
+
         fun stopVpnIntent(context: Context): Intent {
             return Intent(context, ProxyVpnService::class.java).also {
                 it.action = ACTION_DISCONNECT

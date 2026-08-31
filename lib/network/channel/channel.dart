@@ -22,6 +22,7 @@ import 'dart:math';
 import 'package:proxypin/network/channel/channel_context.dart';
 import 'package:proxypin/network/channel/host_port.dart';
 import 'package:proxypin/network/util/logger.dart';
+import 'package:proxypin/network/util/mtls.dart';
 import 'package:proxypin/network/util/socket_address.dart';
 
 import 'channel_dispatcher.dart';
@@ -118,6 +119,7 @@ class Channel {
       socket,
       host: host,
       supportedProtocols: supportedProtocols,
+      context: Mtls.securityContext,
       onBadCertificate: (certificate) => true,
     );
 
@@ -137,6 +139,7 @@ class Channel {
       socket,
       host: host,
       supportedProtocols: supportedProtocols,
+      context: Mtls.securityContext,
       onBadCertificate: (certificate) => true,
     );
 

@@ -594,18 +594,37 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   const SizedBox(height: 16),
                   const Text('定时方式:', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'none', label: Text('一次性'), icon: Icon(Icons.play_circle_outline, size: 16)),
-                      ButtonSegment(value: 'daily', label: Text('每天'), icon: Icon(Icons.repeat, size: 16)),
-                      ButtonSegment(value: 'weekly', label: Text('每周'), icon: Icon(Icons.date_range, size: 16)),
-                      ButtonSegment(value: 'interval', label: Text('间隔'), icon: Icon(Icons.timer_outlined, size: 16)),
-                      ButtonSegment(value: 'cron', label: Text('Cron'), icon: Icon(Icons.code, size: 16)),
+                  // 5 种方式用 ChoiceChip 流式布局，避免 SegmentedButton 一行放不下溢出
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final (value, label, icon) in const [
+                        ('none', '一次性', Icons.play_circle_outline),
+                        ('daily', '每天', Icons.repeat),
+                        ('weekly', '每周', Icons.date_range),
+                        ('interval', '间隔', Icons.timer_outlined),
+                        ('cron', 'Cron', Icons.code),
+                      ])
+                        ChoiceChip(
+                          label: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 2),
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              Icon(icon, size: 14, color: repeatMode == value ? Theme.of(context).colorScheme.onPrimary : Theme.of(context).colorScheme.outline),
+                              const SizedBox(width: 4),
+                              Text(label, style: const TextStyle(fontSize: 12)),
+                            ]),
+                          ),
+                          selected: repeatMode == value,
+                          selectedColor: Theme.of(context).colorScheme.primary,
+                          labelStyle: TextStyle(color: repeatMode == value ? Theme.of(context).colorScheme.onPrimary : null),
+                          showCheckmark: false,
+                          visualDensity: VisualDensity.compact,
+                          onSelected: (sel) {
+                            if (sel) setDialogState(() => repeatMode = value);
+                          },
+                        ),
                     ],
-                    selected: {repeatMode},
-                    onSelectionChanged: (v) => setDialogState(() => repeatMode = v.first),
-                    showSelectedIcon: false,
-                    style: const ButtonStyle(visualDensity: VisualDensity.compact),
                   ),
                   const SizedBox(height: 8),
                   // Cron 表达式模式：表达式输入 + 下次执行预览

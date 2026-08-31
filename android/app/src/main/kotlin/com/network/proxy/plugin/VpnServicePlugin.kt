@@ -18,6 +18,10 @@ class VpnServicePlugin : AndroidFlutterPlugin() {
                     result.success(ProxyVpnService.isRunning)
                 }
 
+                "getQuicBlockedCount" -> {
+                    result.success(ProxyVpnService.quicBlockedCount.get())
+                }
+
                 "startVpn" -> {
                     val host = call.argument<String>("proxyHost")
                     val port = call.argument<Int>("proxyPort")

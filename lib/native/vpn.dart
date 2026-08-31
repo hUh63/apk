@@ -65,4 +65,13 @@ class Vpn {
   static Future<bool> isRunning() async {
     return await proxyVpnChannel.invokeMethod("isRunning");
   }
+
+  /// 已拦截的 QUIC (UDP:443) 包数量（上游 #489）
+  static Future<int> quicBlockedCount() async {
+    try {
+      return await proxyVpnChannel.invokeMethod("getQuicBlockedCount") ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
 }

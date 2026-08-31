@@ -74,6 +74,7 @@ class ConnectionHandler(
 
         // QUIC 拦截（上游 #489）：丢弃 UDP:443，客户端握手失败后回落 TCP HTTP，流量即可被代理抓取
         if (ProxyVpnService.blockQuic && udpHeader.destinationPort == 443) {
+            ProxyVpnService.quicBlockedCount.incrementAndGet()
             return
         }
 

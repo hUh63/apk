@@ -359,9 +359,7 @@ class SettingPage extends StatelessWidget {
                     style: const TextStyle(fontSize: 12),
                   ),
                   trailing: const Icon(Icons.keyboard_arrow_right),
-                  onTap: () async {
-                    await showAiSettingsDialog(context);
-                  }),
+                  onTap: () => navigator(context, const AiChatPage())),
             ]),
           if (Platform.isAndroid) const SizedBox(height: 12),
           section([

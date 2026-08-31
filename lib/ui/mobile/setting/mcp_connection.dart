@@ -563,16 +563,17 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       icon: const Icon(Icons.verified_user),
-                      label: const Text('配置 Dhizuku'),
+                      label: const Text('请求 Dhizuku 授权'),
                       onPressed: () async {
-                        await McpScreen.requestDhizukuAuthorization();
+                        final ok = await McpScreen.requestDhizukuAuthorization();
                         if (!mounted) return;
                         FlutterToastr.show(
-                          '已打开 Dhizuku，请在其中完成本应用的授权',
+                          ok ? 'Dhizuku 已授权' : '授权未完成：请确认已安装 Dhizuku 并完成 Owner 激活',
                           context,
                           duration: 3,
-                          backgroundColor: Colors.orange,
+                          backgroundColor: ok ? Colors.green : Colors.orange,
                         );
+                        // 授权后重新检测状态
                         await _loadDeviceInfo();
                         if (mounted) setState(() {});
                       },

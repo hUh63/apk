@@ -506,19 +506,61 @@ class McpPlugin : FlutterPlugin {
      * 打开 Dhizuku 应用让用户进行授权
      */
     private fun requestDhizukuAuthorization(): Boolean {
+        // 优先走 Dhizuku 标准 API（应用内弹出授权弹窗），失败回退到打开 Dhizuku 应用
+        try {
+            val context = context ?: return openDhizukuApp()
+            val clazz = Class.forName("com.bmax.dhizuku.api.Dhizuku")
+            // 初始化
+            clazz.getMethod("init", android.content.Context::class.java).invoke(null, context)
+
+            val isOwnerGranted = clazz.getMethod("isOwnerGranted").invoke(null) as Boolean
+            if (isOwnerGranted) {
+                return true
+            }
+
+            // requestPermission 触发 Dhizuku 的标准授权弹窗，等待用户操作
+            var granted = false
+            val latch = CountDownLatch(1)
+            val listenerInterface = Class.forName("com.bmax.dhizuku.api.Dhizuku\$OnRequestPermissionResultListener")
+            val handler = java.lang.reflect.InvocationHandler { _, method, args ->
+                if (method.name == "onRequestPermissionResult" && args != null && args.size >= 2) {
+                    granted = (args[1] as Int) == 0
+                    latch.countDown()
+                }
+                null
+            }
+            val listener = java.lang.reflect.Proxy.newProxyInstance(
+                listenerInterface.classLoader, arrayOf(listenerInterface), handler)
+
+            clazz.getMethod("addRequestPermissionResultListener", listenerInterface).invoke(null, listener)
+            try {
+                val requestCodeField = clazz.getField("REQUEST_PERMISSION_ID")
+                val requestCode = requestCodeField.get(null) as Int
+                clazz.getMethod("requestPermission", Int::class.javaPrimitiveType).invoke(null, requestCode)
+                latch.await(90, TimeUnit.SECONDS)
+            } finally {
+                clazz.getMethod("removeRequestPermissionResultListener", listenerInterface)
+                    .invoke(null, listener)
+            }
+            return granted
+        } catch (e: Throwable) {
+            // API 不可用（未装 Dhizuku / 版本过旧），回退：打开 Dhizuku 应用
+            return openDhizukuApp()
+        }
+    }
+
+    /** 打开 Dhizuku 应用（回退路径） */
+    private fun openDhizukuApp(): Boolean {
         return try {
             val pm = context?.packageManager ?: return false
-            // 统一使用 me.bmax.dhizuku 包名
             val dhizukuPkg = "me.bmax.dhizuku"
-            
-            // 尝试打开 Dhizuku 应用
+
             val intent = pm.getLaunchIntentForPackage(dhizukuPkg)
             if (intent != null) {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context?.startActivity(intent)
                 true
             } else {
-                // 尝试打开 Dhizuku 管理页面（备用 Action）
                 val dhizukuIntent = Intent("me.bmax.dhizuku.action.OPEN").apply {
                     setPackage(dhizukuPkg)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
