@@ -33,6 +33,7 @@ class _Attachment {
   _Attachment.endpoints(List<HttpRequest> source)
       : kind = 'endpoints',
         label = 'API 端点清单',
+        requests = const [],
         content = _endpointsText(source);
 
   _Attachment.text(String title, this.content)
