@@ -770,7 +770,8 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                       decoration: const InputDecoration(
                         labelText: '间隔分钟数',
                         border: OutlineInputBorder(),
-                        hintText: '如 30 表示每 30 分钟执行一次',
+                        helperText: '如填 30，表示每 30 分钟自动执行一次',
+                        helperMaxLines: 2,
                       ),
                       onChanged: (v) => intervalMinutes = int.tryParse(v) ?? 30,
                     ),
@@ -782,9 +783,10 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                       controller: repeatCountController,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
-                        labelText: '重复次数（留空 = 无限重复）',
+                        labelText: '重复次数',
                         border: OutlineInputBorder(),
-                        hintText: '如 5 表示执行 5 次后自动结束',
+                        helperText: '如填 5，表示共执行 5 次后自动结束；留空 = 无限重复',
+                        helperMaxLines: 2,
                       ),
                       onChanged: (v) => repeatCount = int.tryParse(v),
                     ),

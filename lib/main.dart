@@ -220,7 +220,8 @@ class FluentApp extends StatelessWidget {
       brightness: brightness,
       useMaterial3: appConfiguration.useMaterial3,
       colorScheme: colorScheme,
-      pageTransitionsTheme: pageTransitions ?? const PageTransitionsTheme(),
+      // 仅开启预测性返回时覆盖 Android 页面转场；关闭时不设置，保留主题默认转场
+      pageTransitionsTheme: pageTransitions,
     );
 
     if (!appConfiguration.useMaterial3) {

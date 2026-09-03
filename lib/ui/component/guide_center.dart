@@ -334,6 +334,10 @@ class MarkdownLiteView extends StatelessWidget {
       return spans.isEmpty ? [TextSpan(text: text, style: base)] : spans;
     }
 
+    // 安全截取：避免对短行做 substring 越界（RangeError）
+    String cut(String t, int start) =>
+        t.length > start ? t.substring(start) : t;
+
     void flushParagraph() {
       if (buffer.isEmpty) return;
       final text = buffer.join('\n');
@@ -439,30 +443,30 @@ class MarkdownLiteView extends StatelessWidget {
       }
       if (trimmed.startsWith('### ')) {
         flushParagraph();
-        lastHeading = trimmed.substring(4);
+        lastHeading = cut(trimmed, 4);
         widgets.add(Padding(
           padding: const EdgeInsets.only(top: 6, bottom: 4),
-          child: Text(trimmed.substring(4),
+          child: Text(cut(trimmed, 4),
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
         ));
         continue;
       }
       if (trimmed.startsWith('## ')) {
         flushParagraph();
-        lastHeading = trimmed.substring(3);
+        lastHeading = cut(trimmed, 3);
         widgets.add(Padding(
           padding: const EdgeInsets.only(top: 12, bottom: 6),
-          child: Text(trimmed.substring(3),
+          child: Text(cut(trimmed, 3),
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
         ));
         continue;
       }
       if (trimmed.startsWith('# ')) {
         flushParagraph();
-        lastHeading = trimmed.substring(2);
+        lastHeading = cut(trimmed, 2);
         widgets.add(Padding(
           padding: const EdgeInsets.only(top: 8, bottom: 10),
-          child: Text(trimmed.substring(2),
+          child: Text(cut(trimmed, 2),
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         ));
         continue;
@@ -478,12 +482,12 @@ class MarkdownLiteView extends StatelessWidget {
             borderRadius: BorderRadius.circular(6),
             border: Border(left: BorderSide(width: 3, color: theme.colorScheme.primary)),
           ),
-          child: Text(trimmed.substring(2), style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic)),
+          child: Text(cut(trimmed, 2), style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic)),
         ));
         continue;
       }
       if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-        buffer.add('• ${trimmed.substring(2)}');
+        buffer.add('• ${cut(trimmed, 2)}');
         continue;
       }
       final numbered = RegExp(r'^(\d+)\.\s+(.*)');

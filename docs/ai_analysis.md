@@ -17,6 +17,13 @@ AI 分析可以把抓包数据交给大语言模型解读：接口用途、字�
 5. 支持 __从文件导入配置__：JSON 格式 `{"baseUrl": "...", "apiKey": "...", "model": "...", "enabled": true}`；
 6. 保存后即可使用。Key 保存在本机配置中，不会上传到 ProxyPin 之外的任何地方。
 
+==接口地址支持两种填法==（自动识别，不会重复拼接）：
+
+- Base URL 形式：`https://hmai.n10.top/v1`（程序自动补 `/chat/completions`）
+- 完整接口形式：`https://hmai.n10.top/v1/chat/completions`
+
+自建网关（OneAPI/NewAPI 等）与各类代理服务均可直接填写。
+
 ## 附加上下文（可多类型多选）
 
 点击右上角 📎 附加信息，三种类型可同时附加多条：

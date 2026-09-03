@@ -423,30 +423,6 @@ class _PreferenceState extends State<Preference> {
                 },
               ),
             ),
-            Divider(height: 0, thickness: 0.3, color: dividerColor),
-            ListTile(
-              title: const Text('双向认证 (mTLS)'),
-              subtitle: Text(
-                configuration.mtlsEnabled
-                    ? '已启用 · 点击配置客户端证书'
-                    : '与上游服务器 TLS 握手时提供客户端证书（PEM）',
-                style: const TextStyle(fontSize: 12),
-              ),
-              trailing: SwitchWidget(
-                value: configuration.mtlsEnabled,
-                scale: 0.8,
-                onChanged: (value) async {
-                  if (value) {
-                    final ok = await _showMtlsDialog();
-                    if (!ok) return;
-                  } else {
-                    Mtls.unload();
-                    setState(() => configuration.mtlsEnabled = false);
-                    configuration.flushConfig();
-                  }
-                },
-              ),
-            ),
           ]),
           const SizedBox(height: 12),
           _buildSplashSection(dividerColor),
@@ -485,6 +461,30 @@ class _PreferenceState extends State<Preference> {
                     configuration.flushConfig();
                     if (!value) {
                       FlutterToastr.show('已关闭，重新启动抓包后生效', context);
+                    }
+                  },
+                ),
+              ),
+              Divider(height: 0, thickness: 0.3, color: dividerColor),
+              ListTile(
+                title: const Text('双向认证 (mTLS)'),
+                subtitle: Text(
+                  configuration.mtlsEnabled
+                      ? '已启用 · 点击配置客户端证书'
+                      : '与上游服务器 TLS 握手时提供客户端证书（PEM）',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                trailing: SwitchWidget(
+                  value: configuration.mtlsEnabled,
+                  scale: 0.8,
+                  onChanged: (value) async {
+                    if (value) {
+                      final ok = await _showMtlsDialog();
+                      if (!ok) return;
+                    } else {
+                      Mtls.unload();
+                      setState(() => configuration.mtlsEnabled = false);
+                      configuration.flushConfig();
                     }
                   },
                 ),

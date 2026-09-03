@@ -502,13 +502,15 @@ class McpPlugin : FlutterPlugin {
      */
     private fun requestShizukuAuthorization(): Boolean {
         return try {
-            if (context == null) return false
+            val ctx = context ?: return false
             if (!Shizuku.pingBinder()) return false
 
+            // 已授权直接成功（含用户在 Shizuku 应用内手动授权后）
             if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
                 return true
             }
 
+            // requestPermission 必须在主线程调用（Shizuku 内部依赖主线程 Handler）
             var granted = false
             val latch = CountDownLatch(1)
             val listener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
@@ -519,12 +521,31 @@ class McpPlugin : FlutterPlugin {
             }
             Shizuku.addRequestPermissionResultListener(listener)
             try {
-                // 注意：不做 shouldShowRequestPermissionRationale 拦截——
-                // 用户曾拒绝过一次也会再次弹出授权弹窗
-                Shizuku.requestPermission(SHIZUKU_REQUEST_CODE)
-                latch.await(90, TimeUnit.SECONDS)
+                val mainThread = android.os.Looper.getMainLooper() == android.os.Looper.myLooper()
+                val requestDone = CountDownLatch(1)
+                val invoke = Runnable {
+                    try {
+                        Shizuku.requestPermission(SHIZUKU_REQUEST_CODE)
+                    } catch (e: Throwable) {
+                        granted = false
+                    } finally {
+                        requestDone.countDown()
+                    }
+                }
+                if (mainThread) {
+                    invoke.run()
+                } else {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post(invoke)
+                }
+                // 等待弹窗请求真正发出（最长 5 秒），再等待用户操作结果（最长 60 秒）
+                requestDone.await(5, TimeUnit.SECONDS)
+                latch.await(60, TimeUnit.SECONDS)
             } finally {
                 Shizuku.removeRequestPermissionResultListener(listener)
+            }
+            // 兜底：即使回调未触发，用户手动授权后实时权限检查也会成功
+            if (!granted) {
+                granted = Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
             }
             granted
         } catch (e: Throwable) {
@@ -534,79 +555,6 @@ class McpPlugin : FlutterPlugin {
             } catch (e2: Exception) {
                 false
             }
-        }
-    }
-
-    /**
-     * 请求 Dhizuku 授权
-     * Dhizuku 包名：me.bmax.dhizuku
-     * 打开 Dhizuku 应用让用户进行授权
-     */
-    private fun requestDhizukuAuthorization(): Boolean {
-        // 优先走 Dhizuku 标准 API（应用内弹出授权弹窗），失败回退到打开 Dhizuku 应用
-        try {
-            val context = context ?: return openDhizukuApp()
-            val clazz = Class.forName("com.bmax.dhizuku.api.Dhizuku")
-            // 初始化
-            clazz.getMethod("init", android.content.Context::class.java).invoke(null, context)
-
-            val isOwnerGranted = clazz.getMethod("isOwnerGranted").invoke(null) as Boolean
-            if (isOwnerGranted) {
-                return true
-            }
-
-            // requestPermission 触发 Dhizuku 的标准授权弹窗，等待用户操作
-            var granted = false
-            val latch = CountDownLatch(1)
-            val listenerInterface = Class.forName("com.bmax.dhizuku.api.Dhizuku\$OnRequestPermissionResultListener")
-            val handler = java.lang.reflect.InvocationHandler { _, method, args ->
-                if (method.name == "onRequestPermissionResult" && args != null && args.size >= 2) {
-                    granted = (args[1] as Int) == 0
-                    latch.countDown()
-                }
-                null
-            }
-            val listener = java.lang.reflect.Proxy.newProxyInstance(
-                listenerInterface.classLoader, arrayOf(listenerInterface), handler)
-
-            clazz.getMethod("addRequestPermissionResultListener", listenerInterface).invoke(null, listener)
-            try {
-                val requestCodeField = clazz.getField("REQUEST_PERMISSION_ID")
-                val requestCode = requestCodeField.get(null) as Int
-                clazz.getMethod("requestPermission", Int::class.javaPrimitiveType).invoke(null, requestCode)
-                latch.await(90, TimeUnit.SECONDS)
-            } finally {
-                clazz.getMethod("removeRequestPermissionResultListener", listenerInterface)
-                    .invoke(null, listener)
-            }
-            return granted
-        } catch (e: Throwable) {
-            // API 不可用（未装 Dhizuku / 版本过旧），回退：打开 Dhizuku 应用
-            return openDhizukuApp()
-        }
-    }
-
-    /** 打开 Dhizuku 应用（回退路径） */
-    private fun openDhizukuApp(): Boolean {
-        return try {
-            val pm = context?.packageManager ?: return false
-            val dhizukuPkg = "me.bmax.dhizuku"
-
-            val intent = pm.getLaunchIntentForPackage(dhizukuPkg)
-            if (intent != null) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context?.startActivity(intent)
-                true
-            } else {
-                val dhizukuIntent = Intent("me.bmax.dhizuku.action.OPEN").apply {
-                    setPackage(dhizukuPkg)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context?.startActivity(dhizukuIntent)
-                true
-            }
-        } catch (e: Exception) {
-            false
         }
     }
 
