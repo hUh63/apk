@@ -83,7 +83,7 @@ class FloatingBallService : Service() {
         if (ballView == null) {
             createBall()
         } else {
-            applyBallStyle()
+            refreshBallStyle()
         }
         return START_STICKY
     }
@@ -181,8 +181,8 @@ class FloatingBallService : Service() {
         view.contentDescription = if (running) "MCP 运行中" else "MCP 已停止"
     }
 
-    private fun applyBallStyle(target: LinearLayout? = ballView) {
-        target?.let { applyBallStyle(it) }
+    private fun refreshBallStyle() {
+        ballView?.let { applyBallStyle(it) }
     }
 
     private fun togglePanel() {
@@ -226,7 +226,7 @@ class FloatingBallService : Service() {
             startActivity(launch)
         }
         addButton("刷新状态") {
-            applyBallStyle()
+            refreshBallStyle()
             closePanel()
         }
 
