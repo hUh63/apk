@@ -75,6 +75,9 @@ class _PreferenceState extends State<Preference> {
 
   /// 启动页设置区块：开关 / 背景（原启动页·渐变·自定义图片·透明）/ 时长 / 自定义小字
   Widget _buildSplashSection(Color dividerColor) {
+    // 展示时长与自定义小字仅在非"原启动页"模式下可编辑
+    final splashDetailEditable =
+        appConfiguration.splashEnabled && appConfiguration.splashBackground != 'off';
     return Card(
       color: Colors.transparent,
       elevation: 0,
@@ -121,8 +124,6 @@ class _PreferenceState extends State<Preference> {
           ),
         ),
         // 展示时长与自定义小字：选原启动页时禁用并说明（系统启动画面不支持注入内容）
-        final splashDetailEditable =
-            appConfiguration.splashEnabled && appConfiguration.splashBackground != 'off';
         Divider(height: 0, thickness: 0.3, color: dividerColor),
         ListTile(
           title: Text('展示时长',

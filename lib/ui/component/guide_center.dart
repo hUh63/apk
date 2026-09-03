@@ -211,9 +211,8 @@ class _GuideArticlePageState extends State<GuideArticlePage> {
                         actions: [
                           TextButton(
                               onPressed: () {
-                                Clipboard.setData(const ClipboardData(
-                                    text:
-                                        '重点标记语法：**粗体** ==高亮== __下划线__ ~~删除线~~ ~波浪线~ `代码`；代码块上方可加 <!--demo:说明--> 提供示例说明。'));
+                                Clipboard.setData(ClipboardData(
+                                    text: '重点标记语法：**粗体** ==高亮== __下划线__ ~~删除线~~ ~波浪线~ 代码；代码块上方可加 <!--demo:说明--> 提供示例说明。'));
                                 FlutterToastr.show('标记语法已复制', context);
                               },
                               child: const Text('复制语法')),
@@ -370,7 +369,8 @@ class MarkdownLiteView extends StatelessWidget {
                   },
                   icon: const Icon(Icons.play_circle_outline, size: 15),
                   label: const Text('示例', style: TextStyle(fontSize: 11)),
-                  visualDensity: VisualDensity.compact,
+                  style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 6)),
                 ),
                 TextButton.icon(
                   onPressed: () {
@@ -379,7 +379,8 @@ class MarkdownLiteView extends StatelessWidget {
                   },
                   icon: const Icon(Icons.copy, size: 14),
                   label: const Text('复制', style: TextStyle(fontSize: 11)),
-                  visualDensity: VisualDensity.compact,
+                  style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 6)),
                 ),
               ]),
             ),
