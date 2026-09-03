@@ -102,7 +102,12 @@ class FloatingBallService : Service() {
             .setContentText("悬浮球运行中，MCP 保活增强")
             .setSmallIcon(android.R.drawable.ic_menu_manage)
             .build()
-        startForeground(NOTIFICATION_ID, notification)
+        // Android 14+ 要求前台服务带类型（manifest 已声明 specialUse）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility", "InflateParams")
@@ -116,9 +121,9 @@ class FloatingBallService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = 40
-            y = 300
+            gravity = Gravity.TOP or Gravity.END
+            x = 24
+            y = 260
         }
 
         var downX = 0f; var downY = 0f
@@ -245,7 +250,9 @@ class FloatingBallService : Service() {
     }
 
     private fun closePanel() {
-        panelView?.let { windowManager.removeView(it) }
+        try {
+            panelView?.let { windowManager.removeView(it) }
+        } catch (_: Exception) {}
         panelView = null
         panelOpen = false
     }
@@ -273,8 +280,12 @@ class FloatingBallService : Service() {
 
     override fun onDestroy() {
         cancelDock()
-        panelView?.let { windowManager.removeView(it) }
-        ballView?.let { windowManager.removeView(it) }
+        try {
+            panelView?.let { windowManager.removeView(it) }
+        } catch (_: Exception) {}
+        try {
+            ballView?.let { windowManager.removeView(it) }
+        } catch (_: Exception) {}
         panelView = null
         ballView = null
         super.onDestroy()

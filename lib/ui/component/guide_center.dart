@@ -250,6 +250,31 @@ class MarkdownLiteView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    try {
+      return _build(context);
+    } catch (e) {
+      // 渲染防御：异常时展示原始内容与错误信息，避免整页白屏
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text('渲染异常（已降级为纯文本）：$e',
+                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.error)),
+          ),
+          SelectableText(content, style: const TextStyle(fontSize: 13.5, height: 1.5)),
+        ]),
+      );
+    }
+  }
+
+  Widget _build(BuildContext context) {
     final theme = Theme.of(context);
     final lines = content.split('\n');
     final widgets = <Widget>[];

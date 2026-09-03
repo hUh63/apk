@@ -1,12 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Android 12+ 系统启动画面（SplashScreen API）：
-         背景与应用渐变品牌页主色调一致，消除"系统启动页→自定义启动页"的割裂跳变。
-         图标使用应用图标，窗口SplashScreen 由系统在首帧后自动收起。 -->
+    <!-- Android 12+ 系统启动画面：保持默认样式（无自定义图标，用户要求还原原启动页） -->
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">@drawable/launch_background</item>
-        <item name="android:windowSplashScreenBackground">#1A4B8F</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
-        <item name="android:windowSplashScreenAnimationDuration">300</item>
     </style>
 </resources>

@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.22.25 (2026-09-04)
+
+### 崩溃修复
+
+- **悬浮球前台服务崩溃**（`MissingForegroundServiceTypeException`，targetSDK 36）：manifest 为 FloatingBallService 声明 `foregroundServiceType="specialUse"` + 对应权限，`startForeground` 显式携带类型；关闭/退出时的重复 removeView 崩溃（IllegalArgumentException）改为安全移除；悬浮球初始位置调整到屏幕右侧（此前可能在状态栏附近不可见）
+- **使用文档白屏防御**：MarkdownLiteView 增加渲染异常兜底（自动降级为纯文本 + 错误提示，不再整页白屏）
+
+### 功能修复
+
+- **启动页还原默认**：移除 Android 12+ 系统启动画面的自定义图标与配色，恢复应用原本的默认系统启动页（纯色无图标）
+- **AI 接口地址兼容**：支持填写完整接口地址（`https://hmai.n10.top/v1/chat/completions` 等以 /chat/completions 结尾的地址）与 Base URL 两种形式，自动识别不再重复拼接
+
 ## v1.22.24 (2026-09-03)
 
 ### 问题修复

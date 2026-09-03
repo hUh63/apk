@@ -32,13 +32,17 @@ class AiAnalyzer {
       throw Exception('尚未配置 AI 服务：请到「设置 → MCP Connection → AI 分析」填写接口地址与 API Key');
     }
 
-    final baseUrl = config.aiBaseUrl.endsWith('/')
+    // 兼容两种填写方式：baseUrl（https://host/v1）或完整接口（.../chat/completions）
+    final raw = config.aiBaseUrl.endsWith('/')
         ? config.aiBaseUrl.substring(0, config.aiBaseUrl.length - 1)
         : config.aiBaseUrl;
+    final endpoint = raw.toLowerCase().endsWith('/chat/completions')
+        ? raw
+        : '$raw/chat/completions';
 
     final client = HttpClient();
     try {
-      final request2 = await client.postUrl(Uri.parse('$baseUrl/chat/completions'));
+      final request2 = await client.postUrl(Uri.parse(endpoint));
       request2.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
       request2.headers.set(HttpHeaders.authorizationHeader, 'Bearer ${config.aiApiKey}');
       request2.add(utf8.encode(jsonEncode({

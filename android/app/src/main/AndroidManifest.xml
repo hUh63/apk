@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
@@ -84,7 +85,12 @@
         <!-- MCP 悬浮球（前台服务，提升保活；需要悬浮窗权限） -->
         <service
             android:name=".plugin.FloatingBallService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="MCP floating ball for connection status and keep-alive" />
+        </service>
 
         <activity
             android:name=".VpnAlertDialog"
