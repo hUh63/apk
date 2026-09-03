@@ -100,8 +100,8 @@ class AppConfiguration {
   /// 启动页开关（移动端启动页）
   bool splashEnabled = true;
 
-  /// 启动页展示时长（毫秒）
-  int splashDurationMs = 1800;
+  /// 启动页展示时长（毫秒），默认 0.5 秒
+  int splashDurationMs = 500;
 
   /// 启动页背景：off 原生启动页（默认，不叠加自定义启动页）/ gradient 主题色渐变 /
   /// custom 自定义图片 / transparent 跟随主题背景
@@ -115,6 +115,9 @@ class AppConfiguration {
 
   /// 莫奈取色（Android 12+ Material You，跟随壁纸派生主题色与启动页配色）
   bool monetEnabled = true;
+
+  /// 预测性返回（Android 14+ 预测返回手势动画，Material 3 页面转场）
+  bool predictiveBackEnabled = false;
 
   //桌面window大小
   Size? windowSize;
@@ -248,13 +251,14 @@ class AppConfiguration {
       autoReadEnabled = config['autoReadEnabled'] ?? true;
       clearConfirm = config['clearConfirm'] ?? false;
       splashEnabled = config['splashEnabled'] ?? true;
-      splashDurationMs = config['splashDurationMs'] ?? 1800;
+      splashDurationMs = config['splashDurationMs'] ?? 500;
       splashBackground = config['splashBackground'] ?? "off";
       // 旧版本 "default"（渐变）迁移为 "gradient"，新默认值为 "off"（原生启动页）
       if (splashBackground == "default") splashBackground = "gradient";
       splashBackgroundPath = config['splashBackgroundPath'];
       splashSubtitle = config['splashSubtitle'];
       monetEnabled = config['monetEnabled'] ?? true;
+      predictiveBackEnabled = config['predictiveBackEnabled'] ?? false;
 
       windowSize = config['windowSize'] == null
           ? null
@@ -308,6 +312,7 @@ class AppConfiguration {
       "splashDurationMs": splashDurationMs,
       "splashBackground": splashBackground,
       "monetEnabled": monetEnabled,
+      "predictiveBackEnabled": predictiveBackEnabled,
       if (splashBackgroundPath != null) "splashBackgroundPath": splashBackgroundPath,
       if (splashSubtitle != null) "splashSubtitle": splashSubtitle,
       if (memoryCleanupThreshold != null)

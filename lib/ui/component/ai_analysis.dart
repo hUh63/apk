@@ -6,6 +6,10 @@
  */
 import 'dart:convert';
 
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_toastr/flutter_toastr.dart';
@@ -274,7 +278,7 @@ class _AiChatPageState extends State<AiChatPage> {
 
     try {
       var round = 0;
-      const maxRounds = 3; // Agent 模式工具循环上限，防失控
+      final maxRounds = Configuration.loaded?.aiAgentMaxRounds.clamp(1, 8) ?? 3;
       while (true) {
         final reply = await AiAnalyzer.chat(apiMessages,
             agentMode: _agentMode && round < maxRounds);
@@ -569,14 +573,34 @@ class _ToolCall {
   _ToolCall(this.name, this.arguments);
 }
 
-/// AI 配置编辑（baseUrl / apiKey / model），返回 true 表示已保存
+/// AI 服务商预设
+class _AiProvider {
+  final String name;
+  final String baseUrl;
+  final String modelHint;
+  const _AiProvider(this.name, this.baseUrl, this.modelHint);
+}
+
+const _aiProviders = [
+  _AiProvider('OpenAI', 'https://api.openai.com/v1', 'gpt-4o-mini'),
+  _AiProvider('DeepSeek', 'https://api.deepseek.com/v1', 'deepseek-chat'),
+  _AiProvider('通义千问', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'qwen-plus'),
+  _AiProvider('Kimi', 'https://api.moonshot.cn/v1', 'moonshot-v1-8k'),
+  _AiProvider('智谱 GLM', 'https://open.bigmodel.cn/api/paas/v4', 'glm-4-flash'),
+  _AiProvider('Ollama 本地', 'http://127.0.0.1:11434/v1', 'llama3.1'),
+];
+
+/// AI 配置编辑（服务商预设 / 自定义 / 文件导入），返回 true 表示已保存
 Future<bool?> showAiSettingsDialog(BuildContext context) async {
   final config = Configuration.loaded;
   if (config == null) return false;
   final baseUrlController = TextEditingController(text: config.aiBaseUrl);
   final keyController = TextEditingController(text: config.aiApiKey);
   final modelController = TextEditingController(text: config.aiModel);
+  final extraPromptController = TextEditingController(text: config.aiAgentExtraPrompt);
   var enabled = config.aiEnabled;
+  String selectedProvider =
+      _aiProviders.any((p) => p.baseUrl == config.aiBaseUrl) ? config.aiBaseUrl : 'custom';
 
   final result = await showDialog<bool>(
     context: context,
@@ -584,9 +608,9 @@ Future<bool?> showAiSettingsDialog(BuildContext context) async {
       builder: (context, setState) => AlertDialog(
         title: const Text('AI 分析配置', style: TextStyle(fontSize: 16)),
         content: SizedBox(
-          width: 420,
+          width: 440,
           child: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('启用 AI 分析', style: TextStyle(fontSize: 14)),
@@ -595,13 +619,42 @@ Future<bool?> showAiSettingsDialog(BuildContext context) async {
                 value: enabled,
                 onChanged: (v) => setState(() => enabled = v),
               ),
+              const SizedBox(height: 4),
+              const Text('服务商', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              DropdownButtonFormField<String>(
+                value: selectedProvider,
+                isDense: true,
+                decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                items: [
+                  for (final p in _aiProviders)
+                    DropdownMenuItem(value: p.baseUrl, child: Text(p.name, style: const TextStyle(fontSize: 13))),
+                  const DropdownMenuItem(value: 'custom', child: Text('自定义服务…', style: TextStyle(fontSize: 13))),
+                ],
+                onChanged: (v) {
+                  if (v == null) return;
+                  setState(() {
+                    selectedProvider = v;
+                    if (v != 'custom') {
+                      final p = _aiProviders.firstWhere((p) => p.baseUrl == v);
+                      baseUrlController.text = p.baseUrl;
+                      if (modelController.text.isEmpty ||
+                          _aiProviders.any((p) => p.modelHint == modelController.text)) {
+                        modelController.text = p.modelHint;
+                      }
+                    }
+                  });
+                },
+              ),
+              const SizedBox(height: 10),
               TextField(
                 controller: baseUrlController,
-                decoration: const InputDecoration(
+                enabled: selectedProvider == 'custom',
+                decoration: InputDecoration(
                   labelText: '接口地址 (Base URL)',
                   hintText: 'https://api.openai.com/v1',
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
                   isDense: true,
+                  helperText: selectedProvider == 'custom' ? '自定义服务商，填 OpenAI 兼容地址' : null,
                 ),
               ),
               const SizedBox(height: 10),
@@ -619,10 +672,70 @@ Future<bool?> showAiSettingsDialog(BuildContext context) async {
                 controller: modelController,
                 decoration: const InputDecoration(
                   labelText: '模型',
-                  hintText: 'gpt-4o-mini / deepseek-chat / qwen-plus …',
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
+              ),
+              const SizedBox(height: 14),
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+              Text('Agent 模式', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              Text('开启 🤖 后 AI 可自动调用 ProxyPin 工具查数据',
+                  style: TextStyle(fontSize: 11, color: Colors.grey)),
+              Text('最大工具轮数：${config.aiAgentMaxRounds}',
+                  style: const TextStyle(fontSize: 12)),
+              Slider(
+                value: config.aiAgentMaxRounds.toDouble(),
+                min: 1,
+                max: 8,
+                divisions: 7,
+                label: '${config.aiAgentMaxRounds}',
+                onChanged: (v) => setState(() => config.aiAgentMaxRounds = v.round()),
+              ),
+              TextField(
+                controller: extraPromptController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Agent 附加指令',
+                  hintText: '如：优先检查安全风险；只看 POST 请求…',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              // 从文件导入配置
+              OutlinedButton.icon(
+                onPressed: () async {
+                  try {
+                    final file = await FilePicker.pickFile(type: FileType.any);
+                    if (file?.path == null) return;
+                    final content = await File(file!.path!).readAsString();
+                    final data = jsonDecode(content);
+                    if (data is! Map<String, dynamic>) throw Exception('格式需为 JSON 对象');
+                    setState(() {
+                      if (data['baseUrl'] is String) {
+                        baseUrlController.text = data['baseUrl'];
+                        selectedProvider = _aiProviders.any((p) => p.baseUrl == data['baseUrl'])
+                            ? data['baseUrl']
+                            : 'custom';
+                      }
+                      if (data['apiKey'] is String) keyController.text = data['apiKey'];
+                      if (data['model'] is String) modelController.text = data['model'];
+                      if (data['enabled'] is bool) enabled = data['enabled'];
+                    });
+                    if (context.mounted) FlutterToastr.show('配置已导入', context, backgroundColor: Colors.green);
+                  } catch (e) {
+                    if (context.mounted) {
+                      FlutterToastr.show('导入失败：$e', context, backgroundColor: Colors.red);
+                    }
+                  }
+                },
+                icon: const Icon(Icons.upload_file, size: 16),
+                label: const Text('从文件导入配置 (JSON)'),
+              ),
+              const Text(
+                'JSON 格式：{"baseUrl": "...", "apiKey": "...", "model": "...", "enabled": true}',
+                style: TextStyle(fontSize: 10, color: Colors.grey),
               ),
             ]),
           ),
@@ -635,6 +748,7 @@ Future<bool?> showAiSettingsDialog(BuildContext context) async {
               config.aiBaseUrl = baseUrlController.text.trim();
               config.aiApiKey = keyController.text.trim();
               config.aiModel = modelController.text.trim().isEmpty ? 'gpt-4o-mini' : modelController.text.trim();
+              config.aiAgentExtraPrompt = extraPromptController.text.trim();
               config.flushConfig();
               Navigator.pop(context, true);
             },

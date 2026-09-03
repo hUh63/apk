@@ -114,7 +114,15 @@ class _MobileRequestCryptoPageState extends State<MobileRequestCryptoPage> {
         padding: const EdgeInsets.only(top: 10, bottom: 30),
         decoration: BoxDecoration(border: Border.all(color: Colors.grey.withValues(alpha: 0.2))),
         child: rules.isEmpty
-            ? const Center(child: Text('-'))
+            ? Center(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.enhanced_encryption_outlined, size: 44, color: Colors.grey.shade400),
+                const SizedBox(height: 10),
+                const Text('暂无解密规则', style: TextStyle(fontSize: 14)),
+                const SizedBox(height: 4),
+                Text('点击右上角 + 添加需要解密的请求',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+              ]))
             : Scrollbar(
                 child: ListView(children: [
                 Row(

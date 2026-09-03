@@ -54,18 +54,26 @@ jobs:
       - name: Build Universal APK (all architectures)
         run: flutter build apk --release
 
+      - name: Extract version (upstream #917)
+        id: version
+        run: |
+          VER=$(grep '^version:' pubspec.yaml | head -1 | sed 's/version: //' | tr -d ' ')
+          echo "app_version=$VER" >> "$GITHUB_OUTPUT"
+          echo "version extracted: $VER"
+
       - name: Rename universal APK
         run: |
-          mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/proxypin-universal.apk
+          mv build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/proxypin-${{ steps.version.outputs.app_version }}-universal.apk"
 
       - name: Build Split APKs (per architecture)
         run: flutter build apk --release --split-per-abi
 
       - name: Rename split APKs
         run: |
+          VER="${{ steps.version.outputs.app_version }}"
           for f in build/app/outputs/flutter-apk/app-*-release.apk; do
             abi=$(echo "$f" | sed -E 's/.*app-(.*)-release\.apk/\1/')
-            mv "$f" "build/app/outputs/flutter-apk/proxypin-${abi}.apk"
+            mv "$f" "build/app/outputs/flutter-apk/proxypin-${VER}-${abi}.apk"
           done
 
       - name: List all built APKs
@@ -75,21 +83,13 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: proxypin-all-apks
-          path: |
-            build/app/outputs/flutter-apk/proxypin-universal.apk
-            build/app/outputs/flutter-apk/proxypin-armeabi-v7a.apk
-            build/app/outputs/flutter-apk/proxypin-arm64-v8a.apk
-            build/app/outputs/flutter-apk/proxypin-x86_64.apk
+          path: build/app/outputs/flutter-apk/proxypin-*.apk
           retention-days: 30
 
       - name: Create Release (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
-          files: |
-            build/app/outputs/flutter-apk/proxypin-universal.apk
-            build/app/outputs/flutter-apk/proxypin-armeabi-v7a.apk
-            build/app/outputs/flutter-apk/proxypin-arm64-v8a.apk
-            build/app/outputs/flutter-apk/proxypin-x86_64.apk
+          files: build/app/outputs/flutter-apk/proxypin-*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

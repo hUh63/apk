@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_toastr/flutter_toastr.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:proxypin/l10n/app_localizations.dart';
+import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/network/mcp/mcp_server.dart';
 import 'package:proxypin/native/mcp_screen.dart';
@@ -71,6 +73,175 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
     }
   }
 
+  // ==================== 悬浮球 ====================
+  bool floatingBallEnabled = false;
+  bool floatingBallAutoDock = true;
+  int floatingBallColor = 0xFF6750A4; // 预置主色
+  int floatingBallAlpha = 230; // 透明度 0-255
+
+  String get floatingBallColorDesc =>
+      '颜色 #${floatingBallColor.toRadixString(16).substring(2).toUpperCase()} · 透明度 ${(floatingBallAlpha / 255 * 100).round()}%';
+
+  static const _floatingChannel = MethodChannel('com.proxy/floatingBall');
+
+  Future<void> _loadFloatingBallConfig() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      floatingBallEnabled = prefs.getBool('floatingBallEnabled') ?? false;
+      floatingBallAutoDock = prefs.getBool('floatingBallAutoDock') ?? true;
+      floatingBallColor = prefs.getInt('floatingBallColor') ?? 0xFF6750A4;
+      floatingBallAlpha = prefs.getInt('floatingBallAlpha') ?? 230;
+    });
+    if (floatingBallEnabled) {
+      _updateFloatingBall();
+    }
+  }
+
+  Future<void> _saveFloatingBallConfig() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('floatingBallEnabled', floatingBallEnabled);
+    await prefs.setBool('floatingBallAutoDock', floatingBallAutoDock);
+    await prefs.setInt('floatingBallColor', floatingBallColor);
+    await prefs.setInt('floatingBallAlpha', floatingBallAlpha);
+    _updateFloatingBall();
+  }
+
+  /// 通知原生悬浮球服务（启用/更新/关闭）
+  Future<void> _updateFloatingBall() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _floatingChannel.invokeMethod(floatingBallEnabled ? 'start' : 'stop', {
+        'autoDock': floatingBallAutoDock,
+        'color': floatingBallColor,
+        'alpha': floatingBallAlpha,
+        'running': McpServer().isRunning,
+      });
+    } catch (e) {
+      logger.w('悬浮球服务调用失败', error: e);
+    }
+  }
+
+  /// 悬浮球样式自定义：预置颜色 + 取色器 + 透明度 + 实时预览
+  Future<void> _showFloatingBallStyleDialog() async {
+    var color = Color(floatingBallColor);
+    var alpha = floatingBallAlpha;
+    final presets = <String, Color>{
+      'M3 紫': const Color(0xFF6750A4),
+      '深海蓝': const Color(0xFF1565C0),
+      '翡翠绿': const Color(0xFF2E7D32),
+      '珊瑚橙': const Color(0xFFEF6C00),
+      '玫瑰红': const Color(0xFFC2185B),
+      '石墨黑': const Color(0xFF37474F),
+    };
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('自定义悬浮球', style: TextStyle(fontSize: 16)),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              // 实时预览
+              Center(
+                child: Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: color.withValues(alpha: alpha / 255),
+                    boxShadow: [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 12)],
+                  ),
+                  child: const Center(
+                    child: Text('P',
+                        style: TextStyle(
+                            fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text('预置颜色', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                children: [
+                  for (final entry in presets.entries)
+                    GestureDetector(
+                      onTap: () => setDialogState(() => color = entry.value),
+                      child: Column(children: [
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: entry.value,
+                            border: Border.all(
+                              color: color.value == entry.value.value ? Colors.white : Colors.transparent,
+                              width: 2,
+                            ),
+                            boxShadow: [BoxShadow(color: entry.value.withValues(alpha: 0.3), blurRadius: 6)],
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(entry.key, style: const TextStyle(fontSize: 10)),
+                      ]),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // 取色器（滑杆调 RGB 简化实现）
+              const Text('自定义颜色（RGB）', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              _colorSlider('R', color.red, (v) => setDialogState(() => color = Color.fromARGB(255, v, color.green, color.blue))),
+              _colorSlider('G', color.green, (v) => setDialogState(() => color = Color.fromARGB(255, color.red, v, color.blue))),
+              _colorSlider('B', color.blue, (v) => setDialogState(() => color = Color.fromARGB(255, color.red, color.green, v))),
+              const SizedBox(height: 8),
+              Text('透明度 ${(alpha / 255 * 100).round()}%', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              Slider(
+                value: alpha.toDouble(),
+                min: 80,
+                max: 255,
+                onChanged: (v) => setDialogState(() => alpha = v.round()),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+            ElevatedButton(
+              onPressed: () {
+                setDialogState(() {});
+                Navigator.pop(context, true);
+              },
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok == true && mounted) {
+      setState(() {
+        floatingBallColor = color.value;
+        floatingBallAlpha = alpha;
+      });
+      await _saveFloatingBallConfig();
+    }
+  }
+
+  Widget _colorSlider(String label, int value, ValueChanged<int> onChanged) {
+    return Row(children: [
+      SizedBox(width: 18, child: Text(label, style: const TextStyle(fontSize: 12))),
+      Expanded(
+        child: Slider(
+          value: value.toDouble(),
+          min: 0,
+          max: 255,
+          divisions: 255,
+          label: '$value',
+          onChanged: (v) => onChanged(v.round()),
+        ),
+      ),
+    ]);
+  }
+
   /// 重新加载设备信息（授权返回后刷新状态）
   Future<void> _loadDeviceInfo() async {
     if (!McpScreen.isSupported) return;
@@ -96,6 +267,11 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
       _mcpAutoStart = config.mcpAutoStart;
       _toolsEnabled = Map<String, bool>.from(config.mcpToolsEnabled);
       _portController.text = _configuredPort.toString();
+      await _loadFloatingBallConfig();
+      if (McpScreen.isSupported) {
+        _deviceInfo = await McpScreen.getDeviceInfo();
+      }
+      await _loadFloatingBallConfig();
       if (McpScreen.isSupported) {
         _deviceInfo = await McpScreen.getDeviceInfo();
       }
@@ -191,6 +367,7 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
     final ip = _deviceIp ?? '127.0.0.1';
     final apiUrl = 'http://$ip:$port/mcp';
     final sseUrl = 'http://$ip:$port/sse';
+    final healthUrl = 'http://$ip:$port/health';
     final isRunning = mcpServer.isRunning;
     final lastError = mcpServer.lastError;
 
@@ -358,6 +535,59 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
                           onPressed: () => _copyText(sseUrl, '已复制 SSE URL'),
                         ),
                       ),
+                      const Divider(height: 0),
+                      ListTile(
+                        title: const Text('Health Check（健康检查）'),
+                        subtitle: Text(healthUrl),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.copy, size: 20),
+                          onPressed: () => _copyText(healthUrl, '已复制 Health Check URL'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // 悬浮球设置
+                Text('悬浮球', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Text(
+                  '桌面悬浮球显示 MCP 运行状态，点击弹出快捷面板；前台服务可提升应用保活能力',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: Column(
+                    children: [
+                      SwitchListTile(
+                        title: const Text('启用悬浮球'),
+                        subtitle: const Text('悬浮窗展示 MCP 状态，提升保活能力', style: TextStyle(fontSize: 12)),
+                        value: floatingBallEnabled,
+                        onChanged: (v) {
+                          setState(() => floatingBallEnabled = v);
+                          _saveFloatingBallConfig();
+                        },
+                      ),
+                      const Divider(height: 0),
+                      SwitchListTile(
+                        title: const Text('3 秒无操作自动贴边'),
+                        subtitle: const Text('悬浮球自动吸附屏幕边缘，避免遮挡', style: TextStyle(fontSize: 12)),
+                        value: floatingBallAutoDock,
+                        onChanged: floatingBallEnabled
+                            ? (v) {
+                                setState(() => floatingBallAutoDock = v);
+                                _saveFloatingBallConfig();
+                              }
+                            : null,
+                      ),
+                      const Divider(height: 0),
+                      ListTile(
+                        title: const Text('自定义悬浮球样式'),
+                        subtitle: Text(floatingBallColorDesc, style: const TextStyle(fontSize: 12)),
+                        trailing: const Icon(Icons.palette_outlined, size: 20),
+                        onTap: floatingBallEnabled ? _showFloatingBallStyleDialog : null,
+                      ),
                     ],
                   ),
                 ),
@@ -522,7 +752,9 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
                         final ok = await McpScreen.requestShizukuAuthorization();
                         if (!mounted) return;
                         FlutterToastr.show(
-                          ok ? 'Shizuku 已授权' : '授权未完成：请确认 Shizuku 已运行，或到 Shizuku 应用中手动授权',
+                          ok
+                              ? 'Shizuku 已授权'
+                              : '未完成授权：请在刚弹出的授权窗口中选择“允许”；若未弹出，请到 Shizuku 应用中为本应用授权',
                           context,
                           duration: 3,
                           backgroundColor: ok ? Colors.green : Colors.orange,

@@ -84,6 +84,8 @@ class Configuration {
 
   //AI Agent 模式：允许 AI 自动调用 ProxyPin 功能（MCP 工具），关闭时仅对话
   bool aiAgentEnabled = false;
+  int aiAgentMaxRounds = 3; // 单次问答最大工具循环轮数
+  String aiAgentExtraPrompt = ""; // 用户附加的 Agent 系统指令
 
   //QUIC 拦截（Android VPN 层丢弃 UDP:443，强制应用回落 TCP HTTP 以便可抓包，上游 #489）
   bool blockQuic = true;
@@ -128,6 +130,8 @@ class Configuration {
     aiApiKey = config['aiApiKey'] ?? "";
     aiModel = config['aiModel'] ?? "gpt-4o-mini";
     aiAgentEnabled = config['aiAgentEnabled'] ?? false;
+    aiAgentMaxRounds = config['aiAgentMaxRounds'] ?? 3;
+    aiAgentExtraPrompt = config['aiAgentExtraPrompt'] ?? "";
     blockQuic = config['blockQuic'] ?? true;
     mtlsEnabled = config['mtlsEnabled'] ?? false;
     mtlsChainPath = config['mtlsChainPath'];
@@ -201,6 +205,8 @@ class Configuration {
       'aiApiKey': aiApiKey,
       'aiModel': aiModel,
       'aiAgentEnabled': aiAgentEnabled,
+      'aiAgentMaxRounds': aiAgentMaxRounds,
+      if (aiAgentExtraPrompt.isNotEmpty) 'aiAgentExtraPrompt': aiAgentExtraPrompt,
       'blockQuic': blockQuic,
       'mtlsEnabled': mtlsEnabled,
       if (mtlsChainPath != null) 'mtlsChainPath': mtlsChainPath,

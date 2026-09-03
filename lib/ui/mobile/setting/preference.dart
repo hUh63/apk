@@ -120,30 +120,36 @@ class _PreferenceState extends State<Preference> {
             },
           ),
         ),
-        // 选择自定义品牌页后展示详细设置
-        if (appConfiguration.splashEnabled && appConfiguration.splashBackground != 'off') ...[
-          Divider(height: 0, thickness: 0.3, color: dividerColor),
-          ListTile(
-            title: const Text('展示时长'),
-            subtitle: Text(
-              '${(appConfiguration.splashDurationMs / 1000).toStringAsFixed(1)} 秒',
-              style: const TextStyle(fontSize: 12),
-            ),
-            trailing: SizedBox(
-              width: 150,
-              child: Slider(
-                value: appConfiguration.splashDurationMs.toDouble(),
-                min: 500,
-                max: 5000,
-                divisions: 9,
-                label: '${(appConfiguration.splashDurationMs / 1000).toStringAsFixed(1)}s',
-                onChanged: (v) {
-                  setState(() => appConfiguration.splashDurationMs = v.round());
-                  appConfiguration.flushConfig();
-                },
-              ),
+        // 展示时长与自定义小字：选原启动页时禁用并说明（系统启动画面不支持注入内容）
+        final splashDetailEditable =
+            appConfiguration.splashEnabled && appConfiguration.splashBackground != 'off';
+        Divider(height: 0, thickness: 0.3, color: dividerColor),
+        ListTile(
+          title: Text('展示时长',
+              style: TextStyle(fontSize: 14, color: splashDetailEditable ? null : Colors.grey)),
+          subtitle: Text(
+            splashDetailEditable
+                ? '${(appConfiguration.splashDurationMs / 1000).toStringAsFixed(2)} 秒'
+                : '原启动页为系统画面，不支持自定义时长',
+            style: TextStyle(fontSize: 12, color: splashDetailEditable ? null : Colors.grey),
+          ),
+          trailing: SizedBox(
+            width: 150,
+            child: Slider(
+              value: appConfiguration.splashDurationMs.toDouble(),
+              min: 200,
+              max: 5000,
+              label: '${(appConfiguration.splashDurationMs / 1000).toStringAsFixed(2)}s',
+              onChanged: splashDetailEditable
+                  ? (v) {
+                      setState(() => appConfiguration.splashDurationMs = v.round());
+                      appConfiguration.flushConfig();
+                    }
+                  : null,
             ),
           ),
+        ),
+        if (splashDetailEditable) ...[
           if (appConfiguration.splashBackground == 'custom') ...[
             Divider(height: 0, thickness: 0.3, color: dividerColor),
             ListTile(
@@ -158,17 +164,20 @@ class _PreferenceState extends State<Preference> {
           ],
           Divider(height: 0, thickness: 0.3, color: dividerColor),
           ListTile(
-            title: const Text('自定义小字'),
+            title: Text('自定义小字',
+                style: TextStyle(fontSize: 14, color: splashDetailEditable ? null : Colors.grey)),
             subtitle: Text(
-              appConfiguration.splashSubtitle?.isNotEmpty == true
-                  ? appConfiguration.splashSubtitle!
-                  : '默认显示版本信息',
-              style: const TextStyle(fontSize: 12),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              splashDetailEditable
+                  ? (appConfiguration.splashSubtitle?.isNotEmpty == true
+                      ? appConfiguration.splashSubtitle!
+                      : '默认显示版本信息')
+                  : '原启动页不支持自定义小字，切换为渐变/透明后可用',
+              style: TextStyle(fontSize: 12, color: splashDetailEditable ? null : Colors.grey),
+              maxLines: 2,
             ),
-            trailing: const Icon(Icons.edit_outlined, size: 18),
-            onTap: _editSplashSubtitle,
+            trailing: Icon(Icons.edit_outlined, size: 18,
+                color: splashDetailEditable ? null : Colors.grey),
+            onTap: splashDetailEditable ? _editSplashSubtitle : null,
           ),
         ],
       ]),
@@ -392,6 +401,23 @@ class _PreferenceState extends State<Preference> {
                   setState(() => appConfiguration.monetEnabled = value);
                   appConfiguration.flushConfig();
                   // 触发 MaterialApp 重建，莫奈取色立即生效
+                  appConfiguration.globalChange.value = !appConfiguration.globalChange.value;
+                },
+              ),
+            ),
+            Divider(height: 0, thickness: 0.3, color: dividerColor),
+            ListTile(
+              title: const Text('预测性返回'),
+              subtitle: const Text(
+                'Android 14+ 返回手势预测动画（Material 3 页面转场）',
+                style: TextStyle(fontSize: 12),
+              ),
+              trailing: SwitchWidget(
+                value: appConfiguration.predictiveBackEnabled,
+                scale: 0.8,
+                onChanged: (value) {
+                  setState(() => appConfiguration.predictiveBackEnabled = value);
+                  appConfiguration.flushConfig();
                   appConfiguration.globalChange.value = !appConfiguration.globalChange.value;
                 },
               ),

@@ -209,8 +209,19 @@ class FluentApp extends StatelessWidget {
       surfaceContainerHigh: surfaceContainer,
     );
 
-    var themeData =
-        ThemeData(brightness: brightness, useMaterial3: appConfiguration.useMaterial3, colorScheme: colorScheme);
+    // 预测性返回：开启时使用 Material 3 预测返回页面转场（Android 14+ 生效，其他平台回退默认转场）
+    final pageTransitions = appConfiguration.predictiveBackEnabled && !Platform.isWindows
+        ? const PageTransitionsTheme(builders: {
+            TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
+          })
+        : null;
+
+    var themeData = ThemeData(
+      brightness: brightness,
+      useMaterial3: appConfiguration.useMaterial3,
+      colorScheme: colorScheme,
+      pageTransitionsTheme: pageTransitions ?? const PageTransitionsTheme(),
+    );
 
     if (!appConfiguration.useMaterial3) {
       themeData = themeData.copyWith(

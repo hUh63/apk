@@ -290,7 +290,8 @@ class _TextEditorPageState extends State<TextEditorPage> {
     final color = Theme.of(context).colorScheme.primary;
     return Container(
       padding: const EdgeInsets.only(top: 2, bottom: 2, left: 8, right: 12),
-      child: Row(children: [
+      // 两行布局：语言行 + 工具行，窄屏（手机）不再溢出
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         SizedBox(width: 6),
         // 语言下拉
         DropdownButton<_LangOption>(
@@ -306,7 +307,6 @@ class _TextEditorPageState extends State<TextEditorPage> {
             setState(() => _lang = v);
           },
         ),
-        const Spacer(),
         Wrap(
           spacing: 0,
           runSpacing: 0,
@@ -322,7 +322,7 @@ class _TextEditorPageState extends State<TextEditorPage> {
               tint: _wrap ? color : null,
             ),
             _iconBtn(Icons.copy, localizations.copy, _copy),
-            _iconBtn(Icons.file_download_outlined, localizations.download, _download),
+            _iconBtn(Icons.save_outlined, '保存', _download),
           ],
         ),
       ]),

@@ -24,6 +24,7 @@ import 'package:proxypin/network/components/manager/request_block_manager.dart';
 import 'package:proxypin/network/components/manager/request_rewrite_manager.dart';
 import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/ui/component/ai_analysis.dart';
+import 'package:proxypin/ui/component/log_viewer_page.dart';
 import 'package:proxypin/network/util/system_proxy.dart';
 import 'package:proxypin/storage/histories.dart';
 import 'package:proxypin/ui/component/proxy_port_setting.dart';
@@ -376,6 +377,13 @@ class SettingPage extends StatelessWidget {
           ]),
           const SizedBox(height: 12),
           section([
+            ListTile(
+                leading: const Icon(Icons.article_outlined, size: 20),
+                title: const Text('日志管理'),
+                subtitle: const Text('应用运行日志查看与导出', style: TextStyle(fontSize: 12)),
+                trailing: const Icon(Icons.keyboard_arrow_right),
+                onTap: () => navigator(context, const LogViewerPage())),
+            Divider(height: 0, thickness: 0.3, color: Theme.of(context).dividerColor.withValues(alpha: 0.22)),
             ListTile(
                 leading: const Icon(Icons.menu_book_outlined, size: 20),
                 title: const Text('使用文档'),

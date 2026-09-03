@@ -4,6 +4,7 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:flutter_toastr/flutter_toastr.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -142,6 +143,8 @@ class LogManager {
   }
 
   /// 开始记录
+  bool get isRecording => _isRecording;
+
   void startRecording() => _isRecording = true;
 
   /// 停止记录
@@ -288,6 +291,24 @@ class _LogViewerPageState extends State<LogViewerPage> {
       appBar: AppBar(
         title: const Text('日志管理'),
         actions: [
+          // 录制开关（开启后开始记录新日志）
+          IconButton(
+            icon: Icon(
+              _logManager.isRecording ? Icons.fiber_manual_record : Icons.pause_circle_outline,
+              size: 20,
+              color: _logManager.isRecording ? Colors.red : Colors.grey,
+            ),
+            tooltip: _logManager.isRecording ? '正在记录，点击暂停' : '已暂停，点击开启',
+            onPressed: () {
+              setState(() {
+                _logManager.isRecording ? _logManager.stopRecording() : _logManager.startRecording();
+              });
+              FlutterToastr.show(
+                _logManager.isRecording ? '日志记录已开启' : '日志记录已暂停',
+                context,
+              );
+            },
+          ),
           // 搜索按钮
           IconButton(
             icon: const Icon(Icons.search),

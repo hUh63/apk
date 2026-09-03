@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_toastr/flutter_toastr.dart';
 import 'package:proxypin/l10n/app_localizations.dart';
 import 'package:proxypin/network/bin/server.dart';
 import 'package:proxypin/network/http/http.dart';
 import 'package:proxypin/ui/component/api_endpoint_page.dart';
 import 'package:proxypin/ui/component/guide_center.dart';
+import 'package:proxypin/ui/component/ai_analysis.dart';
 import 'package:proxypin/ui/toolbox/dev_tools.dart';
 import 'package:proxypin/ui/component/multi_window.dart';
 import 'package:proxypin/ui/mobile/request/request_editor.dart';
@@ -294,6 +296,14 @@ class _ToolboxState extends State<Toolbox> {
                       icon: Icons.build_circle_outlined,
                       text: '开发工具',
                       tooltip: 'Cron 表达式 / JWT 解码 / UUID / SHA 哈希'),
+                  IconText(
+                      onTap: () {
+                        Navigator.of(context).push(
+                            MaterialPageRoute(builder: (context) => const AiChatPage()));
+                      },
+                      icon: Icons.psychology_outlined,
+                      text: 'AI 分析',
+                      tooltip: 'AI 对话分析抓包数据（支持 Agent 模式）'),
                 ],
               ),
             ],

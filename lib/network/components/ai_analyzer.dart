@@ -83,6 +83,12 @@ class AiAnalyzer {
         final desc = (t['description'] ?? '').toString();
         buf.writeln('- $name: ${desc.length > 120 ? '${desc.substring(0, 120)}…' : desc}');
       }
+      final extra = Configuration.loaded?.aiAgentExtraPrompt ?? '';
+      if (extra.trim().isNotEmpty) {
+        buf.writeln();
+        buf.writeln('## 用户附加指令');
+        buf.writeln(extra.trim());
+      }
       return buf.toString();
     } catch (_) {
       return systemPrompt;

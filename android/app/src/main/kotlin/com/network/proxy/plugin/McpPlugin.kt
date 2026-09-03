@@ -46,10 +46,48 @@ class McpPlugin : FlutterPlugin {
         private const val SHIZUKU_REQUEST_CODE = 631
     }
 
+    /** 悬浮球服务控制：start / stop */
+    private fun handleFloatingBall(call: MethodCall): Map<String, Any> {
+        val ctx = context ?: return mapOf("success" to false, "error" to "no context")
+        if (!Settings.canDrawOverlays(ctx)) {
+            // 引导开启悬浮窗权限
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${ctx.packageName}"))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            ctx.startActivity(intent)
+            return mapOf("success" to false, "needOverlayPermission" to true)
+        }
+        val intent = Intent(ctx, FloatingBallService::class.java)
+        when (call.method) {
+            "start" -> {
+                intent.putExtra("autoDock", call.argument<Boolean>("autoDock") ?: true)
+                intent.putExtra("color", call.argument<Int>("color") ?: 0xFF6750A4.toInt())
+                intent.putExtra("alpha", call.argument<Int>("alpha") ?: 230)
+                ctx.startForegroundService(intent)
+            }
+            "stop" -> {
+                intent.action = "STOP"
+                ctx.startService(intent)
+            }
+        }
+        return mapOf("success" to true)
+    }
+
     private var context: Context? = null
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
+        // 悬浮球服务通道
+        io.flutter.plugin.common.MethodChannel(binding.binaryMessenger, "com.proxy/floatingBall")
+            .setMethodCallHandler { call, result ->
+                Thread {
+                    try {
+                        val response = handleFloatingBall(call)
+                        result.success(response)
+                    } catch (e: Exception) {
+                        result.error("FB_ERROR", e.message, null)
+                    }
+                }.start()
+            }
         MethodChannel(binding.binaryMessenger, CHANNEL_NAME).setMethodCallHandler { call, result ->
             Thread {
                 try {
@@ -469,10 +507,6 @@ class McpPlugin : FlutterPlugin {
             if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
                 return true
             }
-            if (Shizuku.shouldShowRequestPermissionRationale()) {
-                // 用户曾拒绝且勾选"不再询问"，只能引导去 Shizuku 应用手动授权
-                return false
-            }
 
             var granted = false
             val latch = CountDownLatch(1)
@@ -484,6 +518,8 @@ class McpPlugin : FlutterPlugin {
             }
             Shizuku.addRequestPermissionResultListener(listener)
             try {
+                // 注意：不做 shouldShowRequestPermissionRationale 拦截——
+                // 用户曾拒绝过一次也会再次弹出授权弹窗
                 Shizuku.requestPermission(SHIZUKU_REQUEST_CODE)
                 latch.await(90, TimeUnit.SECONDS)
             } finally {

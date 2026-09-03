@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show Clipboard, rootBundle;
+import 'package:flutter_toastr/flutter_toastr.dart';
 
 /// 内置文档中心：离线查看全部功能使用教程、规范文档与开发文档。
 ///
@@ -35,6 +36,7 @@ class GuideCenter {
 
   /// 内置文档清单（id 即 asset 相对路径的 key）
   static const List<GuideDoc> docs = [
+    GuideDoc('overview', '功能总览', '快速上手', 'docs/overview.md', Icons.grid_view_outlined),
     GuideDoc('quick_start', '快速上手', '快速上手', 'docs/quick_start.md', Icons.rocket_launch_outlined),
     GuideDoc('certificate_https', '证书与 HTTPS 抓包', '快速上手', 'docs/certificate_https.md', Icons.security_outlined),
     GuideDoc('features_tips', '常用功能技巧', '快速上手', 'docs/features_tips.md', Icons.tips_and_updates_outlined),
@@ -64,6 +66,11 @@ class GuideCenter {
     } catch (e) {
       return '文档加载失败：$e';
     }
+  }
+
+  /// 清除文档本地缓存（重置按钮使用：重新从 assets 加载默认内容）
+  static void clearCache(GuideDoc doc) {
+    // 文档实时从 assets 读取，无额外缓存层；预留扩展点（用户标注持久化等）
   }
 }
 
@@ -180,6 +187,53 @@ class _GuideArticlePageState extends State<GuideArticlePage> {
       appBar: AppBar(
         title: Text(widget.doc.title, style: const TextStyle(fontSize: 16)),
         centerTitle: true,
+        actions: [
+          // 重置按钮：恢复文档默认的重点标记说明
+          IconButton(
+            icon: const Icon(Icons.restart_alt, size: 20),
+            tooltip: '重置重点标记说明',
+            onPressed: () {
+              showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                        title: const Text('重点标记说明', style: TextStyle(fontSize: 15)),
+                        content: const Text(
+                          '文档中的重点使用多种标记方式呈现：\n\n'
+                          '• ==黄色高亮==：关键操作步骤\n'
+                          '• 粗体（主题色）：重要概念与入口\n'
+                          '• __实线下划线__：需要特别注意的设置\n'
+                          '• ~橙色波浪线~：易错点提醒\n'
+                          '• ~~删除线~~：已废弃或不推荐的做法\n'
+                          '• 等宽底色：命令、路径、代码\n\n'
+                          '代码块右下角提供「示例」（演示说明）与「复制」按钮。',
+                          style: TextStyle(fontSize: 13, height: 1.6),
+                        ),
+                        actions: [
+                          TextButton(
+                              onPressed: () {
+                                Clipboard.setData(const ClipboardData(
+                                    text:
+                                        '重点标记语法：**粗体** ==高亮== __下划线__ ~~删除线~~ ~波浪线~ `代码`；代码块上方可加 <!--demo:说明--> 提供示例说明。'));
+                                FlutterToastr.show('标记语法已复制', context);
+                              },
+                              child: const Text('复制语法')),
+                          TextButton(
+                              onPressed: () {
+                                // 清除本地阅读缓存，下次进入按默认重新渲染
+                                GuideCenter.clearCache(widget.doc);
+                                setState(() => _content = null);
+                                GuideCenter.load(widget.doc).then((content) {
+                                  if (mounted) setState(() => _content = content);
+                                });
+                                Navigator.pop(context);
+                                FlutterToastr.show('已恢复默认标记', context, backgroundColor: Colors.green);
+                              },
+                              child: const Text('重置')),
+                        ],
+                      ));
+            },
+          ),
+        ],
       ),
       body: _content == null
           ? const Center(child: CircularProgressIndicator())
@@ -203,19 +257,51 @@ class MarkdownLiteView extends StatelessWidget {
     final buffer = <String>[];
     bool inCode = false;
     final codeLines = <String>[];
+    var lastHeading = ''; // 当前章节标题（供示例弹窗展示）
 
-    // 粗体解析：**text**
+    // 重点标记解析：**粗体** ==高亮== __下划线__ ~~删除线~~ ~波浪线~ `代码`
     List<InlineSpan> parseInline(String text, TextStyle base) {
       final spans = <InlineSpan>[];
-      final reg = RegExp(r'\*\*(.+?)\*\*');
+      final reg = RegExp(r'\*\*(.+?)\*\*|==(.+?)==|__(.+?)__|~~(.+?)~~|~([^~]+?)~|`([^`]+?)`');
       int last = 0;
       for (final m in reg.allMatches(text)) {
         if (m.start > last) {
           spans.add(TextSpan(text: text.substring(last, m.start), style: base));
         }
-        spans.add(TextSpan(
-            text: m.group(1),
-            style: base.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)));
+        final bold = m.group(2);
+        final highlight = m.group(3);
+        final underline = m.group(4);
+        final strike = m.group(5);
+        final wavy = m.group(6);
+        final code = m.group(7);
+        if (bold != null) {
+          spans.add(TextSpan(
+              text: bold, style: base.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)));
+        } else if (highlight != null) {
+          spans.add(TextSpan(
+              text: highlight,
+              style: base.copyWith(
+                backgroundColor: const Color(0xFFFFF176).withValues(alpha: theme.brightness == Brightness.dark ? 0.35 : 0.85),
+                fontWeight: FontWeight.w600,
+              )));
+        } else if (underline != null) {
+          spans.add(TextSpan(
+              text: underline,
+              style: base.copyWith(decoration: TextDecoration.underline, decorationThickness: 2.2, fontWeight: FontWeight.w600)));
+        } else if (strike != null) {
+          spans.add(TextSpan(
+              text: strike,
+              style: base.copyWith(decoration: TextDecoration.lineThrough, color: theme.colorScheme.outline)));
+        } else if (wavy != null) {
+          spans.add(TextSpan(
+              text: wavy,
+              style: base.copyWith(decoration: TextDecoration.underline, decorationStyle: TextDecorationStyle.wavy, decorationColor: Colors.orange, decorationThickness: 1.6)));
+        } else if (code != null) {
+          spans.add(TextSpan(
+              text: code,
+              style: base.copyWith(
+                  fontFamily: 'monospace', fontSize: (base.fontSize ?? 14) - 1.5, backgroundColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7), color: theme.brightness == Brightness.dark ? const Color(0xFFE6B455) : const Color(0xFFB35900))));
+        }
         last = m.end;
       }
       if (last < text.length) {
@@ -240,19 +326,65 @@ class MarkdownLiteView extends StatelessWidget {
       final line = raw.trimRight();
       if (line.trimLeft().startsWith('```')) {
         if (inCode) {
-          widgets.add(Container(
-            width: double.infinity,
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: theme.brightness == Brightness.dark ? Colors.grey[900] : const Color(0xFF1E1E1E),
-              borderRadius: BorderRadius.circular(8),
+          final codeText = codeLines.join('\n');
+          final demo = codeLines.isNotEmpty && codeLines.first.trimLeft().startsWith('<!--demo:')
+              ? codeLines.first.trimLeft().replaceAll('<!--demo:', '').replaceAll('-->', '').trim()
+              : null;
+          final displayCode = demo == null ? codeText : codeLines.skip(1).join('\n');
+          widgets.add(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              decoration: BoxDecoration(
+                color: theme.brightness == Brightness.dark ? Colors.grey[900] : const Color(0xFF1E1E1E),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+              ),
+              child: SelectableText(
+                displayCode,
+                style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: Color(0xFFD4D4D4), height: 1.5),
+              ),
             ),
-            child: SelectableText(
-              codeLines.join('\n'),
-              style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: Color(0xFFD4D4D4), height: 1.5),
+            // 代码块操作条：示例（演示说明）+ 复制
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(6, 0, 6, 2),
+              decoration: BoxDecoration(
+                color: theme.brightness == Brightness.dark ? Colors.grey[900] : const Color(0xFF1E1E1E),
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8)),
+              ),
+              child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                TextButton.icon(
+                  onPressed: () {
+                    showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                              title: Text('示例 · $lastHeading', style: const TextStyle(fontSize: 15)),
+                              content: Text(
+                                demo ?? '这段代码/配置演示了「$lastHeading」章节的用法。将其填入对应功能页即可复现效果。',
+                                style: const TextStyle(fontSize: 13.5, height: 1.5),
+                              ),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(context), child: const Text('知道了')),
+                              ],
+                            ));
+                  },
+                  icon: const Icon(Icons.play_circle_outline, size: 15),
+                  label: const Text('示例', style: TextStyle(fontSize: 11)),
+                  visualDensity: VisualDensity.compact,
+                ),
+                TextButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: displayCode));
+                    FlutterToastr.show('代码已复制', context);
+                  },
+                  icon: const Icon(Icons.copy, size: 14),
+                  label: const Text('复制', style: TextStyle(fontSize: 11)),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ]),
             ),
-          ));
+            const SizedBox(height: 10),
+          ]));
           codeLines.clear();
           inCode = false;
         } else {
@@ -281,6 +413,7 @@ class MarkdownLiteView extends StatelessWidget {
       }
       if (trimmed.startsWith('### ')) {
         flushParagraph();
+        lastHeading = trimmed.substring(4);
         widgets.add(Padding(
           padding: const EdgeInsets.only(top: 6, bottom: 4),
           child: Text(trimmed.substring(4),
@@ -290,6 +423,7 @@ class MarkdownLiteView extends StatelessWidget {
       }
       if (trimmed.startsWith('## ')) {
         flushParagraph();
+        lastHeading = trimmed.substring(3);
         widgets.add(Padding(
           padding: const EdgeInsets.only(top: 12, bottom: 6),
           child: Text(trimmed.substring(3),
@@ -299,6 +433,7 @@ class MarkdownLiteView extends StatelessWidget {
       }
       if (trimmed.startsWith('# ')) {
         flushParagraph();
+        lastHeading = trimmed.substring(2);
         widgets.add(Padding(
           padding: const EdgeInsets.only(top: 8, bottom: 10),
           child: Text(trimmed.substring(2),
