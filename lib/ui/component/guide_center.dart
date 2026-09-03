@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show Clipboard, rootBundle;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData, rootBundle;
 import 'package:flutter_toastr/flutter_toastr.dart';
 
 /// 内置文档中心：离线查看全部功能使用教程、规范文档与开发文档。
