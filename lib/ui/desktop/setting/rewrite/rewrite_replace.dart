@@ -185,7 +185,6 @@ class RewriteReplaceState extends State<DesktopRewriteReplace> {
         SizedBox(
             width: 90,
             child: DropdownButtonFormField<String>(
-                  isExpanded: true,
                 initialValue: rewriteItem.bodyType ?? ReplaceBodyType.text.name,
                 focusColor: Colors.transparent,
                 itemHeight: 48,
@@ -334,8 +333,8 @@ class RewriteReplaceState extends State<DesktopRewriteReplace> {
           const SizedBox(width: 10),
           SizedBox(
               width: 120,
-              chil                  isExpanded: true,
-d: DropdownButtonFormField<String>(
+              child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: rewriteItem.method?.name ?? 'GET',
                   focusColor: Colors.transparent,
                   itemHeight: 48,

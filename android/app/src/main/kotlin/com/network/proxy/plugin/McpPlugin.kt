@@ -50,6 +50,10 @@ class McpPlugin : FlutterPlugin {
     /** 悬浮球服务控制：start / stop */
     private fun handleFloatingBall(call: MethodCall): Map<String, Any> {
         val ctx = context ?: return mapOf("success" to false, "error" to "no context")
+        // 权限状态查询：不触发跳转，任何情况下都返回实际状态
+        if (call.method == "checkOverlay") {
+            return mapOf("granted" to Settings.canDrawOverlays(ctx))
+        }
         if (!Settings.canDrawOverlays(ctx)) {
             // 引导开启悬浮窗权限
             val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${ctx.packageName}"))
