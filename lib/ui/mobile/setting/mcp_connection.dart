@@ -74,6 +74,7 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
   }
 
   // ==================== 悬浮球 ====================
+  bool _overlayPermissionGranted = false;
   bool floatingBallEnabled = false;
   bool floatingBallAutoDock = true;
   int floatingBallColor = 0xFF6750A4; // 预置主色
@@ -84,7 +85,19 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
 
   static const _floatingChannel = MethodChannel('com.proxy/floatingBall');
 
+  /// 查询悬浮窗权限状态
+  Future<bool> _queryOverlayPermission() async {
+    if (!Platform.isAndroid) return true;
+    try {
+      final r = await _floatingChannel.invokeMethod('checkOverlay');
+      return r is Map && r['granted'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _loadFloatingBallConfig() async {
+    _overlayPermissionGranted = await _queryOverlayPermission();
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
@@ -565,14 +578,46 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
                 Card(
                   child: Column(
                     children: [
+                      ListTile(
+                        leading: Icon(
+                          _overlayPermissionGranted ? Icons.check_circle : Icons.error_outline,
+                          size: 20,
+                          color: _overlayPermissionGranted ? Colors.green : Colors.orange,
+                        ),
+                        title: const Text('悬浮球权限'),
+                        subtitle: Text(
+                          _overlayPermissionGranted ? '已授权"显示在其他应用上层"' : '未授权——点击前往系统设置开启，否则悬浮球无法显示',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        trailing: _overlayPermissionGranted
+                            ? const Text('已授权', style: TextStyle(fontSize: 12, color: Colors.green))
+                            : const Icon(Icons.arrow_forward_ios, size: 16),
+                        onTap: () async {
+                          try {
+                            await _floatingChannel.invokeMethod('checkOverlay');
+                          } catch (_) {}
+                          // 原生 checkOverlay 内部对未授权场景会跳转系统设置
+                          await Future.delayed(const Duration(milliseconds: 500));
+                          final granted = await _queryOverlayPermission();
+                          if (mounted) setState(() => _overlayPermissionGranted = granted);
+                        },
+                      ),
+                      const Divider(height: 0),
                       SwitchListTile(
                         title: const Text('启用悬浮球'),
-                        subtitle: const Text('悬浮窗展示 MCP 状态，提升保活能力', style: TextStyle(fontSize: 12)),
+                        subtitle: Text(
+                          _overlayPermissionGranted
+                              ? '悬浮窗展示 MCP 状态，提升保活能力'
+                              : '请先完成上方悬浮球权限授权',
+                          style: const TextStyle(fontSize: 12),
+                        ),
                         value: floatingBallEnabled,
-                        onChanged: (v) {
-                          setState(() => floatingBallEnabled = v);
-                          _saveFloatingBallConfig();
-                        },
+                        onChanged: _overlayPermissionGranted
+                            ? (v) {
+                                setState(() => floatingBallEnabled = v);
+                                _saveFloatingBallConfig();
+                              }
+                            : null,
                       ),
                       const Divider(height: 0),
                       SwitchListTile(

@@ -623,6 +623,7 @@ class _ScriptEditState extends State<ScriptEdit> {
                           SizedBox(width: 55, child: Text('${localizations.type}:')),
                           Expanded(
                               child: DropdownButtonFormField<bool>(
+                  isExpanded: true,
                             initialValue: _useRemote,
                             items: [
                               DropdownMenuItem(value: false, child: Text(localizations.local)),

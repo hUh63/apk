@@ -189,6 +189,7 @@ class _MCPTaskManagerPageState extends State<MCPTaskManagerPage> {
                 const Text('触发器类型', style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<AutomationTriggerType>(
+                  isExpanded: true,
                   value: selectedTrigger,
                   decoration: const InputDecoration(border: OutlineInputBorder()),
                   items: AutomationTriggerType.values.map((t) => DropdownMenuItem(value: t, child: Text(t.label))).toList(),

@@ -132,6 +132,7 @@ class MobileMapLocaleState extends State<MobileMapLocal> {
             SizedBox(
                 width: 90,
                 child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                     initialValue: bodyType.value,
                     focusColor: Colors.transparent,
                     itemHeight: 48,

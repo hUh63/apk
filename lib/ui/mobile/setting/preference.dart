@@ -109,7 +109,7 @@ class _PreferenceState extends State<Preference> {
               DropdownMenuItem(value: 'off', child: Text('原启动页（默认）')),
               DropdownMenuItem(value: 'gradient', child: Text('渐变品牌页')),
               DropdownMenuItem(value: 'custom', child: Text('自定义图片')),
-              DropdownMenuItem(value: 'transparent', child: Text('透明（跟随主题）')),
+              DropdownMenuItem(value: 'transparent', child: Text('跟随主题（推荐）')),
             ],
             onChanged: (v) {
               if (v == null) return;

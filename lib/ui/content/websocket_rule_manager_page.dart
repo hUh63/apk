@@ -445,6 +445,7 @@ class _RuleEditDialogState extends State<RuleEditDialog> {
               ),
               SizedBox(height: 16),
               DropdownButtonFormField<RuleMatchMode>(
+                  isExpanded: true,
                 value: _mode,
                 decoration: InputDecoration(labelText: '匹配方式'),
                 items: [

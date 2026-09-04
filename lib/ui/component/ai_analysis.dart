@@ -622,6 +622,7 @@ Future<bool?> showAiSettingsDialog(BuildContext context) async {
               const SizedBox(height: 4),
               const Text('服务商', style: TextStyle(fontSize: 12, color: Colors.grey)),
               DropdownButtonFormField<String>(
+                  isExpanded: true,
                 value: selectedProvider,
                 isDense: true,
                 decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),

@@ -88,7 +88,7 @@ class _SplashBannerState extends State<SplashBanner>
     final mode = widget.backgroundMode;
     final hasImage = mode == 'custom' && widget.backgroundImage != null;
 
-    // 前景色：浅色背景上用白，透明模式跟随主题
+    // 前景色：跟随主题模式下用主题前景色（随主题/深浅模式变化）
     final Color foreground =
         (mode == 'transparent') ? cs.onSurface : Colors.white;
 

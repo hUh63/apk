@@ -795,6 +795,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   const Text('执行任务:', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<int>(
+                  isExpanded: true,
                     value: actionType,
                     decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
                     items: const [
@@ -1019,7 +1020,8 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  DropdownButtonFormField<int>(
+                              isExpanded: true,
+      DropdownButtonFormField<int>(
                     value: eventType,
                     decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
                     items: const [
@@ -1037,7 +1039,8 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                       decoration: const InputDecoration(
                           labelText: 'URL 正则', hintText: '.*', border: OutlineInputBorder()),
                     ),
-                  if (eventType == 1)
+                  if (even                  isExpanded: true,
+tType == 1)
                     DropdownButtonFormField<NetworkStatus>(
                       value: networkStatus,
                       decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
@@ -1045,7 +1048,8 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                           .map((s) => DropdownMenuItem(value: s, child: Text(s.name)))
                           .toList(),
                       onChanged: (v) => setDialogState(() => networkStatus = v ?? NetworkStatus.disconnected),
-                    ),
+                             isExpanded: true,
+         ),
                   if (eventType == 2)
                     DropdownButtonFormField<ProxyStatus>(
                       value: proxyStatus,
@@ -1267,7 +1271,8 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                     final c = e.value;
                     final fields = _ConditionRow.fieldsForType(c.type);
                     return _removableTile(
-                      title: Column(children: [
+                    isExpanded: true,
+                    title: Column(children: [
                         // 条件类型选择
                         DropdownButtonFormField<ConditionType>(
                           // custom 类型不在候选列表，编辑持久化规则时退化为 httpRequest，避免断言崩溃
@@ -1279,7 +1284,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                           items: [
                             for (final t in ConditionType.values)
                               if (t != ConditionType.custom)
-                                DropdownMenuItem(value: t, child: Text(_conditionTypeLabel(t), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))),
+                                DropdownMenuItem(value: t, child: Text(_conditionTypeLabel(t), softWrap: true, style: const TextStyle(fontSize: 13))),
                           ],
                           onChanged: (v) => setDialogState(() {
                             c.type = v ?? ConditionType.httpRequest;
@@ -1295,7 +1300,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                             value: fields.contains(c.field) ? c.field : (fields.isNotEmpty ? fields.first : 'url'),
                             isExpanded: true,
                             decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
-                            items: fields.map((f) => DropdownMenuItem(value: f, child: Text(_ConditionRow.fieldDisplayName(c.type, f), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)))).toList(),
+                            items: fields.map((f) => DropdownMenuItem(value: f, child: Text(_ConditionRow.fieldDisplayName(c.type, f), softWrap: true, style: const TextStyle(fontSize: 13)))).toList(),
                             onChanged: (v) => setDialogState(() => c.field = v ?? fields.first),
                           )),
                           const SizedBox(width: 6),
@@ -1303,7 +1308,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                             value: c.operator,
                             isExpanded: true,
                             decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
-                            items: Operator.values.map((o) => DropdownMenuItem(value: o, child: Text(_formatOperator(o), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)))).toList(),
+                            items: Operator.values.map((o) => DropdownMenuItem(value: o, child: Text(_formatOperator(o), softWrap: true, style: const TextStyle(fontSize: 13)))).toList(),
                             onChanged: (v) => setDialogState(() => c.operator = v ?? Operator.equals),
                           )),
                         ]),
@@ -1322,7 +1327,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                         value: a.type,
                         isExpanded: true,
                         decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
-                        items: ActionType.values.map((t) => DropdownMenuItem(value: t, child: Text(_formatActionType(t), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)))).toList(),
+                        items: ActionType.values.map((t) => DropdownMenuItem(value: t, child: Text(_formatActionType(t), softWrap: true, style: const TextStyle(fontSize: 13)))).toList(),
                         onChanged: (v) => setDialogState(() => a.type = v ?? ActionType.log),
                       ),
                       subtitle: TextField(
@@ -1450,7 +1455,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
         isExpanded: true,
         decoration: const InputDecoration(isDense: true, labelText: '值', border: OutlineInputBorder()),
         items: opts
-            .map((v) => DropdownMenuItem(value: v, child: Text(_ConditionRow.valueDisplayName(c.type, v), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))))
+            .map((v) => DropdownMenuItem(value: v, child: Text(_ConditionRow.valueDisplayName(c.type, v), softWrap: true, style: const TextStyle(fontSize: 13))))
             .toList(),
         onChanged: (v) => setDialogState(() => c.valueController.text = v ?? ''),
       );
@@ -1898,7 +1903,8 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                       final otherNames = nodes.where((nn) => nn['id'] != n['id']).map((nn) => nn['name']?.toString() ?? '').toList();
                       return _removableTile(
                         title: Row(children: [
-                          Icon(_scriptTypeIcon(n['type']?.toString()), size: 18),
+                          Icon(_scriptTypeIcon(n['type']?.                  isExpanded: true,
+toString()), size: 18),
                           const SizedBox(width: 8),
                           Expanded(
                             child: DropdownButtonFormField<String>(
@@ -2110,7 +2116,8 @@ class _McpAutomationPageState extends State<McpAutomationPage>
   Widget _optionDropdown(List<String> options, String? value, String hint, ValueChanged<String?> onChanged,
       {String emptyHint = ''}) {
     if (options.isEmpty) {
-      return Padding(
+      return                   isExpanded: true,
+Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Text(emptyHint, style: const TextStyle(fontSize: 12, color: Colors.grey)),
       );
@@ -2118,7 +2125,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     return DropdownButtonFormField<String>(
       value: (value != null && options.contains(value)) ? value : null,
       decoration: InputDecoration(border: const OutlineInputBorder(), isDense: true, labelText: hint),
-      items: options.map((o) => DropdownMenuItem(value: o, child: Text(o, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)))).toList(),
+      items: options.map((o) => DropdownMenuItem(value: o, child: Text(o, softWrap: true, style: const TextStyle(fontSize: 13)))).toList(),
       onChanged: onChanged,
     );
   }

@@ -583,6 +583,7 @@ class _RewriteRuleEditState extends State<RewriteRuleEdit> {
                             width: 170,
                             height: 36,
                             child: DropdownButtonFormField<RuleType>(
+                  isExpanded: true,
                               onSaved: (val) => rule.type = val!,
                               initialValue: ruleType,
                               decoration: InputDecoration(

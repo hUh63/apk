@@ -214,6 +214,7 @@ class _RewriteUpdateAddState extends State<RewriteUpdateEdit> {
                   SizedBox(
                       width: 140,
                       child: DropdownButtonFormField<RewriteType>(
+                  isExpanded: true,
                           initialValue: rewriteType,
                           focusColor: Colors.transparent,
                           itemHeight: 48,

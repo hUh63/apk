@@ -192,6 +192,7 @@ class _ReportServersPageState extends State<ReportServersPage> {
                                 SizedBox(
                                   width: 150,
                                   child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                                     initialValue: compression,
                                     decoration: _inputDecoration(),
                                     isDense: true,

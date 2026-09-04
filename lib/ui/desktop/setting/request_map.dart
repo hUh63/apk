@@ -515,6 +515,7 @@ class _RequestMapEditState extends State<RequestMapEdit> {
                             width: 150,
                             height: 33,
                             child: DropdownButtonFormField<RequestMapType>(
+                  isExpanded: true,
                               onSaved: (val) => rule.type = val!,
                               initialValue: mapType,
                               decoration: InputDecoration(
