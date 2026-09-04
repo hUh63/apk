@@ -80,7 +80,7 @@ class MobileSearchState extends State<MobileSearch> {
                 Future.delayed(const Duration(milliseconds: 500), () {
                   _changing = false;
                   if (!_searched) {
-                    searchModel.searchOptions = {Option.url, Option.method, Option.responseContentType};
+                    searchModel.searchOptions = {Option.url, Option.method, Option.requestHeader, Option.requestBody, Option.responseBody};
                   }
                   widget.onSearch?.call(searchModel);
                 });
@@ -140,7 +140,7 @@ class MobileSearchState extends State<MobileSearch> {
                                     _keywordController.text = k;
                                     searchModel.keyword = k;
                                     if (!_searched) {
-                                      searchModel.searchOptions = {Option.url, Option.method, Option.responseContentType};
+                                      searchModel.searchOptions = {Option.url, Option.method, Option.requestHeader, Option.requestBody, Option.responseBody};
                                     }
                                     widget.onSearch?.call(searchModel);
                                   },

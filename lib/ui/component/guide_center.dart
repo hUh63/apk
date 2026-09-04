@@ -292,12 +292,13 @@ class MarkdownLiteView extends StatelessWidget {
         if (m.start > last) {
           spans.add(TextSpan(text: text.substring(last, m.start), style: base));
         }
-        final bold = m.group(2);
-        final highlight = m.group(3);
-        final underline = m.group(4);
-        final strike = m.group(5);
-        final wavy = m.group(6);
-        final code = m.group(7);
+        // 捕获组与正则一一对应：g1 粗体 / g2 高亮 / g3 下划线 / g4 删除线 / g5 波浪线 / g6 代码
+        final bold = m.group(1);
+        final highlight = m.group(2);
+        final underline = m.group(3);
+        final strike = m.group(4);
+        final wavy = m.group(5);
+        final code = m.group(6);
         if (bold != null) {
           spans.add(TextSpan(
               text: bold, style: base.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)));

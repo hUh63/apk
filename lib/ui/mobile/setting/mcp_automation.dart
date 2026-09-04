@@ -1279,7 +1279,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                           items: [
                             for (final t in ConditionType.values)
                               if (t != ConditionType.custom)
-                                DropdownMenuItem(value: t, child: Text(_conditionTypeLabel(t))),
+                                DropdownMenuItem(value: t, child: Text(_conditionTypeLabel(t), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))),
                           ],
                           onChanged: (v) => setDialogState(() {
                             c.type = v ?? ConditionType.httpRequest;
@@ -1295,7 +1295,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                             value: fields.contains(c.field) ? c.field : (fields.isNotEmpty ? fields.first : 'url'),
                             isExpanded: true,
                             decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
-                            items: fields.map((f) => DropdownMenuItem(value: f, child: Text(_ConditionRow.fieldDisplayName(c.type, f)))).toList(),
+                            items: fields.map((f) => DropdownMenuItem(value: f, child: Text(_ConditionRow.fieldDisplayName(c.type, f), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)))).toList(),
                             onChanged: (v) => setDialogState(() => c.field = v ?? fields.first),
                           )),
                           const SizedBox(width: 6),
@@ -1303,7 +1303,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                             value: c.operator,
                             isExpanded: true,
                             decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
-                            items: Operator.values.map((o) => DropdownMenuItem(value: o, child: Text(_formatOperator(o)))).toList(),
+                            items: Operator.values.map((o) => DropdownMenuItem(value: o, child: Text(_formatOperator(o), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)))).toList(),
                             onChanged: (v) => setDialogState(() => c.operator = v ?? Operator.equals),
                           )),
                         ]),
@@ -1322,7 +1322,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                         value: a.type,
                         isExpanded: true,
                         decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
-                        items: ActionType.values.map((t) => DropdownMenuItem(value: t, child: Text(_formatActionType(t)))).toList(),
+                        items: ActionType.values.map((t) => DropdownMenuItem(value: t, child: Text(_formatActionType(t), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)))).toList(),
                         onChanged: (v) => setDialogState(() => a.type = v ?? ActionType.log),
                       ),
                       subtitle: TextField(
@@ -1450,7 +1450,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
         isExpanded: true,
         decoration: const InputDecoration(isDense: true, labelText: '值', border: OutlineInputBorder()),
         items: opts
-            .map((v) => DropdownMenuItem(value: v, child: Text(_ConditionRow.valueDisplayName(c.type, v))))
+            .map((v) => DropdownMenuItem(value: v, child: Text(_ConditionRow.valueDisplayName(c.type, v), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))))
             .toList(),
         onChanged: (v) => setDialogState(() => c.valueController.text = v ?? ''),
       );
@@ -2118,7 +2118,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     return DropdownButtonFormField<String>(
       value: (value != null && options.contains(value)) ? value : null,
       decoration: InputDecoration(border: const OutlineInputBorder(), isDense: true, labelText: hint),
-      items: options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
+      items: options.map((o) => DropdownMenuItem(value: o, child: Text(o, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)))).toList(),
       onChanged: onChanged,
     );
   }

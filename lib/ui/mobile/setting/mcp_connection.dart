@@ -111,12 +111,17 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
   Future<void> _updateFloatingBall() async {
     if (!Platform.isAndroid) return;
     try {
-      await _floatingChannel.invokeMethod(floatingBallEnabled ? 'start' : 'stop', {
+      final result = await _floatingChannel.invokeMethod(floatingBallEnabled ? 'start' : 'stop', {
         'autoDock': floatingBallAutoDock,
         'color': floatingBallColor,
         'alpha': floatingBallAlpha,
         'running': McpServer().isRunning,
       });
+      // 缺少悬浮窗权限：原生已跳转系统设置页，这里给出明确提示
+      if (result is Map && result['needOverlayPermission'] == true && mounted) {
+        FlutterToastr.show('悬浮球需要"显示在其他应用上层"权限，已在系统设置中打开，请授权后回来重新开启',
+            context, duration: 4, backgroundColor: Colors.orange);
+      }
     } catch (e) {
       logger.w('悬浮球服务调用失败', error: e);
     }

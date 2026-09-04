@@ -68,7 +68,7 @@ class SearchState extends State<Search> {
             Future.delayed(const Duration(milliseconds: 500), () {
               changing = false;
               if (!searched) {
-                searchModel.searchOptions = {Option.url, Option.method, Option.responseContentType};
+                searchModel.searchOptions = {Option.url, Option.method, Option.requestHeader, Option.requestBody, Option.responseBody};
               }
               widget.onSearch?.call(searchModel);
             });
