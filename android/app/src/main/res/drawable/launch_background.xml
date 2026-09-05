@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 默认启动背景：浅色下白色 -->
+<!-- 启动背景：主题色（浅色白/深色深灰）+ 居中应用图标，作为 Android 12 以下系统的启动画面 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
+    <item android:drawable="@color/launch_bg" />
+    <item>
+        <bitmap
+            android:src="@mipmap/ic_launcher"
+            android:gravity="center" />
+    </item>
 </layer-list>

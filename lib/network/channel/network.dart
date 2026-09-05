@@ -28,6 +28,7 @@ import 'package:proxypin/network/handle/relay_handle.dart';
 import 'package:proxypin/network/socks/socks5.dart';
 import 'package:proxypin/network/util/attribute_keys.dart';
 import 'package:proxypin/network/util/crts.dart';
+import 'package:proxypin/network/util/idn.dart';
 import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/network/util/process_info.dart';
 import 'package:proxypin/network/util/tls.dart';
@@ -287,9 +288,21 @@ class Client extends Network {
     return host;
   }
 
+  /// 上游 #923：URL 编码的主机名（如 `%E5%B0%8F%E5%BA%A6.%E4%B8%AD%E5%9B%BD`）含 `%`，
+  /// Dart 的地址解析会将其误判为 IPv6 链路本地 scope id 抛 FormatException。
+  /// 非 IPv6 的含 % 主机先做百分号解码，再按需转换为 IDN punycode（中文域名等）。
+  static String _sanitizeHost(String host) {
+    if (host.contains('%') && !HostAndPort.ipV6RegExp.hasMatch(host)) {
+      try {
+        host = Uri.decodeComponent(host);
+      } catch (_) {}
+    }
+    return idnToAscii(host);
+  }
+
   Future<Channel> connect(HostAndPort hostAndPort, ChannelContext channelContext,
       {Duration timeout = const Duration(seconds: 3)}) async {
-    String host = _stripIPv6Brackets(hostAndPort.host);
+    String host = _sanitizeHost(_stripIPv6Brackets(hostAndPort.host));
 
     // logger.d('Connecting to $host:${hostAndPort.port}');
     return Socket.connect(host, hostAndPort.port, timeout: timeout).then((socket) {
@@ -304,7 +317,7 @@ class Client extends Network {
 
   /// ssl连接
   Future<Channel> secureConnect(HostAndPort hostAndPort, ChannelContext channelContext) async {
-    return SecureSocket.connect(_stripIPv6Brackets(hostAndPort.host), hostAndPort.port,
+    return SecureSocket.connect(_sanitizeHost(_stripIPv6Brackets(hostAndPort.host)), hostAndPort.port,
         timeout: const Duration(seconds: 3), onBadCertificate: (certificate) => true).then((socket) {
       var channel = Channel(socket);
       channelContext.serverChannel = channel;

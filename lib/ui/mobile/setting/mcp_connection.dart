@@ -111,17 +111,17 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
     }
   }
 
-  Future<void> _saveFloatingBallConfig() async {
+  Future<void> _saveFloatingBallConfig({bool showFeedback = false}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('floatingBallEnabled', floatingBallEnabled);
     await prefs.setBool('floatingBallAutoDock', floatingBallAutoDock);
     await prefs.setInt('floatingBallColor', floatingBallColor);
     await prefs.setInt('floatingBallAlpha', floatingBallAlpha);
-    _updateFloatingBall();
+    _updateFloatingBall(showFeedback: showFeedback);
   }
 
   /// 通知原生悬浮球服务（启用/更新/关闭）
-  Future<void> _updateFloatingBall() async {
+  Future<void> _updateFloatingBall({bool showFeedback = false}) async {
     if (!Platform.isAndroid) return;
     try {
       final result = await _floatingChannel.invokeMethod(floatingBallEnabled ? 'start' : 'stop', {
@@ -130,13 +130,30 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
         'alpha': floatingBallAlpha,
         'running': McpServer().isRunning,
       });
+      if (!mounted) return;
       // 缺少悬浮窗权限：原生已跳转系统设置页，这里给出明确提示
-      if (result is Map && result['needOverlayPermission'] == true && mounted) {
-        FlutterToastr.show('悬浮球需要"显示在其他应用上层"权限，已在系统设置中打开，请授权后回来重新开启',
+      if (result is Map && result['needOverlayPermission'] == true) {
+        FlutterToastr.show('悬浮球需要"显示在其他应用上层"权限，已为你打开系统设置，授权后回来重新开启',
             context, duration: 4, backgroundColor: Colors.orange);
+        return;
+      }
+      // 启动/停止失败：展示原生返回的具体原因（不再静默无反应）
+      if (result is Map && result['success'] == false) {
+        FlutterToastr.show(
+            '悬浮球${floatingBallEnabled ? "启动" : "停止"}失败：${result['error'] ?? '未知原因'}',
+            context, duration: 4, backgroundColor: Colors.red);
+        return;
+      }
+      // 用户手动开启时给出成功反馈 + 厂商系统拦截的兜底引导
+      if (showFeedback && floatingBallEnabled) {
+        FlutterToastr.show('悬浮球已开启；若屏幕上看不到，请检查系统「显示悬浮窗」与厂商「后台弹出界面」权限',
+            context, duration: 4, backgroundColor: Colors.green);
       }
     } catch (e) {
       logger.w('悬浮球服务调用失败', error: e);
+      if (mounted && showFeedback) {
+        FlutterToastr.show('悬浮球调用失败：$e', context, duration: 4, backgroundColor: Colors.red);
+      }
     }
   }
 
@@ -593,11 +610,13 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
                             ? const Text('已授权', style: TextStyle(fontSize: 12, color: Colors.green))
                             : const Icon(Icons.arrow_forward_ios, size: 16),
                         onTap: () async {
-                          try {
-                            await _floatingChannel.invokeMethod('checkOverlay');
-                          } catch (_) {}
-                          // 原生 checkOverlay 内部对未授权场景会跳转系统设置
-                          await Future.delayed(const Duration(milliseconds: 500));
+                          if (!_overlayPermissionGranted) {
+                            // 未授权：跳转系统悬浮窗权限设置页
+                            try {
+                              await _floatingChannel.invokeMethod('openOverlaySettings');
+                            } catch (_) {}
+                            await Future.delayed(const Duration(milliseconds: 600));
+                          }
                           final granted = await _queryOverlayPermission();
                           if (mounted) setState(() => _overlayPermissionGranted = granted);
                         },
@@ -615,7 +634,7 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
                         onChanged: _overlayPermissionGranted
                             ? (v) {
                                 setState(() => floatingBallEnabled = v);
-                                _saveFloatingBallConfig();
+                                _saveFloatingBallConfig(showFeedback: true);
                               }
                             : null,
                       ),
@@ -660,14 +679,14 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
                           '服务器同时支持最新无状态协议（2026-07-28）与旧版握手协议。',
                           style: TextStyle(
                             fontSize: 13,
-                            color: Colors.grey.shade700,
+                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.75),
                           ),
                         ),
                       ),
                       const SizedBox(height: 8),
                       Container(
                         width: double.infinity,
-                        color: Colors.grey.shade100,
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
                         child: Stack(
                           children: [
                             Padding(
@@ -679,10 +698,10 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
                               ),
                               child: SelectableText(
                                 configJson,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontFamily: 'monospace',
                                   fontSize: 13,
-                                  color: Colors.black,
+                                  color: Theme.of(context).colorScheme.onSurface,
                                 ),
                               ),
                             ),

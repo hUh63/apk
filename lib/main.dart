@@ -118,9 +118,18 @@ class _SplashGateState extends State<SplashGate> {
     if (!_showSplash) return widget.child;
 
     final config = widget.appConfiguration;
-    // 开关关闭 或 背景选"原生启动页(off)"时不叠加自定义启动页
-    if (!config.splashEnabled || config.splashBackground == 'off') {
+    // 总开关关闭：不做任何启动页，直接进入主界面
+    if (!config.splashEnabled) {
       return widget.child;
+    }
+    // 背景选"原生启动页(off)"：不叠加品牌启动页，改为系统画面的延续——
+    // 主题色背景 + 应用图标放大动画（跟随应用主题，含莫奈取色与深浅模式）
+    if (config.splashBackground == 'off') {
+      return NativeStyleSplash(
+        onComplete: () {
+          if (mounted) setState(() => _showSplash = false);
+        },
+      );
     }
 
     final backgroundFile =

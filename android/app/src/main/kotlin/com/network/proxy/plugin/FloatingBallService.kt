@@ -159,7 +159,21 @@ class FloatingBallService : Service() {
             }
         }
 
-        windowManager.addView(ballView, ballParams)
+        try {
+            windowManager.addView(ballView, ballParams)
+        } catch (e: Exception) {
+            // 悬浮窗被系统/厂商拦截时必须给出可见反馈，否则用户开启后什么都看不到
+            Log.e(TAG, "悬浮球添加失败", e)
+            ballView = null
+            try {
+                android.widget.Toast.makeText(
+                    this,
+                    "悬浮球启动失败：${e.message ?: "窗口被系统拒绝，请检查「显示悬浮窗」与厂商后台弹出权限"}",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            } catch (_: Throwable) {}
+            return
+        }
         scheduleDock()
     }
 
@@ -264,8 +278,10 @@ class FloatingBallService : Service() {
         dockRunnable = Runnable {
             val params = ballParams ?: return@Runnable
             val screen = resources.displayMetrics.widthPixels
-            val center = params.x + 110 // 估算球心
-            val targetX = if (center < screen / 2) 8 else screen - 240
+            // gravity 为 END：x 表示距屏幕右缘的偏移。球心屏幕坐标 ≈ screen - x - 55
+            val center = screen - params.x - 55
+            // 贴左：球左缘 ≈ 8 → x = screen - 118；贴右：球右缘 ≈ 8 → x = 8
+            val targetX = if (center < screen / 2) screen - 118 else 8
             params.x = targetX
             try {
                 windowManager.updateViewLayout(ballView, params)

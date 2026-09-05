@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="launch_bg">#1A4B8F</color>
+    <!-- 系统启动画面背景：与应用浅色主题 surface（白色）保持一致；
+         夜间模式由 values-night/launch_bg 提供，跟随系统深浅模式 -->
+    <color name="launch_bg">#FFFFFF</color>
 </resources>

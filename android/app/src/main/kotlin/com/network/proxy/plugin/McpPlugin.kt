@@ -54,6 +54,13 @@ class McpPlugin : FlutterPlugin {
         if (call.method == "checkOverlay") {
             return mapOf("granted" to Settings.canDrawOverlays(ctx))
         }
+        // 主动跳转悬浮窗权限设置页（由 Flutter 侧权限入口调用）
+        if (call.method == "openOverlaySettings") {
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${ctx.packageName}"))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            ctx.startActivity(intent)
+            return mapOf("success" to true)
+        }
         if (!Settings.canDrawOverlays(ctx)) {
             // 引导开启悬浮窗权限
             val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${ctx.packageName}"))
@@ -64,14 +71,25 @@ class McpPlugin : FlutterPlugin {
         val intent = Intent(ctx, FloatingBallService::class.java)
         when (call.method) {
             "start" -> {
-                intent.putExtra("autoDock", call.argument<Boolean>("autoDock") ?: true)
-                intent.putExtra("color", call.argument<Int>("color") ?: 0xFF6750A4.toInt())
-                intent.putExtra("alpha", call.argument<Int>("alpha") ?: 230)
-                ctx.startForegroundService(intent)
+                try {
+                    intent.putExtra("autoDock", call.argument<Boolean>("autoDock") ?: true)
+                    // 注意：Dart int 超出 Int 范围时（如 ARGB 颜色值）会解码为 Long，必须按 Number 取值再转 Int
+                    intent.putExtra("color", (call.argument<Any?>("color") as? Number)?.toInt() ?: 0xFF6750A4.toInt())
+                    intent.putExtra("alpha", (call.argument<Any?>("alpha") as? Number)?.toInt() ?: 230)
+                    intent.putExtra("running", call.argument<Boolean>("running") ?: false)
+                    ctx.startForegroundService(intent)
+                } catch (e: Exception) {
+                    // 前台服务启动失败（系统限制等）必须反馈给用户，避免"开了但没反应"
+                    return mapOf("success" to false, "error" to (e.message ?: "前台服务启动失败"))
+                }
             }
             "stop" -> {
                 intent.action = "STOP"
-                ctx.startService(intent)
+                try {
+                    ctx.startService(intent)
+                } catch (e: Exception) {
+                    return mapOf("success" to false, "error" to (e.message ?: "服务停止失败"))
+                }
             }
         }
         return mapOf("success" to true)

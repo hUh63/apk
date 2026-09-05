@@ -233,3 +233,83 @@ class _SplashBannerState extends State<SplashBanner>
     );
   }
 }
+
+/// 原启动页（off 模式）：系统启动画面的无缝延续。
+/// - 背景跟随应用主题 surface（深浅模式 / 莫奈取色自动变化）
+/// - 应用图标一次克制的放大动画（系统画面是静态图标，这里完成"放大"瞬间）
+/// - 无文字、无进度条，动画结束立即进入主界面
+class NativeStyleSplash extends StatefulWidget {
+  final VoidCallback? onComplete;
+
+  const NativeStyleSplash({super.key, this.onComplete});
+
+  @override
+  State<NativeStyleSplash> createState() => _NativeStyleSplashState();
+}
+
+class _NativeStyleSplashState extends State<NativeStyleSplash>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  bool _exiting = false;
+  Timer? _doneTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 560));
+    _controller.forward();
+    // 放大完成后淡出交还主界面，整体约 1 秒，接近系统启动画面的自然衔接
+    _doneTimer = Timer(const Duration(milliseconds: 780), () {
+      if (!mounted) return;
+      setState(() => _exiting = true);
+      Future.delayed(const Duration(milliseconds: 180), () {
+        if (mounted) widget.onComplete?.call();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _doneTimer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final curve =
+        CurvedAnimation(parent: _controller, curve: Curves.easeOutBack);
+
+    return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: Center(
+        child: AnimatedOpacity(
+          opacity: _exiting ? 0.0 : 1.0,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          child: ScaleTransition(
+            scale: Tween(begin: 0.55, end: 1.0).animate(curve),
+            child: Container(
+              width: 104,
+              height: 104,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: cs.primary.withValues(alpha: 0.08),
+                border: Border.all(color: cs.primary.withValues(alpha: 0.25), width: 1.5),
+              ),
+              alignment: Alignment.center,
+              // 图标随主题色/莫奈取色染色（与 Android 13 themed icon 同风格）：
+              // 冷启动系统画面为静态彩色图标，进入应用后由此处即时跟随主题
+              child: ColorFiltered(
+                colorFilter: ColorFilter.mode(cs.primary, BlendMode.srcIn),
+                child: Image.asset('assets/icon.png', width: 64, height: 64),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

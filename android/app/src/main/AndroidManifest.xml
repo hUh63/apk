@@ -17,6 +17,16 @@
     <!-- Dhizuku permission - required for Dhizuku to recognize and manage this app -->
     <uses-permission android:name="me.bmax.dhizuku.permission.DHIZUKU_API" />
 
+    <!-- Shizuku 官方要求：应用必须声明 ShizukuProvider 才能在启动时收到 Shizuku binder。
+         缺少此声明时 Shizuku.pingBinder() 永远返回 false，授权弹窗永远无法弹出。 -->
+    <provider
+        android:name="rikka.shizuku.ShizukuProvider"
+        android:authorities="${applicationId}.shizuku"
+        android:multiprocess="false"
+        android:enabled="true"
+        android:exported="true"
+        android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
     <!-- Declare media/storage permissions. These are required if your app or
          plugins directly read media files. You still need to request these at
          runtime on Android (and on Android 13+ use the READ_MEDIA_* permissions).
