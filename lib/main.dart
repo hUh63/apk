@@ -24,6 +24,7 @@ import 'package:flutter/material.dart';
 import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/network/components/manager/environment_manager.dart';
 import 'package:proxypin/network/util/logger.dart';
+import 'package:proxypin/ui/component/log_viewer_page.dart' show LogManager, LogLevel;
 import 'package:proxypin/network/util/mtls.dart';
 import 'package:proxypin/ui/component/chinese_font.dart';
 import 'package:proxypin/ui/component/multi_window_compat.dart';
@@ -44,6 +45,21 @@ import 'l10n/app_localizations.dart';
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   await RustLib.init();
+
+  // 把运行日志同步进内存队列，供「工具箱 → 日志」页实时查看
+  logBridge = (level, message, error, stackTrace) {
+    LogManager().addLog(
+      switch (level) {
+        Level.debug => LogLevel.debug,
+        Level.warning => LogLevel.warning,
+        Level.error => LogLevel.error,
+        _ => LogLevel.info,
+      },
+      'app',
+      message,
+      stackTrace: stackTrace?.toString(),
+    );
+  };
 
   final windowController = Platforms.isDesktop() ? await DesktopMultiWindow.ensureInitialized() : null;
 

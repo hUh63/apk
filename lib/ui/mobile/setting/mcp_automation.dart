@@ -1232,7 +1232,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
           content: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: 560,
-              maxHeight: MediaQuery.sizeOf(context).height * 0.75,
+              maxHeight: MediaQuery.sizeOf(context).height * 0.82,
             ),
             child: SizedBox(
               width: double.maxFinite,
@@ -1243,11 +1243,11 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                 children: [
                   TextField(
                       controller: nameController,
-                      decoration: const InputDecoration(labelText: '规则名称', border: OutlineInputBorder())),
+                      decoration: const InputDecoration(labelText: '规则名称', border: OutlineInputBorder(), isDense: true)),
                   const SizedBox(height: 8),
                   TextField(
                       controller: descController,
-                      decoration: const InputDecoration(labelText: '描述', border: OutlineInputBorder())),
+                      decoration: const InputDecoration(labelText: '描述', border: OutlineInputBorder(), isDense: true)),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<RulePriority>(
                     value: priority,
@@ -1451,7 +1451,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
       return DropdownButtonFormField<String>(
         value: opts.contains(c.valueController.text) ? c.valueController.text : null,
         isExpanded: true,
-        decoration: const InputDecoration(labelText: '值', border: OutlineInputBorder()),
+        decoration: const InputDecoration(labelText: '值', border: OutlineInputBorder(), isDense: true),
         items: opts
             .map((v) => DropdownMenuItem(value: v, child: Text(_ConditionRow.valueDisplayName(c.type, v), style: const TextStyle(fontSize: 13))))
             .toList(),
@@ -1460,7 +1460,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     }
     return TextField(
       controller: c.valueController,
-      decoration: const InputDecoration(labelText: '值', border: OutlineInputBorder()),
+      decoration: const InputDecoration(labelText: '值', border: OutlineInputBorder(), isDense: true),
     );
   }
 

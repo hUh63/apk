@@ -266,9 +266,10 @@ class _NativeStyleSplashState extends State<NativeStyleSplash>
     super.didChangeDependencies();
     if (_started) return;
     _started = true;
-    // 先预载应用图标再开始放大动画：避免"背景先出现、图标后闪现"的割裂感，
-    // 冷启动全程图标保持在屏（系统画面/窗口背景均为图标 + 主题色）
-    precacheImage(const AssetImage('assets/icon.png'), context)
+    // 预载透明底图标（icon_foreground.png，95% 透明）后再开始放大动画：
+    // 透明底 + srcIn 染色只染图案本身，保留 ∞ 图形并随主题色变化；
+    // 若用不透明 icon.png 整体染色会变成纯色块，图案会消失
+    precacheImage(const AssetImage('assets/icon_foreground.png'), context)
         .whenComplete(() {
       if (!mounted) return;
       _controller.forward();
@@ -318,7 +319,8 @@ class _NativeStyleSplashState extends State<NativeStyleSplash>
               // 冷启动系统画面为静态彩色图标，进入应用后由此处即时跟随主题
               child: ColorFiltered(
                 colorFilter: ColorFilter.mode(cs.primary, BlendMode.srcIn),
-                child: Image.asset('assets/icon.png', width: 64, height: 64),
+                child: Image.asset('assets/icon_foreground.png',
+                    width: 64, height: 64),
               ),
             ),
           ),

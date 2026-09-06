@@ -31,9 +31,10 @@ import android.widget.TextView
 
 /**
  * 悬浮球前台服务（液态玻璃风格）：
- * - 正圆玻璃球：径向渐变球体 + 顶部高光 + 白色波纹图案，无描边，颜色/透明度可自定义
- * - 点击弹出贴球配置面板：设置 / 换颜色 / 调透明度 / 贴边开关 / 隐藏悬浮球（配置实时写回偏好设置）
- * - 3 秒无操作自动贴边（可关）
+ * - 小巧正圆玻璃球：径向渐变球体 + 顶部高光 + 白色波纹图案，无描边，颜色/透明度可自定义
+ * - 拖动跟随手指（屏幕坐标驱动，坐标系与贴边一致），3 秒无操作自动贴边
+ * - 点击弹出配置面板：始终出现在球的内侧且不与球重叠（垂直与球心对齐），
+ *   内容：设置 / 换颜色 / 调透明度 / 贴边开关 / 隐藏悬浮球（实时写回偏好设置）
  * - 前台服务提升应用保活能力
  */
 class FloatingBallService : Service() {
@@ -42,8 +43,8 @@ class FloatingBallService : Service() {
         const val CHANNEL_ID = "floating-ball"
         const val NOTIFICATION_ID = 9528
 
-        /** 球体直径（dp），正圆保证 */
-        const val BALL_DP = 104
+        /** 球体直径（dp），小尺寸正圆 */
+        const val BALL_DP = 76
 
         /** 与 Flutter 侧预置色一致的循环列表 */
         val PRESET_COLORS = intArrayOf(
@@ -72,6 +73,15 @@ class FloatingBallService : Service() {
     private var panelOpen = false
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /** 球体像素尺寸 */
+    private fun ballSizePx(): Int = (BALL_DP * resources.displayMetrics.density).toInt()
+
+    /** 球左缘的屏幕坐标（窗口 gravity 为 TOP|END，x 表示距右缘距离） */
+    private fun ballScreenLeft(): Int {
+        val dm = resources.displayMetrics
+        return dm.widthPixels - (ballParams?.x ?: 0) - ballSizePx()
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -126,7 +136,7 @@ class FloatingBallService : Service() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun createBall() {
-        val sizePx = (BALL_DP * resources.displayMetrics.density).toInt()
+        val sizePx = ballSizePx()
         ballView = GlassBallView(this).apply {
             setStyle(ballColor, ballAlpha)
         }
@@ -142,26 +152,31 @@ class FloatingBallService : Service() {
             y = 260
         }
 
-        var downX = 0f; var downY = 0f
-        var startX = 0; var startY = 0
+        val dm = resources.displayMetrics
+        var downRawX = 0f; var downRawY = 0f
+        var startLeft = 0; var startTop = 0
         var moved = false
 
         ballView?.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    downX = event.rawX; downY = event.rawY
-                    startX = ballParams?.x ?: 0; startY = ballParams?.y ?: 0
+                    downRawX = event.rawX; downRawY = event.rawY
+                    startLeft = ballScreenLeft()
+                    startTop = ballParams?.y ?: 0
                     moved = false
                     cancelDock()
                     false
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val dx = (event.rawX - downX).toInt()
-                    val dy = (event.rawY - downY).toInt()
+                    val dx = (event.rawX - downRawX).toInt()
+                    val dy = (event.rawY - downRawY).toInt()
                     if (dx * dx + dy * dy > 100) {
                         moved = true
-                        ballParams?.x = startX + dx
-                        ballParams?.y = startY + dy
+                        // 拖动以屏幕坐标驱动，避免 END 坐标系方向反导致球不跟手
+                        val newLeft = (startLeft + dx).coerceIn(0, dm.widthPixels - sizePx)
+                        val newTop = (startTop + dy).coerceIn(0, dm.heightPixels - sizePx)
+                        ballParams?.x = dm.widthPixels - newLeft - sizePx
+                        ballParams?.y = newTop
                         ballParams?.let { windowManager.updateViewLayout(ballView, it) }
                     }
                     moved
@@ -220,43 +235,44 @@ class FloatingBallService : Service() {
         }
         panelOpen = true
         val dm = resources.displayMetrics
-        val sizePx = (BALL_DP * resources.displayMetrics.density).toInt()
+        val density = dm.density
 
         panelView = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            // 玻璃面板：深色半透明圆角 + 高光描顶
+            // 玻璃面板：深色半透明圆角 + 细白描边
             background = GradientDrawable().apply {
-                cornerRadius = 30f
-                setColor(Color.argb(228, 24, 24, 30))
+                cornerRadius = 26f
+                setColor(Color.argb(232, 24, 24, 30))
                 setStroke(1, Color.argb(46, 255, 255, 255))
             }
-            setPadding(34, 28, 34, 30)
+            setPadding((30 * density).toInt(), (22 * density).toInt(), (30 * density).toInt(), (24 * density).toInt())
             elevation = 18f
         }
 
         val title = TextView(this).apply {
             text = "悬浮球"
-            setTextColor(Color.argb(200, 255, 255, 255))
-            textSize = 12f
-            letterSpacing = 0.1f
+            setTextColor(Color.argb(190, 255, 255, 255))
+            textSize = 11f
+            letterSpacing = 0.08f
         }
         panelView?.addView(title)
 
         fun addButton(text: String, action: (Button) -> Unit): Button {
             val btn = Button(this).apply {
                 this.text = text
-                textSize = 13f
+                textSize = 12.5f
                 isAllCaps = false
                 setTextColor(Color.WHITE)
                 background = GradientDrawable().apply {
-                    cornerRadius = 22f
-                    setColor(Color.argb(42, 255, 255, 255))
-                    setStroke(1, Color.argb(36, 255, 255, 255))
+                    cornerRadius = 19f
+                    setColor(Color.argb(40, 255, 255, 255))
+                    setStroke(1, Color.argb(34, 255, 255, 255))
                 }
                 layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    (188 * density).toInt(),
                     LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { topMargin = (8 * resources.displayMetrics.density).toInt() }
+                ).apply { topMargin = (6 * density).toInt() }
+                setPadding(0, 0, 0, 0)
                 setOnClickListener { action(this) }
             }
             panelView?.addView(btn)
@@ -298,11 +314,15 @@ class FloatingBallService : Service() {
             stopSelf()
         }
 
-        // 面板贴球：球在右半屏 → 面板出现在球左侧；球在左半屏 → 面板出现在球右侧
-        val screenW = dm.widthPixels
-        val ballLeft = screenW - (ballParams?.x ?: 24) - sizePx
+        // 面板定位：球在右半屏 → 面板在球左侧；球在左半屏 → 面板在球右侧。
+        // 与球保持 16dp 间距不重叠，垂直方向与球心对齐，且面板整体不超出屏幕。
+        val sizePx = ballSizePx()
+        val ballLeft = ballScreenLeft()
         val ballTop = (ballParams?.y ?: 260)
-        val onLeft = ballLeft + sizePx / 2 < screenW / 2
+        val ballCenterY = ballTop + sizePx / 2
+        val onLeft = ballLeft + sizePx / 2 < dm.widthPixels / 2
+        // 面板估算高度：标题 + 5 个按钮 + padding（dp）
+        val panelH = (300 * density).toInt()
 
         panelParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -312,15 +332,26 @@ class FloatingBallService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             if (onLeft) {
+                // 面板在球右侧
                 gravity = Gravity.TOP or Gravity.START
-                x = (ballLeft + sizePx + 12).coerceAtLeast(8)
+                x = (ballLeft + sizePx + (16 * density).toInt())
+                    .coerceAtMost(dm.widthPixels - (150 * density).toInt())
             } else {
+                // 面板在球左侧：END 系 x = 距右缘距离，面板右缘 = 球左缘 - 16dp
                 gravity = Gravity.TOP or Gravity.END
-                x = (screenW - ballLeft + 12).coerceAtLeast(8)
+                x = (dm.widthPixels - ballLeft + (16 * density).toInt())
+                    .coerceAtMost(dm.widthPixels - (150 * density).toInt())
             }
-            y = (ballTop - 20).coerceIn(8, (dm.heightPixels - 360).coerceAtLeast(8))
+            // 垂直：面板中心对齐球心，限制在屏内
+            y = (ballCenterY - panelH / 2).coerceIn((8 * density).toInt(), dm.heightPixels - panelH - (8 * density).toInt())
         }
-        windowManager.addView(panelView, panelParams)
+        try {
+            windowManager.addView(panelView, panelParams)
+        } catch (e: Exception) {
+            Log.e(TAG, "面板添加失败", e)
+            panelOpen = false
+            panelView = null
+        }
     }
 
     private fun closePanel() {
@@ -338,8 +369,8 @@ class FloatingBallService : Service() {
         dockRunnable = Runnable {
             val params = ballParams ?: return@Runnable
             val screen = resources.displayMetrics.widthPixels
-            val sizePx = (BALL_DP * resources.displayMetrics.density).toInt()
-            // gravity 为 END：x 表示距屏幕右缘的偏移。球心屏幕坐标 ≈ screen - x - sizePx/2
+            val sizePx = ballSizePx()
+            // END 系：x 为距屏幕右缘距离；球心屏幕坐标 ≈ screen - x - sizePx/2
             val center = screen - params.x - sizePx / 2
             // 贴左：球左缘 ≈ 8 → x = screen - sizePx - 8；贴右：球右缘 ≈ 8 → x = 8
             val targetX = if (center < screen / 2) screen - sizePx - 8 else 8

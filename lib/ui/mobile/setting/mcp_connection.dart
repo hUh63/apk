@@ -176,20 +176,26 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
           title: const Text('自定义悬浮球', style: TextStyle(fontSize: 16)),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              // 实时预览
+              // 实时预览：液态玻璃球（渐变 + 高光 + 波纹），与真实悬浮球一致
               Center(
                 child: Container(
-                  width: 72,
-                  height: 72,
+                  width: 76,
+                  height: 76,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: color.withValues(alpha: alpha / 255),
-                    boxShadow: [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 12)],
+                    boxShadow: [
+                      BoxShadow(
+                          color: color.withValues(alpha: 0.35),
+                          blurRadius: 14,
+                          offset: const Offset(0, 4)),
+                    ],
                   ),
-                  child: const Center(
-                    child: Text('P',
-                        style: TextStyle(
-                            fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1)),
+                  child: Opacity(
+                    opacity: (alpha / 255).clamp(0.2, 1.0),
+                    child: CustomPaint(
+                      size: const Size(76, 76),
+                      painter: _GlassBallPreviewPainter(color: color),
+                    ),
                   ),
                 ),
               ),
@@ -816,20 +822,24 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
                     ),
                   ),
                 ],
-                if (McpScreen.isSupported && !shizukuGranted) ...[
+                if (McpScreen.isSupported) ...[
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
-                      icon: const Icon(Icons.security),
-                      label: const Text('请求 Shizuku 授权'),
+                      icon: Icon(
+                        shizukuGranted ? Icons.verified_user : Icons.security,
+                        size: 20,
+                        color: shizukuGranted ? Colors.green : null,
+                      ),
+                      label: Text(shizukuGranted ? 'Shizuku 已授权' : '请求 Shizuku 授权'),
                       onPressed: () async {
                         final ok = await McpScreen.requestShizukuAuthorization();
                         if (!mounted) return;
                         FlutterToastr.show(
                           ok
                               ? 'Shizuku 已授权'
-                              : '未完成授权：请在刚弹出的授权窗口中选择“允许”；若未弹出，请到 Shizuku 应用中为本应用授权',
+                              : '未完成授权：请确认 Shizuku 正在运行，并到 Shizuku 应用中选择本应用授权；或在弹窗中选择“允许”',
                           context,
                           duration: 3,
                           backgroundColor: ok ? Colors.green : Colors.orange,
@@ -1040,4 +1050,75 @@ class _ToolTile extends StatelessWidget {
       trailing: Switch(value: enabled, onChanged: onChanged),
     );
   }
+}
+
+/// 液态玻璃球预览绘制（与原生悬浮球一致的径向渐变 + 高光 + 波纹图案）
+class _GlassBallPreviewPainter extends CustomPainter {
+  final Color color;
+  const _GlassBallPreviewPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final r = size.width / 2;
+
+    final light = Color.lerp(color, Colors.white, 0.42)!;
+    final dark = Color.lerp(color, Colors.black, 0.38)!;
+
+    // 球体径向渐变（左上亮 → 主色 → 右下暗）
+    final paint = Paint()
+      ..shader = RadialGradient(
+        center: Alignment(-0.32, -0.38),
+        radius: 1.32,
+        colors: [light, color, dark],
+        stops: const [0.0, 0.52, 1.0],
+      ).createShader(Rect.fromCircle(center: Offset(cx, cy), radius: r));
+    canvas.drawCircle(Offset(cx, cy), r, paint);
+
+    // 顶部玻璃高光
+    final hlPaint = Paint()..color = Colors.white.withValues(alpha: 0.32);
+    canvas.drawOval(
+      Rect.fromCenter(
+          center: Offset(cx - r * 0.24, cy - r * 0.59),
+          width: r * 0.64,
+          height: r * 0.46),
+      hlPaint,
+    );
+    // 底部微弱反光
+    final glPaint = Paint()..color = Colors.white.withValues(alpha: 0.13);
+    canvas.drawOval(
+      Rect.fromCenter(
+          center: Offset(cx + r * 0.02, cy + r * 0.55),
+          width: r * 0.64,
+          height: r * 0.22),
+      glPaint,
+    );
+
+    // 白色同心波纹（右上方向弧）
+    final wavePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..color = Colors.white;
+    const alphas = [0.95, 0.62, 0.36];
+    for (var i = 0; i < 3; i++) {
+      wavePaint.strokeWidth = r * (0.085 - i * 0.016);
+      wavePaint.color = Colors.white.withValues(alpha: alphas[i]);
+      final rr = r * (0.20 + i * 0.21);
+      canvas.drawArc(
+        Rect.fromCenter(
+            center: Offset(cx, cy + r * 0.10),
+            width: rr * 2,
+            height: rr * 2),
+        // 248° 起、扫 124°（与原生 Kotlin 绘制角度一致）
+        4.33,
+        2.16,
+        false,
+        wavePaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GlassBallPreviewPainter old) => old.color != color;
 }

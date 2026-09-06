@@ -289,7 +289,8 @@ class _LogViewerPageState extends State<LogViewerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('日志管理'),
+        title: const Text('日志管理',
+            maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
           // 录制开关（开启后开始记录新日志）
           IconButton(
