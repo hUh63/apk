@@ -1,10 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 启动背景（API 21+）：主题色 + 居中应用图标 -->
+<!-- 启动背景（API 21-30）：纯主题色（浅色白/深色 #3C3C3C 随系统深浅模式）。
+     图标不在此绘制：v26+ 的 ic_launcher 为 adaptive-icon XML，<bitmap> 无法引用。 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/launch_bg" />
-    <item>
-        <bitmap
-            android:src="@mipmap/ic_launcher"
-            android:gravity="center" />
-    </item>
 </layer-list>

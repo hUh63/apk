@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 启动背景（API 31+）：纯主题色。Android 12+ 由系统启动画面负责绘制图标与背景
+     （LaunchTheme 的 windowSplashScreenBackground / windowSplashScreenAnimatedIcon），
+     本资源仅作为 NormalTheme 窗口背景（Flutter 首帧前），必须为可安全加载的纯色。 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/launch_bg" />
+</layer-list>
