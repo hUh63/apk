@@ -21,10 +21,12 @@ import 'dart:io';
 import 'package:code_forge/code_forge.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:proxypin/network/bin/configuration.dart';
 import 'package:proxypin/network/components/manager/environment_manager.dart';
 import 'package:proxypin/network/util/logger.dart';
 import 'package:proxypin/ui/component/log_viewer_page.dart' show LogManager, LogLevel;
+import 'package:proxypin/ui/mobile/setting/mcp_connection.dart';
 import 'package:proxypin/network/util/mtls.dart';
 import 'package:proxypin/ui/component/chinese_font.dart';
 import 'package:proxypin/ui/component/multi_window_compat.dart';
@@ -36,6 +38,7 @@ import 'package:proxypin/ui/mobile/mobile.dart';
 import 'package:proxypin/utils/desktop_support.dart';
 import 'package:proxypin/utils/navigator.dart';
 import 'package:proxypin/utils/platform.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'l10n/app_localizations.dart';
@@ -60,6 +63,33 @@ void main(List<String> args) async {
       stackTrace: stackTrace?.toString(),
     );
   };
+
+  // 原生（悬浮球面板「MCP 设置」等）请求跳转 MCP 设置页
+  const MethodChannel('com.proxy/toFlutter').setMethodCallHandler((call) async {
+    if (call.method == 'openMcpSettings' && Platform.isAndroid) {
+      final nav = navigatorHelper.navigatorKey.currentState;
+      if (nav == null) return;
+      await nav.push(MaterialPageRoute(
+          builder: (_) => const McpConnectionPage()));
+    }
+  });
+
+  // 冷启动自动恢复悬浮球：仅当用户开启过才随应用启动（默认关闭不打扰）；
+  // 必须在启动早期执行，避免"重进设置页才出现"
+  if (Platform.isAndroid) {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('floatingBallEnabled') ?? false) {
+        await const MethodChannel('com.proxy/floatingBall').invokeMethod('start', {
+          'autoDock': prefs.getBool('floatingBallAutoDock') ?? true,
+          'color': prefs.getInt('floatingBallColor') ?? 0xFF6750A4,
+          'alpha': prefs.getInt('floatingBallAlpha') ?? 255,
+          'running': false,
+          'silent': true, // 无悬浮窗权限时静默跳过，不跳系统设置打扰
+        });
+      }
+    } catch (_) {/* 插件未就绪或失败不影响启动 */}
+  }
 
   final windowController = Platforms.isDesktop() ? await DesktopMultiWindow.ensureInitialized() : null;
 

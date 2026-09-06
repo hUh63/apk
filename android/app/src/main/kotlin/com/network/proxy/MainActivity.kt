@@ -18,6 +18,19 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         pluginRegister(flutterEngine)
+        handleOpenMcpSettings(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleOpenMcpSettings(intent)
+    }
+
+    /** 悬浮球面板「MCP 设置」跳转：把 intent 目标转发给 Flutter 侧导航 */
+    private fun handleOpenMcpSettings(intent: Intent?) {
+        if (intent?.getBooleanExtra("com.proxy.openMcpSettings", false) == true) {
+            McpPlugin.requestOpenMcpSettings()
+        }
     }
 
     override fun onUserLeaveHint() {

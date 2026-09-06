@@ -499,7 +499,7 @@ class _AiChatPageState extends State<AiChatPage> {
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI 分析', style: TextStyle(fontSize: 16)),
+        title: const Text('AI分析', style: TextStyle(fontSize: 16, overflow: TextOverflow.ellipsis)),
         centerTitle: true,
         actions: [
           // Agent 模式开关：AI 自动调用 ProxyPin 功能

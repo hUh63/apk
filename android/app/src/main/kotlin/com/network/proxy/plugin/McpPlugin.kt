@@ -45,6 +45,21 @@ class McpPlugin : FlutterPlugin {
     companion object {
         private const val CHANNEL_NAME = "com.proxy/mcpScreen"
         private const val SHIZUKU_REQUEST_CODE = 631
+
+        // 原生 → Flutter 事件通道（悬浮球面板"跳转 MCP 设置"等）
+        private const val TO_FLUTTER_CHANNEL = "com.proxy/toFlutter"
+        @Volatile
+        private var binaryMessenger: io.flutter.plugin.common.BinaryMessenger? = null
+
+        /** 由 MainActivity 在收到跳转 MCP 设置页的 intent 时调用 */
+        @JvmStatic
+        fun requestOpenMcpSettings() {
+            val m = binaryMessenger ?: return
+            try {
+                io.flutter.plugin.common.MethodChannel(m, TO_FLUTTER_CHANNEL)
+                    .invokeMethod("openMcpSettings", null)
+            } catch (_: Exception) {}
+        }
     }
 
     /** 悬浮球服务控制：start / stop */
@@ -62,6 +77,10 @@ class McpPlugin : FlutterPlugin {
             return mapOf("success" to true)
         }
         if (!Settings.canDrawOverlays(ctx)) {
+            // 冷启动静默恢复场景不做跳转打扰；用户主动开启（非 silent）才跳权限页引导
+            if (call.method == "start" && call.argument<Boolean>("silent") == true) {
+                return mapOf("success" to false, "error" to "no overlay permission")
+            }
             // 引导开启悬浮窗权限
             val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${ctx.packageName}"))
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -99,6 +118,7 @@ class McpPlugin : FlutterPlugin {
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
+        binaryMessenger = binding.binaryMessenger
         // 悬浮球服务通道
         io.flutter.plugin.common.MethodChannel(binding.binaryMessenger, "com.proxy/floatingBall")
             .setMethodCallHandler { call, result ->
@@ -127,6 +147,7 @@ class McpPlugin : FlutterPlugin {
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = null
+        binaryMessenger = null
     }
 
     /**

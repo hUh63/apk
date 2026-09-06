@@ -184,7 +184,8 @@ class FloatingBallService : Service() {
                 }
                 MotionEvent.ACTION_UP -> {
                     if (!moved) togglePanel()
-                    scheduleDock()
+                    dockToEdge()
+                    if (!panelOpen) scheduleRetract()
                     true
                 }
                 else -> false
@@ -206,7 +207,8 @@ class FloatingBallService : Service() {
             } catch (_: Throwable) {}
             return
         }
-        scheduleDock()
+        dockToEdge()
+        scheduleRetract()
     }
 
     private fun refreshBallStyle() {
@@ -280,9 +282,11 @@ class FloatingBallService : Service() {
             return btn
         }
 
-        addButton("设置") {
+        addButton("MCP 设置") {
+            // 拉起应用并跳转 MCP 设置页（MainActivity 转发 intent 给 Flutter 导航）
             val launch = packageManager.getLaunchIntentForPackage(packageName)
-            launch?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            launch?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            launch?.putExtra("com.proxy.openMcpSettings", true)
             startActivity(launch)
             closePanel()
         }
@@ -306,7 +310,7 @@ class FloatingBallService : Service() {
             autoDock = !autoDock
             btn.text = if (autoDock) "贴边：开" else "贴边：关"
             savePref("floatingBallAutoDock", autoDock)
-            if (autoDock) scheduleDock() else cancelDock()
+            if (autoDock) scheduleRetract() else cancelDock()
         }
         dockBtn.text = if (autoDock) "贴边：开" else "贴边：关"
         addButton("关闭悬浮球") {
@@ -363,30 +367,48 @@ class FloatingBallService : Service() {
         panelOpen = false
     }
 
-    /** 3 秒无操作贴边：球藏入屏幕边缘 2/3 只露 1/3，并降低透明度表示"已收纳" */
-    private fun scheduleDock() {
+    /** 悬浮球默认吸附屏幕左右边缘（完整可见），拖动/点击后立即吸附 */
+    private fun dockToEdge() {
+        val params = ballParams ?: return
+        val screen = resources.displayMetrics.widthPixels
+        val sizePx = ballSizePx()
+        // END 系：x 为距右缘距离；球心屏幕坐标 ≈ screen - x - sizePx/2
+        val center = screen - params.x - sizePx / 2
+        params.x = if (center < screen / 2) screen - sizePx - 8 else 8
+        ballView?.let {
+            it.docked = false
+            it.alpha = ballAlpha.coerceIn(30, 255) / 255f
+            try {
+                windowManager.updateViewLayout(it, params)
+            } catch (_: Exception) {}
+        }
+    }
+
+    /** 贴边开关开启：3 秒后收纳（藏入边缘 2/3 只露 1/3，透明度降低） */
+    private fun scheduleRetract() {
         cancelDock()
         if (!autoDock) return
-        dockRunnable = Runnable {
-            val params = ballParams ?: return@Runnable
-            val screen = resources.displayMetrics.widthPixels
-            val sizePx = ballSizePx()
-            // END 系：x 为距屏幕右缘距离；球心屏幕坐标 ≈ screen - x - sizePx/2
-            val center = screen - params.x - sizePx / 2
-            // 右贴：球藏右 2/3（x 为负，窗口部分超出右缘）；左贴：球左缘在 -2/3 球宽处
-            params.x = if (center < screen / 2) screen - sizePx / 3 else -(2 * sizePx / 3)
-            ballView?.let {
-                it.docked = true
-                it.alpha = (ballAlpha.coerceIn(30, 255) / 255f) * 0.45f
-                try {
-                    windowManager.updateViewLayout(it, params)
-                } catch (_: Exception) {}
-            }
-        }
+        dockRunnable = Runnable { retractToEdge() }
         handler.postDelayed(dockRunnable!!, 3000)
     }
 
-    /** 触碰/唤起时从贴边状态恢复：位置拉回屏内、透明度还原 */
+    private fun retractToEdge() {
+        if (panelOpen) return
+        val params = ballParams ?: return
+        val screen = resources.displayMetrics.widthPixels
+        val sizePx = ballSizePx()
+        val center = screen - params.x - sizePx / 2
+        params.x = if (center < screen / 2) screen - sizePx / 3 else -(2 * sizePx / 3)
+        ballView?.let {
+            it.docked = true
+            it.alpha = (ballAlpha.coerceIn(30, 255) / 255f) * 0.45f
+            try {
+                windowManager.updateViewLayout(it, params)
+            } catch (_: Exception) {}
+        }
+    }
+
+    /** 触碰/唤起时从收纳状态恢复：位置拉回屏内、透明度还原 */
     private fun wakeFromDock() {
         val view = ballView ?: return
         if (!view.docked) return

@@ -102,13 +102,16 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      // 启用悬浮球默认关闭：冷启动不自动恢复悬浮球服务，需要手动开启
-      floatingBallEnabled = false;
+      // 启用默认关闭（首次/未配置时），用户开启后记住选择
+      floatingBallEnabled = prefs.getBool('floatingBallEnabled') ?? false;
       floatingBallAutoDock = prefs.getBool('floatingBallAutoDock') ?? true;
       floatingBallColor = prefs.getInt('floatingBallColor') ?? 0xFF6750A4;
       floatingBallAlpha = prefs.getInt('floatingBallAlpha') ?? 255;
     });
-    // 移除自动恢复：即使偏好里 enabled=true，冷启动也不自动启动悬浮球
+    // 用户开启过则冷启动自动恢复悬浮球（服务随应用启动）
+    if (floatingBallEnabled) {
+      _updateFloatingBall();
+    }
   }
 
   /// 从偏好同步悬浮球状态（应用切回前台时调用，保持与悬浮球面板"关闭悬浮球"操作一致）

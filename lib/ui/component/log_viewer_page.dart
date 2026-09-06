@@ -170,6 +170,10 @@ class _LogViewerPageState extends State<LogViewerPage> {
   @override
   void initState() {
     super.initState();
+    // 保底提示：确保页面有数据可看（运行日志由 logger 桥接持续写入）
+    if (LogManager().getLogs().isEmpty) {
+      LogManager().i('system', '日志记录已就绪：应用运行日志将实时显示在此（最多保留 500 条）');
+    }
     _refreshLogs();
     _startAutoRefresh();
   }
@@ -310,27 +314,28 @@ class _LogViewerPageState extends State<LogViewerPage> {
               );
             },
           ),
-          // 搜索按钮
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              showSearch(
-                context: context,
-                delegate: LogSearchDelegate(_logManager),
-              ).then((_) => _refreshLogs());
+          // 搜索 / 导出 / 清除 收进菜单，避免标题被挤压截断
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            tooltip: '更多',
+            onSelected: (value) {
+              switch (value) {
+                case 'search':
+                  showSearch(
+                    context: context,
+                    delegate: LogSearchDelegate(_logManager),
+                  ).then((_) => _refreshLogs());
+                case 'export':
+                  _exportLogs();
+                case 'clear':
+                  _clearLogs();
+              }
             },
-          ),
-          // 导出按钮
-          IconButton(
-            icon: const Icon(Icons.download),
-            onPressed: _exportLogs,
-            tooltip: '导出日志',
-          ),
-          // 清除按钮
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            onPressed: _clearLogs,
-            tooltip: '清除日志',
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'search', child: Text('搜索日志')),
+              PopupMenuItem(value: 'export', child: Text('导出日志')),
+              PopupMenuItem(value: 'clear', child: Text('清除日志')),
+            ],
           ),
         ],
       ),

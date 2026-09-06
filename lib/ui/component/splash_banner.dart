@@ -307,12 +307,14 @@ class _NativeStyleSplashState extends State<NativeStyleSplash>
           child: ScaleTransition(
             scale: Tween(begin: 0.55, end: 1.0).animate(curve),
             child: Container(
-              width: 104,
-              height: 104,
+              width: 116,
+              height: 116,
               decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: cs.primary.withValues(alpha: 0.08),
-                border: Border.all(color: cs.primary.withValues(alpha: 0.25), width: 1.5),
+                // 圆角正方形底（与自适应图标一致的视觉语言）
+                color: cs.primary.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(26),
+                border: Border.all(
+                    color: cs.primary.withValues(alpha: 0.28), width: 1.5),
               ),
               alignment: Alignment.center,
               // 图标随主题色/莫奈取色染色（与 Android 13 themed icon 同风格）：
