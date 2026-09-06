@@ -108,10 +108,9 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
       floatingBallColor = prefs.getInt('floatingBallColor') ?? 0xFF6750A4;
       floatingBallAlpha = prefs.getInt('floatingBallAlpha') ?? 255;
     });
-    // 用户开启过则冷启动自动恢复悬浮球（服务随应用启动）
-    if (floatingBallEnabled) {
-      _updateFloatingBall();
-    }
+    // 页面只负责展示状态，不在此启动服务：
+    // 服务启动由 ① 冷启动 main 自动恢复（开启过）② 用户手动打开开关 两条路径负责，
+    // 避免"面板关闭后进入本页又把球拉起来"的复活问题
   }
 
   /// 从偏好同步悬浮球状态（应用切回前台时调用，保持与悬浮球面板"关闭悬浮球"操作一致）

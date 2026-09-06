@@ -60,6 +60,30 @@ class McpPlugin : FlutterPlugin {
                     .invokeMethod("openMcpSettings", null)
             } catch (_: Exception) {}
         }
+
+        /**
+         * 悬浮球面板内修改配置后通知 Flutter：原生直接写 FlutterSharedPreferences 时，
+         * Dart 侧 SharedPreferences 内存缓存不会自动失效，设置页会读到旧值（如
+         * "关闭悬浮球后进入设置页又自动启用"）；此通知让 Dart 侧同步缓存。
+         */
+        @JvmStatic
+        fun notifyFloatingBallConfigChanged(
+            enabled: Boolean? = null,
+            autoDock: Boolean? = null,
+            color: Int? = null,
+            alpha: Int? = null
+        ) {
+            val m = binaryMessenger ?: return
+            val payload = HashMap<String, Any?>()
+            enabled?.let { payload["enabled"] = it }
+            autoDock?.let { payload["autoDock"] = it }
+            color?.let { payload["color"] = it }
+            alpha?.let { payload["alpha"] = it }
+            try {
+                io.flutter.plugin.common.MethodChannel(m, TO_FLUTTER_CHANNEL)
+                    .invokeMethod("floatingBallConfigChanged", payload)
+            } catch (_: Exception) {}
+        }
     }
 
     /** 悬浮球服务控制：start / stop */

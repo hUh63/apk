@@ -181,11 +181,13 @@ class _LogViewerPageState extends State<LogViewerPage> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _listController.dispose();
     super.dispose();
   }
 
   void _startAutoRefresh() {
-    _refreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+    // 实时刷新：500ms 轮询，新日志即时上屏
+    _refreshTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       if (mounted) {
         _refreshLogs();
       }
@@ -400,6 +402,7 @@ class _LogViewerPageState extends State<LogViewerPage> {
                     ),
                   )
                 : ListView.builder(
+                    controller: _listController,
                     itemCount: _filteredLogs.length,
                     itemBuilder: (context, index) {
                       final log = _filteredLogs[index];

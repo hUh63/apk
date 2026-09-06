@@ -298,6 +298,7 @@ class FloatingBallService : Service() {
             ballColor = PRESET_COLORS[idx]
             refreshBallStyle()
             savePref("floatingBallColor", ballColor)
+            McpPlugin.notifyFloatingBallConfigChanged(color = ballColor)
         }
         addButton("调透明度") {
             var idx = 0
@@ -307,16 +308,20 @@ class FloatingBallService : Service() {
             ballAlpha = ALPHA_CYCLE[idx]
             refreshBallStyle()
             savePref("floatingBallAlpha", ballAlpha)
+            McpPlugin.notifyFloatingBallConfigChanged(alpha = ballAlpha)
         }
         val dockBtn = addButton(if (autoDock) "贴边：开" else "贴边：关") { btn ->
             autoDock = !autoDock
             btn.text = if (autoDock) "贴边：开" else "贴边：关"
             savePref("floatingBallAutoDock", autoDock)
+            McpPlugin.notifyFloatingBallConfigChanged(autoDock = autoDock)
             if (autoDock) scheduleRetract() else cancelDock()
         }
         dockBtn.text = if (autoDock) "贴边：开" else "贴边：关"
         addButton("关闭悬浮球") {
             savePref("floatingBallEnabled", false)
+            // 通知 Flutter 同步内存缓存：否则设置页会读到旧的 enabled=true 而重新拉起服务
+            McpPlugin.notifyFloatingBallConfigChanged(enabled = false)
             closePanel()
             stopSelf()
         }

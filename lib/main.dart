@@ -71,6 +71,26 @@ void main(List<String> args) async {
       if (nav == null) return;
       await nav.push(MaterialPageRoute(
           builder: (_) => const McpConnectionPage()));
+    } else if (call.method == 'floatingBallConfigChanged') {
+      // 悬浮球面板原生直写偏好后，同步 Dart 侧 SharedPreferences 内存缓存，
+      // 避免设置页读到旧值（如"关闭后自动启用"）
+      final m = (call.arguments is Map) ? (call.arguments as Map) : null;
+      if (m == null) return;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        if (m['enabled'] is bool) {
+          await prefs.setBool('floatingBallEnabled', m['enabled'] as bool);
+        }
+        if (m['autoDock'] is bool) {
+          await prefs.setBool('floatingBallAutoDock', m['autoDock'] as bool);
+        }
+        if (m['color'] is int) {
+          await prefs.setInt('floatingBallColor', m['color'] as int);
+        }
+        if (m['alpha'] is int) {
+          await prefs.setInt('floatingBallAlpha', m['alpha'] as int);
+        }
+      } catch (_) {}
     }
   });
 
