@@ -103,7 +103,10 @@ class _AiChatPageState extends State<AiChatPage> {
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  final List<_ChatMessage> _messages = [];
+  // 多对话：会话列表 + 当前索引（_messages 保持原调用点语义 = 当前会话消息）
+  final List<_AiConversation> _conversations = [_AiConversation()];
+  int _activeConversation = 0;
+  List<_ChatMessage> get _messages => _conversations[_activeConversation].messages;
   final List<_Attachment> _attachments = [];
   bool _sending = false;
   bool _agentMode = false;
