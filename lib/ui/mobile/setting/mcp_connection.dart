@@ -57,12 +57,13 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
     super.dispose();
   }
 
-  /// 监听应用生命周期变化（用于检测从设置页返回）
+  /// 监听应用生命周期变化（用于检测从系统设置返回）
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // 从无障碍设置返回后刷新状态
+      // 刷新设备状态；同步悬浮球开关（悬浮球面板内"关闭悬浮球"会写偏好）
       _refreshDeviceInfo();
+      _syncFloatingBallFromPrefs();
     }
   }
 
@@ -78,7 +79,7 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
   bool floatingBallEnabled = false;
   bool floatingBallAutoDock = true;
   int floatingBallColor = 0xFF6750A4; // 预置主色
-  int floatingBallAlpha = 230; // 透明度 0-255
+  int floatingBallAlpha = 255; // 透明度 0-255（默认不透明，避免"看起来还是透"）
 
   String get floatingBallColorDesc =>
       '颜色 #${floatingBallColor.toRadixString(16).substring(2).toUpperCase()} · 透明度 ${(floatingBallAlpha / 255 * 100).round()}%';
@@ -101,14 +102,25 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
+      // 启用悬浮球默认关闭：冷启动不自动恢复悬浮球服务，需要手动开启
+      floatingBallEnabled = false;
+      floatingBallAutoDock = prefs.getBool('floatingBallAutoDock') ?? true;
+      floatingBallColor = prefs.getInt('floatingBallColor') ?? 0xFF6750A4;
+      floatingBallAlpha = prefs.getInt('floatingBallAlpha') ?? 255;
+    });
+    // 移除自动恢复：即使偏好里 enabled=true，冷启动也不自动启动悬浮球
+  }
+
+  /// 从偏好同步悬浮球状态（应用切回前台时调用，保持与悬浮球面板"关闭悬浮球"操作一致）
+  Future<void> _syncFloatingBallFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
       floatingBallEnabled = prefs.getBool('floatingBallEnabled') ?? false;
       floatingBallAutoDock = prefs.getBool('floatingBallAutoDock') ?? true;
       floatingBallColor = prefs.getInt('floatingBallColor') ?? 0xFF6750A4;
-      floatingBallAlpha = prefs.getInt('floatingBallAlpha') ?? 230;
+      floatingBallAlpha = prefs.getInt('floatingBallAlpha') ?? 255;
     });
-    if (floatingBallEnabled) {
-      _updateFloatingBall();
-    }
   }
 
   Future<void> _saveFloatingBallConfig({bool showFeedback = false}) async {

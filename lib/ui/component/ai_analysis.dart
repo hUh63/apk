@@ -81,6 +81,14 @@ class _ChatMessage {
   });
 }
 
+/// 会话：支持多对话独立消息列表，可切换/新建/删除
+class _AiConversation {
+  String title;
+  final List<_ChatMessage> messages;
+  _AiConversation({this.title = '新对话', List<_ChatMessage>? messages})
+      : messages = messages ?? [];
+}
+
 class AiChatPage extends StatefulWidget {
   /// 进入页面时自动附加的请求（如从请求长按菜单进入）
   final HttpRequest? initialRequest;
@@ -115,6 +123,125 @@ class _AiChatPageState extends State<AiChatPage> {
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  // ==================== 多对话管理 ====================
+
+  /// 清除并关闭当前对话（消息清空，保留会话继续使用）
+  Future<void> _clearCurrentConversation() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('清除当前对话', style: TextStyle(fontSize: 16)),
+        content: const Text('将清空当前对话的全部消息，且不可恢复。', style: TextStyle(fontSize: 13)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('清除')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() {
+      _conversations[_activeConversation]
+        ..messages.clear()
+        ..title = '新对话';
+    });
+  }
+
+  /// 新建对话并切换
+  void _newConversation() {
+    setState(() {
+      _conversations.add(_AiConversation());
+      _activeConversation = _conversations.length - 1;
+    });
+    Navigator.of(context).pop(); // 关闭会话列表
+  }
+
+  /// 删除会话（至少保留一个）
+  void _deleteConversation(int index) {
+    if (_conversations.length <= 1) {
+      _conversations[0]..messages.clear()..title = '新对话';
+      _activeConversation = 0;
+    } else {
+      _conversations.removeAt(index);
+      if (_activeConversation >= _conversations.length) {
+        _activeConversation = _conversations.length - 1;
+      } else if (_activeConversation > index) {
+        _activeConversation--;
+      }
+    }
+  }
+
+  /// 会话列表：切换 / 新建 / 删除
+  Future<void> _showConversationSheet() async {
+    await showModalBottomSheet(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: StatefulBuilder(
+          builder: (sheetContext, setSheetState) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 8, 4),
+                child: Row(children: [
+                  const Expanded(
+                      child: Text('对话列表',
+                          style: TextStyle(fontWeight: FontWeight.w600))),
+                  TextButton.icon(
+                    onPressed: () {
+                      _newConversation();
+                    },
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('新建对话', style: TextStyle(fontSize: 13)),
+                  ),
+                ]),
+              ),
+              const Divider(height: 1),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _conversations.length,
+                  itemBuilder: (context, index) {
+                    final conv = _conversations[index];
+                    final active = index == _activeConversation;
+                    return ListTile(
+                      dense: true,
+                      leading: Icon(
+                        active ? Icons.chat_bubble : Icons.chat_bubble_outline,
+                        size: 20,
+                        color: active ? Theme.of(context).colorScheme.primary : null,
+                      ),
+                      title: Text(
+                        conv.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: active ? FontWeight.w600 : null),
+                      ),
+                      subtitle: Text('${conv.messages.length} 条消息',
+                          style: const TextStyle(fontSize: 11)),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        tooltip: '关闭并清除该对话',
+                        onPressed: () {
+                          setSheetState(() => _deleteConversation(index));
+                          if (mounted) setState(() {});
+                        },
+                      ),
+                      onTap: () {
+                        setState(() => _activeConversation = index);
+                        Navigator.of(sheetContext).pop();
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // ==================== 附件选择 ====================
@@ -266,6 +393,11 @@ class _AiChatPageState extends State<AiChatPage> {
 
     final attachments = List<_Attachment>.from(_attachments);
     setState(() {
+      // 首条消息自动命名会话
+      final conv = _conversations[_activeConversation];
+      if (conv.messages.isEmpty && conv.title == '新对话') {
+        conv.title = text.length > 14 ? '${text.substring(0, 14)}…' : text;
+      }
       _messages.add(_ChatMessage(role: 'user', content: text, attachments: attachments));
       _attachments.clear();
       _inputController.clear();
@@ -399,6 +531,18 @@ class _AiChatPageState extends State<AiChatPage> {
             icon: const Icon(Icons.attach_file, size: 20),
             tooltip: '附加信息（可多选）',
             onPressed: _pickAttachment,
+          ),
+          // 清除当前对话（关闭并清空消息）
+          IconButton(
+            icon: const Icon(Icons.delete_sweep_outlined, size: 20),
+            tooltip: '清除当前对话',
+            onPressed: _messages.isEmpty ? null : _clearCurrentConversation,
+          ),
+          // 多对话管理：新建 / 切换 / 删除
+          IconButton(
+            icon: const Icon(Icons.forum_outlined, size: 20),
+            tooltip: '对话列表（新建/切换/删除）',
+            onPressed: _showConversationSheet,
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined, size: 20),

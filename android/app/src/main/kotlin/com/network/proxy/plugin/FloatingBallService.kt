@@ -44,14 +44,14 @@ class FloatingBallService : Service() {
         const val NOTIFICATION_ID = 9528
 
         /** 球体直径（dp），小尺寸正圆 */
-        const val BALL_DP = 76
+        const val BALL_DP = 36
 
         /** 与 Flutter 侧预置色一致的循环列表 */
         val PRESET_COLORS = intArrayOf(
             0xFF6750A4.toInt(), 0xFF1565C0.toInt(), 0xFF2E7D32.toInt(),
             0xFFEF6C00.toInt(), 0xFFC2185B.toInt(), 0xFF37474F.toInt()
         )
-        val ALPHA_CYCLE = intArrayOf(255, 215, 175, 135)
+        val ALPHA_CYCLE = intArrayOf(255, 220, 185, 150)
 
         /** 主进程 MCP 状态（由 McpPlugin 写入，保留字段兼容旧调用） */
         @Volatile
@@ -65,7 +65,7 @@ class FloatingBallService : Service() {
     private var panelParams: WindowManager.LayoutParams? = null
 
     private var ballColor = 0xFF6750A4.toInt()
-    private var ballAlpha = 230
+    private var ballAlpha = 255
     private var autoDock = true
 
     private val handler = Handler(Looper.getMainLooper())
@@ -96,7 +96,7 @@ class FloatingBallService : Service() {
         }
         autoDock = intent?.getBooleanExtra("autoDock", true) ?: true
         ballColor = intent?.getIntExtra("color", 0xFF6750A4.toInt()) ?: 0xFF6750A4.toInt()
-        ballAlpha = intent?.getIntExtra("alpha", 230) ?: 230
+        ballAlpha = intent?.getIntExtra("alpha", 255) ?: 255
 
         if (!Settings.canDrawOverlays(this)) {
             Log.w(TAG, "no overlay permission")
@@ -165,6 +165,7 @@ class FloatingBallService : Service() {
                     startTop = ballParams?.y ?: 0
                     moved = false
                     cancelDock()
+                    wakeFromDock()
                     false
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -241,18 +242,18 @@ class FloatingBallService : Service() {
             orientation = LinearLayout.VERTICAL
             // 玻璃面板：深色半透明圆角 + 细白描边
             background = GradientDrawable().apply {
-                cornerRadius = 26f
+                cornerRadius = 22f
                 setColor(Color.argb(232, 24, 24, 30))
                 setStroke(1, Color.argb(46, 255, 255, 255))
             }
-            setPadding((30 * density).toInt(), (22 * density).toInt(), (30 * density).toInt(), (24 * density).toInt())
+            setPadding((22 * density).toInt(), (16 * density).toInt(), (22 * density).toInt(), (18 * density).toInt())
             elevation = 18f
         }
 
         val title = TextView(this).apply {
             text = "悬浮球"
             setTextColor(Color.argb(190, 255, 255, 255))
-            textSize = 11f
+            textSize = 10f
             letterSpacing = 0.08f
         }
         panelView?.addView(title)
@@ -260,18 +261,18 @@ class FloatingBallService : Service() {
         fun addButton(text: String, action: (Button) -> Unit): Button {
             val btn = Button(this).apply {
                 this.text = text
-                textSize = 12.5f
+                textSize = 11.5f
                 isAllCaps = false
                 setTextColor(Color.WHITE)
                 background = GradientDrawable().apply {
-                    cornerRadius = 19f
+                    cornerRadius = 16f
                     setColor(Color.argb(40, 255, 255, 255))
                     setStroke(1, Color.argb(34, 255, 255, 255))
                 }
                 layoutParams = LinearLayout.LayoutParams(
-                    (188 * density).toInt(),
+                    (132 * density).toInt(),
                     LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { topMargin = (6 * density).toInt() }
+                ).apply { topMargin = (5 * density).toInt() }
                 setPadding(0, 0, 0, 0)
                 setOnClickListener { action(this) }
             }
@@ -308,7 +309,7 @@ class FloatingBallService : Service() {
             if (autoDock) scheduleDock() else cancelDock()
         }
         dockBtn.text = if (autoDock) "贴边：开" else "贴边：关"
-        addButton("隐藏悬浮球") {
+        addButton("关闭悬浮球") {
             savePref("floatingBallEnabled", false)
             closePanel()
             stopSelf()
@@ -322,7 +323,7 @@ class FloatingBallService : Service() {
         val ballCenterY = ballTop + sizePx / 2
         val onLeft = ballLeft + sizePx / 2 < dm.widthPixels / 2
         // 面板估算高度：标题 + 5 个按钮 + padding（dp）
-        val panelH = (300 * density).toInt()
+        val panelH = (240 * density).toInt()
 
         panelParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -362,7 +363,7 @@ class FloatingBallService : Service() {
         panelOpen = false
     }
 
-    /** 3 秒无操作贴边 */
+    /** 3 秒无操作贴边：球藏入屏幕边缘 2/3 只露 1/3，并降低透明度表示"已收纳" */
     private fun scheduleDock() {
         cancelDock()
         if (!autoDock) return
@@ -372,14 +373,32 @@ class FloatingBallService : Service() {
             val sizePx = ballSizePx()
             // END 系：x 为距屏幕右缘距离；球心屏幕坐标 ≈ screen - x - sizePx/2
             val center = screen - params.x - sizePx / 2
-            // 贴左：球左缘 ≈ 8 → x = screen - sizePx - 8；贴右：球右缘 ≈ 8 → x = 8
-            val targetX = if (center < screen / 2) screen - sizePx - 8 else 8
-            params.x = targetX
-            try {
-                windowManager.updateViewLayout(ballView, params)
-            } catch (_: Exception) {}
+            // 右贴：球藏右 2/3（x 为负，窗口部分超出右缘）；左贴：球左缘在 -2/3 球宽处
+            params.x = if (center < screen / 2) screen - sizePx / 3 else -(2 * sizePx / 3)
+            ballView?.let {
+                it.docked = true
+                it.alpha = (ballAlpha.coerceIn(30, 255) / 255f) * 0.45f
+                try {
+                    windowManager.updateViewLayout(it, params)
+                } catch (_: Exception) {}
+            }
         }
         handler.postDelayed(dockRunnable!!, 3000)
+    }
+
+    /** 触碰/唤起时从贴边状态恢复：位置拉回屏内、透明度还原 */
+    private fun wakeFromDock() {
+        val view = ballView ?: return
+        if (!view.docked) return
+        view.docked = false
+        view.alpha = ballAlpha.coerceIn(30, 255) / 255f
+        val params = ballParams ?: return
+        val dm = resources.displayMetrics
+        val sizePx = ballSizePx()
+        params.x = if (params.x < 0) 8 else (dm.widthPixels - sizePx - 8).coerceAtLeast(8)
+        try {
+            windowManager.updateViewLayout(view, params)
+        } catch (_: Exception) {}
     }
 
     private fun cancelDock() {
@@ -410,6 +429,9 @@ private class GlassBallView(context: Context) : View(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var baseColor = 0xFF6750A4.toInt()
 
+    /** 是否处于贴边收纳状态（透明度已降低） */
+    var docked = false
+
     fun setStyle(color: Int, alpha: Int) {
         baseColor = color
         this.alpha = (alpha.coerceIn(30, 255)) / 255f
@@ -426,7 +448,7 @@ private class GlassBallView(context: Context) : View(context) {
         // 球体：径向渐变（左上亮 → 主色 → 右下暗）
         paint.shader = RadialGradient(
             cx - r * 0.32f, cy - r * 0.38f, r * 1.32f,
-            intArrayOf(shift(baseColor, 1.5f), baseColor, shift(baseColor, 0.62f)),
+            intArrayOf(lighten(baseColor, 0.42f), baseColor, darken(baseColor, 0.38f)),
             floatArrayOf(0f, 0.52f, 1f),
             Shader.TileMode.CLAMP
         )
@@ -435,34 +457,39 @@ private class GlassBallView(context: Context) : View(context) {
         // 顶部玻璃高光（椭圆白斑）
         paint.shader = null
         paint.style = Paint.Style.FILL
-        paint.color = Color.argb(84, 255, 255, 255)
+        paint.color = Color.argb(64, 255, 255, 255)
         canvas.drawOval(
             RectF(cx - r * 0.56f, cy - r * 0.82f, cx + r * 0.08f, cy - r * 0.36f),
             paint
         )
         // 底部微弱反光
-        paint.color = Color.argb(36, 255, 255, 255)
+        paint.color = Color.argb(26, 255, 255, 255)
         canvas.drawOval(
             RectF(cx - r * 0.34f, cy + r * 0.44f, cx + r * 0.30f, cy + r * 0.66f),
             paint
         )
 
-        // 白色同心波纹图案（圆头描边，向外渐弱），朝上展开像冒泡信号
+        // 白色波纹图案（小球适配：两条圆头弧，朝上展开）
         paint.style = Paint.Style.STROKE
         paint.strokeCap = Paint.Cap.ROUND
-        val waveAlphas = intArrayOf(255, 178, 108)
-        for (i in 0 until 3) {
-            paint.strokeWidth = r * (0.085f - i * 0.016f)
+        val waveAlphas = intArrayOf(255, 150)
+        for (i in 0 until 2) {
+            paint.strokeWidth = r * (0.16f - i * 0.04f)
             paint.color = Color.argb(waveAlphas[i], 255, 255, 255)
-            val rr = r * (0.20f + i * 0.21f)
+            val rr = r * (0.24f + i * 0.34f)
             val rect = RectF(cx - rr, cy - rr + r * 0.10f, cx + rr, cy + rr + r * 0.10f)
             canvas.drawArc(rect, 248f, 124f, false, paint)
         }
         paint.style = Paint.Style.FILL
     }
 
-    private fun shift(color: Int, factor: Float): Int {
-        fun ch(c: Int) = ((c * factor).toInt()).coerceIn(0, 255)
+    private fun lighten(color: Int, fraction: Float): Int {
+        fun ch(c: Int) = (c + (255 - c) * fraction).toInt()
+        return Color.argb(255, ch(Color.red(color)), ch(Color.green(color)), ch(Color.blue(color)))
+    }
+
+    private fun darken(color: Int, fraction: Float): Int {
+        fun ch(c: Int) = (c * (1 - fraction)).toInt()
         return Color.argb(255, ch(Color.red(color)), ch(Color.green(color)), ch(Color.blue(color)))
     }
 }
