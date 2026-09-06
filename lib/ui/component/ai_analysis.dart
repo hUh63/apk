@@ -192,6 +192,14 @@ class _AiChatPageState extends State<AiChatPage> {
                           style: TextStyle(fontWeight: FontWeight.w600))),
                   TextButton.icon(
                     onPressed: () {
+                      Navigator.of(sheetContext).pop();
+                      _clearCurrentConversation();
+                    },
+                    icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+                    label: const Text('清除当前', style: TextStyle(fontSize: 13)),
+                  ),
+                  TextButton.icon(
+                    onPressed: () {
                       _newConversation();
                     },
                     icon: const Icon(Icons.add, size: 18),
@@ -535,16 +543,10 @@ class _AiChatPageState extends State<AiChatPage> {
             tooltip: '附加信息（可多选）',
             onPressed: _pickAttachment,
           ),
-          // 清除当前对话（关闭并清空消息）
-          IconButton(
-            icon: const Icon(Icons.delete_sweep_outlined, size: 20),
-            tooltip: '清除当前对话',
-            onPressed: _messages.isEmpty ? null : _clearCurrentConversation,
-          ),
-          // 多对话管理：新建 / 切换 / 删除
+          // 多对话管理：新建 / 切换 / 删除 / 清除当前
           IconButton(
             icon: const Icon(Icons.forum_outlined, size: 20),
-            tooltip: '对话列表（新建/切换/删除）',
+            tooltip: '对话列表（新建/切换/删除/清除）',
             onPressed: _showConversationSheet,
           ),
           IconButton(

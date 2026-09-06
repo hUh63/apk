@@ -144,7 +144,9 @@ class FloatingBallService : Service() {
         ballParams = WindowManager.LayoutParams(
             sizePx, sizePx,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            // FLAG_LAYOUT_NO_LIMITS：允许窗口超出屏幕边界（收纳 2/3 藏入边缘必需，
+            // 否则系统会把负坐标 clamp 回屏内导致收纳无效）
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.END
