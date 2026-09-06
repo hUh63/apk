@@ -166,6 +166,7 @@ class _LogViewerPageState extends State<LogViewerPage> {
   String _searchQuery = '';
   bool _autoScroll = true;
   Timer? _refreshTimer;
+  final ScrollController _listController = ScrollController();
 
   @override
   void initState() {
@@ -210,7 +211,19 @@ class _LogViewerPageState extends State<LogViewerPage> {
     setState(() {
       _filteredLogs = logs;
     });
+    // 新日志到达：停留在列表顶部附近时自动回顶，让最新日志立即可见
+    if (_filteredLogs.isNotEmpty) {
+      final topId = _filteredLogs.first.timestamp.microsecondsSinceEpoch;
+      if (_lastTopId != topId) {
+        _lastTopId = topId;
+        if (_listController.hasClients && _listController.offset < 400) {
+          _listController.jumpTo(0);
+        }
+      }
+    }
   }
+
+  int _lastTopId = -1;
 
   Color _getLevelColor(LogLevel level) {
     switch (level) {
