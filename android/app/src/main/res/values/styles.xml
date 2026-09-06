@@ -7,13 +7,10 @@
         <item name="android:windowBackground">@drawable/launch_background</item>
     </style>
     <!-- Theme applied to the Android Window as soon as the process has started.
-         This theme determines the color of the Android Window while your
-         Flutter UI initializes, as well as behind your Flutter UI while its
-         running.
-
-         This Theme is only used starting with V2 of Flutter's Android embedding. -->
+         背景同样使用启动画面资源（主题色 + 居中应用图标）：Flutter 首帧前的窗口期
+         与系统启动画面视觉连续，避免"图标消失→纯色空屏→图标再现"的割裂感。 -->
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
-        <item name="android:windowBackground">?android:colorBackground</item>
+        <item name="android:windowBackground">@drawable/launch_background</item>
     </style>
 
     <string name="vpn_active_notification_title">ProxyPin Active</string>

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:code_forge/code_forge.dart';
@@ -93,6 +94,7 @@ class RequestEditorState extends State<MobileRequestEditor> with SingleTickerPro
 
   @override
   void dispose() {
+    _responseWatchTimer?.cancel();
     if ((widget.source == RequestEditorSource.breakpointRequest ||
             widget.source == RequestEditorSource.breakpointResponse) &&
         !executed) {
@@ -122,6 +124,28 @@ class RequestEditorState extends State<MobileRequestEditor> with SingleTickerPro
     if (widget.request == null) {
       curlParse();
     }
+    // 上游 #922：请求在详情页打开期间才完成时，自动刷新响应内容
+    _watchResponse();
+  }
+
+  Timer? _responseWatchTimer;
+
+  /// 详情页打开时响应尚未返回：轮询等待响应到达后自动刷新，避免一直停留在"未响应"
+  void _watchResponse() {
+    if (widget.request?.response != null || widget.source == RequestEditorSource.breakpointRequest) {
+      return;
+    }
+    _responseWatchTimer = Timer.periodic(const Duration(milliseconds: 400), (timer) {
+      final rsp = widget.request?.response;
+      if (rsp == null) return;
+      timer.cancel();
+      _responseWatchTimer = null;
+      if (!mounted) return;
+      setState(() {
+        request = widget.request;
+        response = rsp;
+      });
+    });
   }
 
   Future<void> curlParse() async {

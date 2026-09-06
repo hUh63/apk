@@ -215,6 +215,11 @@ class McpPlugin : FlutterPlugin {
             "wifiIp" to wifiIp,
             "hasRoot" to hasRoot,
             "hasShizuku" to hasShizuku,
+            // 注意：hasShizuku 只代表 Shizuku binder 已连接（运行中），不代表本应用已获授权；
+            // 「请求 Shizuku 授权」按钮的显隐必须依据 shizukuGranted
+            "shizukuGranted" to (hasShizuku && runCatching {
+                Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+            }.getOrDefault(false)),
             "hasDhizuku" to hasDhizuku,
             "accessibilityEnabled" to accessibilityEnabled,
             "mode" to mode

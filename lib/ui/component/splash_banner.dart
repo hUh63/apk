@@ -251,6 +251,7 @@ class _NativeStyleSplashState extends State<NativeStyleSplash>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   bool _exiting = false;
+  bool _started = false;
   Timer? _doneTimer;
 
   @override
@@ -258,13 +259,26 @@ class _NativeStyleSplashState extends State<NativeStyleSplash>
     super.initState();
     _controller = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 560));
-    _controller.forward();
-    // 放大完成后淡出交还主界面，整体约 1 秒，接近系统启动画面的自然衔接
-    _doneTimer = Timer(const Duration(milliseconds: 780), () {
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    // 先预载应用图标再开始放大动画：避免"背景先出现、图标后闪现"的割裂感，
+    // 冷启动全程图标保持在屏（系统画面/窗口背景均为图标 + 主题色）
+    precacheImage(const AssetImage('assets/icon.png'), context)
+        .whenComplete(() {
       if (!mounted) return;
-      setState(() => _exiting = true);
-      Future.delayed(const Duration(milliseconds: 180), () {
-        if (mounted) widget.onComplete?.call();
+      _controller.forward();
+      // 放大完成后淡出交还主界面，整体约 1 秒，接近系统启动画面的自然衔接
+      _doneTimer = Timer(const Duration(milliseconds: 780), () {
+        if (!mounted) return;
+        setState(() => _exiting = true);
+        Future.delayed(const Duration(milliseconds: 180), () {
+          if (mounted) widget.onComplete?.call();
+        });
       });
     });
   }

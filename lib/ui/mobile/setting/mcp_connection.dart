@@ -409,6 +409,8 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
     final mode = _deviceInfo?['mode'] as String? ?? 'none';
     final hasRoot = _deviceInfo?['hasRoot'] as bool? ?? false;
     final hasShizuku = _deviceInfo?['hasShizuku'] as bool? ?? false;
+    // hasShizuku 只代表 Shizuku 正在运行（binder 已连接），不代表本应用已获授权
+    final shizukuGranted = _deviceInfo?['shizukuGranted'] as bool? ?? false;
     final hasDhizuku = _deviceInfo?['hasDhizuku'] as bool? ?? false;
     final accessibilityEnabled =
         _deviceInfo?['accessibilityEnabled'] as bool? ?? false;
@@ -764,9 +766,13 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
                         leading: const Icon(Icons.security),
                         title: const Text('Shizuku'),
                         trailing: Text(
-                          hasShizuku ? '可用' : '不可用',
+                          shizukuGranted
+                              ? '已授权'
+                              : (hasShizuku ? '未授权' : '未连接'),
                           style: TextStyle(
-                            color: hasShizuku ? Colors.green : Colors.grey,
+                            color: shizukuGranted
+                                ? Colors.green
+                                : (hasShizuku ? Colors.orange : Colors.grey),
                           ),
                         ),
                       ),
@@ -810,7 +816,7 @@ class _McpConnectionPageState extends State<McpConnectionPage> with WidgetsBindi
                     ),
                   ),
                 ],
-                if (McpScreen.isSupported && !hasShizuku) ...[
+                if (McpScreen.isSupported && !shizukuGranted) ...[
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,

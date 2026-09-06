@@ -242,7 +242,14 @@ class X509Utils {
       if (sans != null && sans.isNotEmpty) {
         var sanList = ASN1Sequence();
         for (var s in sans) {
-          sanList.add(ASN1PrintableString(stringValue: s, tag: 0x82));
+          // 上游 #913：IP 地址必须用 iPAddress (context tag 7, 0x87) 编码二进制地址值，
+          // 使用 dNSName (0x82) 编码 IP 会导致部分客户端证书校验失败
+          final addr = InternetAddress.tryParse(s);
+          if (addr != null) {
+            sanList.add(ASN1OctetString(octets: addr.rawAddress, tag: 0x87));
+          } else {
+            sanList.add(ASN1PrintableString(stringValue: s, tag: 0x82));
+          }
         }
         var octetString = ASN1OctetString(octets: sanList.encode());
 

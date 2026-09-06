@@ -796,7 +796,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   const SizedBox(height: 8),
                   DropdownButtonFormField<int>(
                     value: actionType,
-                    decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
                     items: const [
                       DropdownMenuItem(value: 0, child: Text('执行脚本')),
                       DropdownMenuItem(value: 1, child: Text('调用 MCP 工具')),
@@ -1022,7 +1022,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   DropdownButtonFormField<int>(
                     isExpanded: true,
                     value: eventType,
-                    decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
                     items: const [
                       DropdownMenuItem(value: 0, child: Text('HTTP 请求事件')),
                       DropdownMenuItem(value: 1, child: Text('网络状态事件')),
@@ -1042,7 +1042,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                     DropdownButtonFormField<NetworkStatus>(
                       isExpanded: true,
                       value: networkStatus,
-                      decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                      decoration: const InputDecoration(border: OutlineInputBorder()),
                       items: NetworkStatus.values
                           .map((s) => DropdownMenuItem(value: s, child: Text(s.name)))
                           .toList(),
@@ -1052,7 +1052,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                     DropdownButtonFormField<ProxyStatus>(
                       isExpanded: true,
                       value: proxyStatus,
-                      decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                      decoration: const InputDecoration(border: OutlineInputBorder()),
                       items: ProxyStatus.values
                           .map((s) => DropdownMenuItem(value: s, child: Text(s.name)))
                           .toList(),
@@ -1252,7 +1252,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   DropdownButtonFormField<RulePriority>(
                     value: priority,
                     isExpanded: true,
-                    decoration: const InputDecoration(labelText: '优先级', border: OutlineInputBorder(), isDense: true),
+                    decoration: const InputDecoration(labelText: '优先级', border: OutlineInputBorder()),
                     items: RulePriority.values.map((p) => DropdownMenuItem(value: p, child: Text(p.name))).toList(),
                     onChanged: (v) => setDialogState(() => priority = v ?? RulePriority.normal),
                   ),
@@ -1278,7 +1278,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                               ? c.type
                               : ConditionType.httpRequest,
                           isExpanded: true,
-                          decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), labelText: '条件类型'),
+                          decoration: const InputDecoration(border: OutlineInputBorder(), labelText: '条件类型'),
                           items: [
                             for (final t in ConditionType.values)
                               if (t != ConditionType.custom)
@@ -1297,7 +1297,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                           Expanded(child: DropdownButtonFormField<String>(
                             value: fields.contains(c.field) ? c.field : (fields.isNotEmpty ? fields.first : 'url'),
                             isExpanded: true,
-                            decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+                            decoration: const InputDecoration(border: OutlineInputBorder()),
                             items: fields.map((f) => DropdownMenuItem(value: f, child: Text(_ConditionRow.fieldDisplayName(c.type, f), style: const TextStyle(fontSize: 13)))).toList(),
                             onChanged: (v) => setDialogState(() => c.field = v ?? fields.first),
                           )),
@@ -1305,7 +1305,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                           Expanded(child: DropdownButtonFormField<Operator>(
                             value: c.operator,
                             isExpanded: true,
-                            decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+                            decoration: const InputDecoration(border: OutlineInputBorder()),
                             items: Operator.values.map((o) => DropdownMenuItem(value: o, child: Text(_formatOperator(o), style: const TextStyle(fontSize: 13)))).toList(),
                             onChanged: (v) => setDialogState(() => c.operator = v ?? Operator.equals),
                           )),
@@ -1324,14 +1324,14 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                       title: DropdownButtonFormField<ActionType>(
                         value: a.type,
                         isExpanded: true,
-                        decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+                        decoration: const InputDecoration(border: OutlineInputBorder()),
                         items: ActionType.values.map((t) => DropdownMenuItem(value: t, child: Text(_formatActionType(t), style: const TextStyle(fontSize: 13)))).toList(),
                         onChanged: (v) => setDialogState(() => a.type = v ?? ActionType.log),
                       ),
                       subtitle: TextField(
                         controller: a.targetController,
                         decoration: InputDecoration(
-                          isDense: true,
+                         
                           labelText: a.type == ActionType.sendWebhook ? 'Webhook URL' : '目标 / 参数(JSON)',
                           border: const OutlineInputBorder(),
                         ),
@@ -1451,7 +1451,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
       return DropdownButtonFormField<String>(
         value: opts.contains(c.valueController.text) ? c.valueController.text : null,
         isExpanded: true,
-        decoration: const InputDecoration(isDense: true, labelText: '值', border: OutlineInputBorder()),
+        decoration: const InputDecoration(labelText: '值', border: OutlineInputBorder()),
         items: opts
             .map((v) => DropdownMenuItem(value: v, child: Text(_ConditionRow.valueDisplayName(c.type, v), style: const TextStyle(fontSize: 13))))
             .toList(),
@@ -1460,7 +1460,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     }
     return TextField(
       controller: c.valueController,
-      decoration: const InputDecoration(isDense: true, labelText: '值', border: OutlineInputBorder()),
+      decoration: const InputDecoration(labelText: '值', border: OutlineInputBorder()),
     );
   }
 
@@ -1578,7 +1578,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                   DropdownButtonFormField<String>(
                     value: selected['name']?.toString(),
                     isExpanded: true,
-                    decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
                     items: prompts
                         .map((p) => DropdownMenuItem(
                             value: p['name']?.toString() ?? '',
@@ -1617,7 +1617,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                           decoration: InputDecoration(
                             labelText: required ? '${e.key} *' : e.key,
                             border: const OutlineInputBorder(),
-                            isDense: true,
+                           
                           ),
                         ),
                       );
@@ -1907,7 +1907,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
                             child: DropdownButtonFormField<String>(
                               isExpanded: true,
                               value: n['name']?.toString(),
-                              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+                              decoration: const InputDecoration(border: OutlineInputBorder()),
                               items: scriptNames.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                               onChanged: (v) => setDialogState(() {
                                 n['name'] = v;
@@ -2122,7 +2122,7 @@ class _McpAutomationPageState extends State<McpAutomationPage>
     return DropdownButtonFormField<String>(
       isExpanded: true,
       value: (value != null && options.contains(value)) ? value : null,
-      decoration: InputDecoration(border: const OutlineInputBorder(), isDense: true, labelText: hint),
+      decoration: InputDecoration(border: const OutlineInputBorder(), labelText: hint),
       items: options.map((o) => DropdownMenuItem(value: o, child: Text(o, style: const TextStyle(fontSize: 13)))).toList(),
       onChanged: onChanged,
     );
